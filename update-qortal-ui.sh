@@ -25,17 +25,23 @@ yarn install
 
 cd ../qortal-ui-core
 
-yarn install 
+yarn install
+# Break any previous links
+yarn unlink
 yarn link
 
 cd ../qortal-ui-crypto
 
 yarn install 
+# Break any previous links
+yarn unlink
 yarn link
 
 cd ../qortal-ui-plugins
 
 yarn install 
+# Break any previous links
+yarn unlink
 yarn link
 
 cd ../qortal-ui
