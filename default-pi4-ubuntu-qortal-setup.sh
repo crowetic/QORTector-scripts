@@ -35,7 +35,7 @@ echo "---DOWNLOADING QORTAL 1.4.6 CORE---"
 
 echo "---UNZIPPING QORTAL CORE AND MAKING SH FILES EXECUTABLE, ALSO DOWNLOADING THE QORT SCRIPT FOR EASE OF USE OF API---"
 
-wget https://github.com/Qortal/qortal/releases/download/v1.4.6/qortal-1.4.6.zip
+wget https://github.com/Qortal/qortal/releases/download/v1.5.1/qortal-1.5.1.zip
 unzip qortal*.zip
 rm qortal*.zip
 cd qortal
