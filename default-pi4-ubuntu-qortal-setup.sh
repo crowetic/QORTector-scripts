@@ -9,7 +9,7 @@ sudo apt update && sudo apt -y upgrade
 
 echo "---INSTALLING GIT, JAVA, CURL, VIM, UNZIP, P7ZIP-FULL, AND CINNAMON DESKTOP---"
 
-sudo apt install git default-jre curl vim cinnamon-desktop-environment unzip p7zip-full
+sudo apt install -y git default-jre curl vim cinnamon-desktop-environment unzip p7zip-full openssh-server htop
 
 # you will need to change the boot environment when you install cinnamon, log out, then when you log back in click the settings toggle at the bottom after clicking the username and change to cinnamon, else it will continue using unity.
 
