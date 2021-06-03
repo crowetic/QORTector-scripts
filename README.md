@@ -1,8 +1,8 @@
-# QORTector-scripts#
+# QORTector-scripts
 
 simple scripts for various needs on the raspberry pi 4 for use with Qortal.
 
-## to start - install default OS of your choice for raspberry pi 4 - these scripts are tested and working with raspbian and ubuntu 64 for the Raspberry Pi 4.##
+## to start - install default OS of your choice for raspberry pi 4 - these scripts are tested and working with raspbian and ubuntu 64 for the Raspberry Pi 4.
 
 1. Setup your base OS - raspbian or ubuntu 64 (other .deb builds should also work.)
 
