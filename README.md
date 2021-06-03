@@ -13,8 +13,8 @@ wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/default-p
 wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/install-raspi-config.sh
 wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-at-boot.sh
 wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-ui-at-boot.sh
-wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/update-qortal-ui.sh```
-
+wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/update-qortal-ui.sh
+```
 
 3. make all scripts executable 
 
