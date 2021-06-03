@@ -20,7 +20,7 @@ echo "---INSTALLING NODEJS 14 AND YARN (FOR BUILDING THE UI)---"
 curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
 curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg >/dev/null
 echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt update && sudo apt install nodejs yarn
+sudo apt update && sudo apt -y install nodejs yarn
 
 # I also change the menu icon on the menu to the qortal icon from wiki.qortal.org - and get the qortal desktop background for good measure. :)
 
@@ -35,7 +35,7 @@ echo "---DOWNLOADING QORTAL 1.4.6 CORE---"
 
 echo "---UNZIPPING QORTAL CORE AND MAKING SH FILES EXECUTABLE, ALSO DOWNLOADING THE QORT SCRIPT FOR EASE OF USE OF API---"
 
-wget https://github.com/Qortal/qortal/releases/download/v1.5.1/qortal-1.5.2.zip
+wget https://github.com/Qortal/qortal/releases/download/v1.5.3/qortal-1.5.3.zip
 unzip qortal*.zip
 rm qortal*.zip
 cd qortal
