@@ -16,7 +16,7 @@ wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qor
 wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/update-qortal-ui.sh
 ```
 
-3. make all scripts executable 
+3. make all scripts **executable **
 
 ```chmod +x *.sh```
 
