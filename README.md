@@ -43,6 +43,7 @@ add following line in cron
 **to add Start script to desktop**
 
 ```cd Desktop```
+
 ```wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/Start-Qortal-UI-Electron.sh```
 ```chmod Start*.sh```
 
