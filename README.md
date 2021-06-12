@@ -45,6 +45,7 @@ add following line in cron
 ```cd Desktop```
 
 ```wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/Start-Qortal-UI-Electron.sh```
+
 ```chmod Start*.sh```
 
 **once the script is on the desktop and chmodded, you can double-click from within the OS GUI, and click 'run' on the pop-up message, and the UI will run.**
