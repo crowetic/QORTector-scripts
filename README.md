@@ -2,7 +2,7 @@
 
 simple scripts for various needs on the raspberry pi 4 for use with Qortal.
 
-##*notice* - these scripts are NOT for 'Brooklyn R' kernel for the QORTector devices at this point. You CAN use the 'update-qortal-ui.sh' script AND the 'Start-Qortal-UI-Electron.sh' scripts to build/update the Qortal UI from source, and start it using the Electron 'wrapper', but you CANNOT use the other scripts as they are meant for DEFAULT operating systems for the Pi 4, like Ubuntu 64, and Raspbian. Running any of the other scripts on the Brooklyn kernel, will cause issues and are unnecessary anyway, as the Brooklyn kernel already has all the base level dependencies installed.
+### *notice* - these scripts are NOT for 'Brooklyn R' kernel for the QORTector devices at this point. You CAN use the 'update-qortal-ui.sh' script AND the 'Start-Qortal-UI-Electron.sh' scripts to build/update the Qortal UI from source, and start it using the Electron 'wrapper', but you CANNOT use the other scripts as they are meant for DEFAULT operating systems for the Pi 4, like Ubuntu 64, and Raspbian. Running any of the other scripts on the Brooklyn kernel, will cause issues and are unnecessary anyway, as the Brooklyn kernel already has all the base level dependencies installed.
 
 ## to start - install default OS of your choice for raspberry pi 4 - these scripts are tested and working with raspbian and ubuntu 64 for the Raspberry Pi 4.
 
