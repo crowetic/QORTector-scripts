@@ -40,6 +40,14 @@ add following line in cron
 
 ### 7. use 'Start-Qortal-UI-Electron.sh' to start Qortal UI with Electron wrapper (as an independent application) - Run this script whenever you want to start the UI - placing this script on the desktop is a good idea. Click 'run' when you double-click the script with the GUI.
 
+**to add Start script to desktop**
+
+```cd Desktop```
+```wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/Start-Qortal-UI-Electron.sh```
+```chmod Start*.sh```
+
+**once the script is on the desktop and chmodded, you can double-click from within the OS GUI, and click 'run' on the pop-up message, and the UI will run.**
+
 ### 8. install 'raspi-config' with 'install-raspi-config.sh' (./install*.sh)
 
 ```./install*.sh```
