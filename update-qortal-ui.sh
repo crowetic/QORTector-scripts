@@ -5,17 +5,9 @@ killall -9 node*
 echo "removing old files"
 rm -R UI
 
-echo "creating new UI folder and moving to that directory "
-
-mkdir UI
-cd UI
-
 echo "cloning git repositories for Qortal UI"
 
-git clone https://github.com/qortal/qortal-ui
-git clone https://github.com/qortal/qortal-ui-core
-git clone https://github.com/qortal/qortal-ui-crypto
-git clone https://github.com/qortal/qortal-ui-plugins
+git clone https://github.com/qortal/UI
 
 cd qortal-ui
 
