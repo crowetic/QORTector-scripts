@@ -9,6 +9,8 @@ echo "cloning git repositories for Qortal UI"
 
 git clone https://github.com/qortal/UI
 
+cd UI
+
 cd qortal-ui
 
 echo "installing dependencies and linking with yarn link for build process"
