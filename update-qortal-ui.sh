@@ -48,4 +48,4 @@ echo "starting build process...this may take a while...please be patient!"
 
 yarn run build
 
-echo "BUILD COMPLETE! You can now reboot the system to make use of the new UI!"
+echo "BUILD COMPLETE! You can now make use of the new UI!"
