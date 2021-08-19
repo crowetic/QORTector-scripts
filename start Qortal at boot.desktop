@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Exec=/home/qortal/./start-qortal-at-boot.sh
+Exec=~/./start-qortal-at-boot.sh
 X-GNOME-Autostart-enabled=true
 NoDisplay=false
 Hidden=false
