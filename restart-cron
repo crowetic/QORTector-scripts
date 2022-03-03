@@ -1,1 +1,2 @@
 0 5 */5 * * ./restart-qortal.sh
+@reboot ./start-qortal-at-boot.sh
