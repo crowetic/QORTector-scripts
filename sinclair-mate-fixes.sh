@@ -16,8 +16,8 @@ cd /home/pi
 
 echo DOWNLOADING AUTO-RESTART SCRIPT AND CONFIGURING CRON TO USE IT
 
-wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/restart-qortal.sh
-chmod +x restart-qortal.sh
+wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/reboot-mate.sh
+chmod +x reboot-mate.sh
 wget https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/restart-cron
 crontab restart-cron
 
