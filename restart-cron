@@ -1,2 +1,2 @@
-0 5 */3 * * ./restart-qortal.sh
+0 3 */2 * * ./reboot-mate.sh
 @reboot ./start-qortal-at-boot.sh
