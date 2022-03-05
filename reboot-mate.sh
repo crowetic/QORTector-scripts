@@ -5,4 +5,4 @@ cd qortal
 
 sleep 10
 
-reboot
+sudo reboot
