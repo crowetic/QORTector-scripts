@@ -1,7 +1,7 @@
 #!/bin/sh
 cd
 cd qortal
-./stop.sh
+killall -9 java
 sleep 5
 rm -R db
 rm qortal.jar
