@@ -11,7 +11,7 @@ CYAN='\033[0;36m'         # Cyan
 WHITE='\033[0;37m'        # White
 NC='\033[0m'              # No Color
 
-echo "${PURPLE} UPDATING AND INSTALLING SOFTWARE ${NC}\n" 
+echo "${PURPLE} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n" 
 
 sudo apt update 
 sudo apt -y upgrade
@@ -44,10 +44,11 @@ unzip Machine-files.zip
 cd Machine-files
 
 mv Pictures/*.* ~/Pictures/
-mv *.sh ~/
+mv start-qortal.sh ~/
 
 cd 
 
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh
 
 
 echo "${YELLOW} FINISHING UP ${NC}"
