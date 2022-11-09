@@ -37,6 +37,8 @@ chmod +x Qortal-UI
 
 echo "${CYAN} DOWNLOADING IMAGES AND OTHER SCRIPTS ${NC}"
 
+cd
+
 curl -L -O https://cloud.qortal.org/s/t4Fy8Lp4kQYiYZN/download/Machine-files.zip
 
 unzip Machine-files.zip
