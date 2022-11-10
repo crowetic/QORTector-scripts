@@ -15,7 +15,7 @@ echo "${PURPLE} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\
 
 sudo apt update 
 sudo apt -y upgrade
-sudo apt -y install unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2
+sudo apt -y install unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2 htop
 
 echo "${BLUE} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}"
 
@@ -26,10 +26,11 @@ cd qortal
 chmod +x *.sh
 curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
 chmod +x qort
-cd 
+
 
 echo "${PURPLE} DOWNLOADING QORTAL UI AppImage AND RENAMING ${NC}"
 
+cd 
 cd Desktop
 curl -L -O https://github.com/Qortal/qortal-ui/releases/download/v1.9.2/Qortal-Setup-amd64.AppImage
 mv Qortal-Setup*.AppImage Qortal-UI
@@ -47,6 +48,10 @@ cd Machine-files
 
 mv Pictures/*.* ~/Pictures/
 mv start-qortal.sh ~/
+
+cd 
+cd Desktop
+curl -L -O https://cloud.qortal.org/s/6d8qoEkQRDSCTqn/download/rebuilt-machine-setup.txt
 
 cd 
 
