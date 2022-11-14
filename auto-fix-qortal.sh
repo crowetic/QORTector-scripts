@@ -11,6 +11,26 @@ CYAN='\033[0;36m'         # Cyan
 WHITE='\033[0;37m'        # White
 NC='\033[0m'              # No Color
 
+echo "${BLUE} checking internet connection ${NC}\n"
+INTERNET_STATUS="UNKNOWN"
+TIMESTAMP=`date +%s`
+    ping -c 1 -W 0.7 8.8.4.4 > /dev/null 2>&1
+    if [ $? -eq 0 ] ; then
+        if [ "$INTERNET_STATUS" != "UP" ]; then
+            echo "${BLUE}Internet connection is UP, continuing${NC}\n   `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
+            INTERNET_STATUS="UP"
+        fi
+    else
+        if [ "$INTERNET_STATUS" = "UP" ]; then
+            echo "Internet Connection is DOWN, please fix connection and restart device${NC}\n `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
+            INTERNET_STATUS="DOWN"
+	    sleep 30
+	    exit 1
+        fi
+    fi
+
+
+
 echo "${PURPLE} Checking hash of qortal.jar on local machine VS newest released qortal.jar on github ${NC}\n" 
 
 cd qortal
@@ -35,6 +55,15 @@ if [ "$LOCAL" = "$REMOTE" ]; then
     sleep 5 
     rm ~/qortal.jar 
     rm ~/qortal/local.md5 remote.md5 
+    mkdir ~/qortal/new-scripts
+    mkdir ~/qortal/new-scripts/backups
+    mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
+    cp ~/auto-fix-qortal.sh ~/qortal/new-scripts/backups/original.sh
+    cd ~/qortal/new-scripts
+    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
+    chmod +x auto-fix-qortal.sh
+    cd
+    cp ~/qortal/new-scripts/auto-fix-qortal.sh .
     exit 1
 
 else 
@@ -52,5 +81,14 @@ else
         mv start-modified-memory-args.sh start.sh
         chmod +x start.sh
         ./start.sh
+	mkdir ~/qortal/new-scripts
+        mkdir ~/qortal/new-scripts/backups
+        mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
+        cp ~/auto-fix-qortal.sh ~/qortal/new-scripts/backups/original.sh
+        cd ~/qortal/new-scripts
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
+        chmod +x auto-fix-qortal.sh
+        cd
+        cp ~/qortal/new-scripts/auto-fix-qortal.sh .
 fi
 
