@@ -21,7 +21,8 @@ TIMESTAMP=`date +%s`
             INTERNET_STATUS="UP"
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/settings.json && mv settings.json ~/qortal
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh ~/Desktop && chmod +x ~/Desktop/check-qortal-status.sh
-        fi
+            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh && mv start-modified-memory-args.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+	fi
     else
         if [ "$INTERNET_STATUS" = "UP" ]; then
             echo "Internet Connection is DOWN, please fix connection and restart device${NC}\n `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
@@ -74,14 +75,10 @@ else
         killall -9 java
         sleep 5
         rm -R db
-        rm start.sh
         rm qortal.jar
         rm log.t*
 	mv ~/qortal.jar . 
         rm ~/remote.md5 local.md5 
-	curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
-        mv start-modified-memory-args.sh start.sh
-        chmod +x start.sh
         ./start.sh
 	mkdir ~/qortal/new-scripts
         mkdir ~/qortal/new-scripts/backups
