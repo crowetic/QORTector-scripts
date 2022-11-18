@@ -19,6 +19,8 @@ TIMESTAMP=`date +%s`
         if [ "$INTERNET_STATUS" != "UP" ]; then
             echo "${BLUE}Internet connection is UP, continuing${NC}\n   `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
             INTERNET_STATUS="UP"
+	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/settings.json && mv settings.json ~/qortal
+	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh ~/Desktop && chmod +x ~/Desktop/check-qortal-status.sh
         fi
     else
         if [ "$INTERNET_STATUS" = "UP" ]; then
