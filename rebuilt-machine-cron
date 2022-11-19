@@ -1,0 +1,2 @@
+@reboot sleep 399 && ./auto-fix-qortal.sh > "/home/qortal/qortal/auto-fix-startup.log" 2>&1
+1 1 */5 * * /home/qortal/auto-fix-qortal.sh > "/home/qortal/qortal/auto-fix-01.log" 2>&1
