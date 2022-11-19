@@ -32,7 +32,7 @@ echo "${PURPLE} DOWNLOADING QORTAL UI AppImage AND RENAMING ${NC}"
 
 cd 
 cd Desktop
-curl -L -O https://github.com/Qortal/qortal-ui/releases/download/v1.9.2/Qortal-Setup-amd64.AppImage
+curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-amd64.AppImage
 mv Qortal-Setup*.AppImage Qortal-UI
 chmod +x Qortal-UI
 
