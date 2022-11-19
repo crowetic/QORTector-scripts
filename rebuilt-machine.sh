@@ -36,7 +36,7 @@ curl -L -O https://github.com/Qortal/qortal-ui/releases/download/v1.9.2/Qortal-S
 mv Qortal-Setup*.AppImage Qortal-UI
 chmod +x Qortal-UI
 
-echo "${CYAN} DOWNLOADING IMAGES AND OTHER SCRIPTS ${NC}"
+echo "${CYAN} DOWNLOADING PICTURE FILES AND OTHER SCRIPTS ${NC}"
 
 cd
 
@@ -49,13 +49,15 @@ cd Machine-files
 mv Pictures/*.* ~/Pictures/
 mv start-qortal.sh ~/
 
-cd 
-cd Desktop
-curl -L -O https://cloud.qortal.org/s/6d8qoEkQRDSCTqn/download/rebuilt-machine-setup.txt
+curl -L -O https://cloud.qortal.org/s/8z4sRiwJCPqM4Fi/download/Qortal-TheFuture-Wallpaper.png
+mv Qortal-The*.png ~/Pictures/
 
-cd 
+
+curl -L -O https://cloud.qortal.org/s/6d8qoEkQRDSCTqn/download/rebuilt-machine-setup.txt
+mv rebuilt-machine-setup.txt ~/Desktop
 
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
 
 
 echo "${YELLOW} FINISHING UP ${NC}"
@@ -64,8 +66,8 @@ chmod +x *.sh
 
 rm -R Machine-files
 
-echo "${CYAN} STARTING QORTAL REFRESH ${NC}" 
+echo "${CYAN} REBOOTING MACHINE - USE CINNAMON DESKTOP ENVIRONMENT UPON REBOOT BY CLICKING LOGIN NAME THEN SETTINGS ICON AT BOTTOM RIGHT, AND CHANGING TO CINNAMON ${NC}" 
 
-./refresh-qortal.sh
+sudo reboot
 
 
