@@ -11,7 +11,7 @@ CYAN='\033[0;36m'         # Cyan
 WHITE='\033[0;37m'        # White
 NC='\033[0m'              # No Color
 
-echo "${BLUE} checking internet connection ${NC}\n"
+echo "${CYAN} checking internet connection ${NC}\n"
 INTERNET_STATUS="UNKNOWN"
 TIMESTAMP=`date +%s`
     ping -c 1 -W 0.7 8.8.4.4 > /dev/null 2>&1
@@ -26,7 +26,7 @@ TIMESTAMP=`date +%s`
 	fi
     else
         if [ "$INTERNET_STATUS" = "UP" ]; then
-            echo "Internet Connection is DOWN, please fix connection and restart device${NC}\n `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
+            echo "${RED}Internet Connection is DOWN, please fix connection and restart device${NC}\n `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
             INTERNET_STATUS="DOWN"
 	    sleep 30
 	    exit 1
@@ -42,7 +42,7 @@ md5sum qortal.jar > "local.md5"
 cd 
 
 
-echo "${RED} Grabbing newest released jar to check hash ${NC}\n"
+echo "${CYAN} Grabbing newest released jar to check hash ${NC}\n"
 
 curl -L -O https://github.com/qortal/qortal/releases/latest/download/qortal.jar
 
@@ -71,7 +71,7 @@ if [ "$LOCAL" = "$REMOTE" ]; then
     exit 1
 
 else 
-	echo "${CYAN} Your Qortal Core is OUTDATED, refreshing and starting qortal... ${NC}\n"
+	echo "${RED} Your Qortal Core is OUTDATED, refreshing and starting qortal... ${NC}\n"
 	cd qortal
         killall -9 java
         sleep 5
