@@ -23,6 +23,8 @@ curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
 unzip qortal*.zip
 rm qortal*.zip
 cd qortal
+rm settings.json
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/settings.json
 chmod +x *.sh
 curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
 chmod +x qort
