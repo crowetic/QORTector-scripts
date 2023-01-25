@@ -39,7 +39,7 @@ JVM_MEMORY_ARGS="-Xss2000k -Xmx2200m"
 # by default in Java 11, on some platforms (e.g. FreeBSD 12),
 # it is overridden to be true by default. Hence we explicitly
 # set it to false to obtain desired behaviour.
-java \
+nohup nice -n 20 java \
 	-Djava.net.preferIPv4Stack=false \
 	${JVM_MEMORY_ARGS} \
 	-jar qortal.jar \
