@@ -3,12 +3,7 @@
     "minBlockchainPeers": 5,
     "minOutboundPeers": 15,
     "maxPeers": 42,
-    "apiEnabled":true,
     "apiRestricted":false,
-    "autoUpdateEnabled":true,
-    "uPnpEnabled": true,
-    "relayModeEnabled": true,
-    "qdnEnabled": true,
     "allowConnectionsWithOlderPeerVersions": false,
     "minPeerVersion": "3.8.4"
 }
