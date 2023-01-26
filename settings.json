@@ -5,7 +5,7 @@
     "maxPeers": 42,
     "apiEnabled":true,
     "apiRestricted":false,
-    "autoUpdateEnalbed":true,
+    "autoUpdateEnabled":true,
     "uPnpEnabled": true,
     "relayModeEnabled": true,
     "qdnEnabled": true,
