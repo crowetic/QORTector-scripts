@@ -10,5 +10,5 @@
     "relayModeEnabled": true,
     "qdnEnabled": true,
     "allowConnectionsWithOlderPeerVersions": false,
-    "minPeerVersion": "3.7.0"
+    "minPeerVersion": "3.8.4"
 }
