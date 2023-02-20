@@ -3,5 +3,5 @@
     "minBlockchainPeers": 5,
     "minOutboundPeers": 15,
     "maxPeers": 42,
-    "apiRestricted":false,
+    "apiRestricted":false
 }
