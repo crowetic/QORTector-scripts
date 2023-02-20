@@ -4,6 +4,4 @@
     "minOutboundPeers": 15,
     "maxPeers": 42,
     "apiRestricted":false,
-    "allowConnectionsWithOlderPeerVersions": false,
-    "minPeerVersion": "3.8.4"
 }
