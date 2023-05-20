@@ -22,6 +22,7 @@ TIMESTAMP=`date +%s`
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh ~/Desktop && chmod +x ~/Desktop/check-qortal-status.sh
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh && mv start-modified-memory-args.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh && chmod +x start-qortal.sh
+	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh && chmod +x refresh-qortal.sh
 	fi
     else
         if [ "$INTERNET_STATUS" = "UP" ]; then
