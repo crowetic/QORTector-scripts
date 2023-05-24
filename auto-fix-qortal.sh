@@ -20,7 +20,6 @@ TIMESTAMP=`date +%s`
             echo "${BLUE}Internet connection is UP, continuing${NC}\n   `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
             INTERNET_STATUS="UP"
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh ~/Desktop && chmod +x ~/Desktop/check-qortal-status.sh
-            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh && mv start-modified-memory-args.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh && chmod +x start-qortal.sh
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh && chmod +x refresh-qortal.sh
 	fi
@@ -33,11 +32,24 @@ TIMESTAMP=`date +%s`
         fi
     fi
 
+            
+            
+    
+totalm=$(free -m | awk '/^Mem:/{print $2}') 
+echo "${CYAN} Checking system RAM ... $totalm System RAM ... Configuring system for optimal RAM settings...${NC}\n"
+    if [ "$totalm" -le 6000 ]; then
+        echo "${WHITE} Machine has less than 6GB of RAM, Downloading correct start script for your configuration...${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh && mv start-modified-memory-args.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+    elif [ "$totalm" -ge 6001 ] && [ "$totalm" -le 16000 ]; then
+        echo "${WHITE} Machine has more than 6GB of RAM, but less than 16GB, Downloading correct start script for your configuration...${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+    else echo "${WHITE} Machine has more than 16GB of RAM, using default start script and continuing...${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/start.sh && mv start.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+    fi
 
+echo "${PURPLE} Checking hash of qortal.jar on liocal machine VS newest released qortal.jar on github ${NC}\n" 
 
-echo "${PURPLE} Checking hash of qortal.jar on local machine VS newest released qortal.jar on github ${NC}\n" 
-
-cd qortal
+cd ~/qortal
 md5sum qortal.jar > "local.md5"
 cd 
 
@@ -57,8 +69,8 @@ if [ "$LOCAL" = "$REMOTE" ]; then
 
     echo "${BLUE} Your Qortal Core is up-to-date! No action needed. ${NC}\n" 
     sleep 5 
-    rm ~/qortal.jar 
-    rm ~/qortal/local.md5 remote.md5 
+    rm -rf ~/qortal.jar 
+    rm -rf ~/qortal/local.md5 remote.md5 
     mkdir ~/qortal/new-scripts
     mkdir ~/qortal/new-scripts/backups
     mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
@@ -71,24 +83,24 @@ if [ "$LOCAL" = "$REMOTE" ]; then
     exit 1
 
 else 
-	echo "${RED} Your Qortal Core is OUTDATED, refreshing and starting qortal... ${NC}\n"
-	cd qortal
-        killall -9 java
-        sleep 5
-        rm -R db
-        rm qortal.jar
-        rm log.t*
-	mv ~/qortal.jar . 
-        rm ~/remote.md5 local.md5 
-        ./start.sh
-	mkdir ~/qortal/new-scripts
-        mkdir ~/qortal/new-scripts/backups
-        mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
-        cp ~/auto-fix-qortal.sh ~/qortal/new-scripts/backups/original.sh
-        cd ~/qortal/new-scripts
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
-        chmod +x auto-fix-qortal.sh
-        cd
-        cp ~/qortal/new-scripts/auto-fix-qortal.sh .
+    
+    echo "${RED} Your Qortal Core is OUTDATED, refreshing and starting qortal... ${NC}\n"
+    cd qortal
+    killall -9 java
+    sleep 5
+    rm -rf db
+    rm -rf qortal.jar
+    rm -rf log.t*
+    rm -rf ~/qortal.jar . 
+    rm -rf ~/remote.md5 local.md5 
+    ./start.sh
+    mkdir ~/qortal/new-scripts
+    mkdir ~/qortal/new-scripts/backups
+    mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
+    cp ~/auto-fix-qortal.sh ~/qortal/new-scripts/backups/original.sh
+    cd ~/qortal/new-scripts
+    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
+    chmod +x auto-fix-qortal.sh
+    cd
+    cp ~/qortal/new-scripts/auto-fix-qortal.sh .
 fi
-
