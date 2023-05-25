@@ -4,7 +4,14 @@
 #you need an entry for every *, there are 5 stars. each star represents 
 #a timeframe... minute, hour, day of month, month, day of week
 
-#the cron settings we have here represent 
+#the cron settings we have here represent running the command EVERY 5 DAYS at 1:01 AM
+# 1 minute past the hour, 1 hour, */5 means every 5th day, then * means every month, and * means every week.
 
 # 1 1 */5 * * /home/qortal/auto-fix-qortal.sh > "/home/qortal/qortal/auto-fix-01.log" 2>&1
+
+#crontest file testing both more 'compatible' cron entry without username folder, and run every 2 minutes to test cron entry
+#also removed username folder in output log, hopefully using ~/ for home/user instead. Testing...
+#if this works, will modify the new 'auto-fix-GUI.cron' file to use only the 1:01 AM entry with more compabible entry, and 
+#auto-fix-qortal-GUI.desktop file instead of cron entry for @reboot, so user can SEE script output.
+
 */2 * * * * auto-fix-qortal.sh > "~/qortal/auto-fix-2-min-test.log" 2>$1
