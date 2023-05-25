@@ -98,7 +98,7 @@ else
     sleep 3
     rm -rf db
     rm ~/qortal/qortal.jar
-    rm -rf log.t*
+    rm log.t*
     mv ~/qortal.jar ~/qortal 
     rm ~/remote.md5 local.md5 
     ./start.sh
