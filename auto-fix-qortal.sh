@@ -77,8 +77,8 @@ if [ "$LOCAL" = "$REMOTE" ]; then
 
     echo "${BLUE} Your Qortal Core is up-to-date! No action needed. ${NC}\n" 
     sleep 5 
-    rm -rf ~/qortal.jar 
-    rm -rf ~/qortal/local.md5 remote.md5 
+    rm ~/qortal.jar 
+    rm ~/qortal/local.md5 remote.md5 
     mkdir ~/qortal/new-scripts
     mkdir ~/qortal/new-scripts/backups
     mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
@@ -95,12 +95,12 @@ else
     echo "${RED} Your Qortal Core is OUTDATED, refreshing and starting qortal... ${NC}\n"
     cd qortal
     killall -9 java
-    sleep 5
+    sleep 3
     rm -rf db
-    rm -rf qortal.jar
+    rm ~/qortal/qortal.jar
     rm -rf log.t*
-    mv ~/qortal.jar . 
-    rm -rf ~/remote.md5 local.md5 
+    mv ~/qortal.jar ~/qortal 
+    rm ~/remote.md5 local.md5 
     ./start.sh
     mkdir ~/qortal/new-scripts
     mkdir ~/qortal/new-scripts/backups
