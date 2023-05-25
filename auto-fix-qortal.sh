@@ -39,12 +39,12 @@ TIMESTAMP=`date +%s`
     
 totalm=$(free -m | awk '/^Mem:/{print $2}') 
 
-echo "${CYAN} Checking system RAM ... $totalm System RAM ... Configuring system for optimal RAM settings...${NC}\n"
+echo "${YELLOW} Checking system RAM ... $totalm System RAM ... Configuring system for optimal RAM settings...${NC}\n"
     if [ "$totalm" -le 6000 ]; then
         echo "${WHITE} Machine has less than 6GB of RAM, Downloading correct start script for your configuration...${NC}\n"
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh && mv start-modified-memory-args.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
     elif [ "$totalm" -ge 6001 ] && [ "$totalm" -le 16000 ]; then
-        echo "${WHITE} Machine has more than 6GB of RAM, but less than 16GB, Downloading correct start script for your configuration...${NC}\n"
+        echo "${WHITE} Machine has between 6GB and 16GB of RAM, Downloading correct start script for your configuration...${NC}\n"
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
     else echo "${WHITE} Machine has more than 16GB of RAM, using default start script and continuing...${NC}\n"
         curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/start.sh && mv start.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
@@ -55,7 +55,7 @@ echo "${CYAN} Checking system RAM ... $totalm System RAM ... Configuring system 
         
 
 
-echo "${PURPLE} Checking hash of qortal.jar on liocal machine VS newest released qortal.jar on github ${NC}\n" 
+echo "${YELLOW} Checking hash of qortal.jar on liocal machine VS newest released qortal.jar on github ${NC}\n" 
 
 cd ~/qortal
 md5sum qortal.jar > "local.md5"
@@ -115,7 +115,7 @@ fi
 
 if command -v gnome-terminal >/dev/null 2>&1 ; then 
 
-    echo "${CYAN} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
+    echo "${YELLOW} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
     sleep 2
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron && crontab auto-fix-GUI-cron && rm auto-fix-GUI-cron
     echo "${CYAN} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${CYAN} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
