@@ -1,4 +1,4 @@
-#crowetic's QORTector-scripts
+# crowetic's QORTector-scripts
 **This used to be a location for scripts solely related to the raspberry pi** - this is **no longer the case**. 
 
 This is now a location for multiple different **automation scripts** written by crowetic. They are focused on **automating Qortal** in multiple ways. 
@@ -17,7 +17,7 @@ This feature will **modify existing auto-fix machines automatically** when the s
 
 As time goes on the plan is to also make this script check that the node is within x number of blocks from the chain tip, then if it is not, resolve that scenario as well.
 
-##Many other scripts / tools
+## Many other scripts / tools
 
 There are many other scripts and tools in this repo, most of which are not fully labeled. Explanations of each will be published as time goes on, so that they become more useful to others outside of Crowetic Hardware Development team.
 
