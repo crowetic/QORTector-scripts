@@ -6,4 +6,4 @@ NoDisplay=false
 Hidden=false
 Name[en_US]=auto-fix-visible
 Comment[en_US]=Run auto-fix script visibly 5 min after system startup.
-X-GNOME-Autostart-Delay=600
+X-GNOME-Autostart-Delay=420
