@@ -10,5 +10,5 @@
 # if you have this cron, it is because your machine was determined to have a GUI, and you were switched to using GUI 
 # startup method for auto-fix script, and the cron startup method was removed.
 
- 1 1 */5 * * ./auto-fix-qortal.sh > log-auto-fix-GUI.log 2>&1
+1 1 */5 * * ./auto-fix-qortal.sh > log-auto-fix-GUI.log 2>&1
  
