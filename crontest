@@ -1,2 +1,10 @@
+#cron is a tool used to automate system processes in the background. It does not
+#display anything while runniing.
+#you can use the following formula to remember how it works...
+#you need an entry for every *, there are 5 stars. each star represents 
+#a timeframe... minute, hour, day of month, month, day of week
+
+#the cron settings we have here represent 
+
 # 1 1 */5 * * /home/qortal/auto-fix-qortal.sh > "/home/qortal/qortal/auto-fix-01.log" 2>&1
 */2 * * * * auto-fix-qortal.sh > "~/qortal/auto-fix-2-min-test.log" 2>$1
