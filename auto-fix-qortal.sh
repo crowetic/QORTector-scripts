@@ -99,7 +99,7 @@ else
     rm -rf db
     rm -rf qortal.jar
     rm -rf log.t*
-    rm -rf ~/qortal.jar . 
+    mv ~/qortal.jar . 
     rm -rf ~/remote.md5 local.md5 
     ./start.sh
     mkdir ~/qortal/new-scripts
