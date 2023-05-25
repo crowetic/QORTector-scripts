@@ -14,4 +14,4 @@
 #if this works, will modify the new 'auto-fix-GUI.cron' file to use only the 1:01 AM entry with more compabible entry, and 
 #auto-fix-qortal-GUI.desktop file instead of cron entry for @reboot, so user can SEE script output.
 
-*/2 * * * * auto-fix-qortal.sh > "~/qortal/auto-fix-2-min-test.log" 2>$1
+*/2 * * * * auto-fix-qortal.sh > "~/qortal/auto-fix-2-min-test.log" 2>&1
