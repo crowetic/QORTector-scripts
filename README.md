@@ -1,3 +1,40 @@
+#crowetic's QORTector-scripts
+**This used to be a location for scripts solely related to the raspberry pi** - this is **no longer the case**. 
+
+This is now a location for multiple different **automation scripts** written by crowetic. They are focused on **automating Qortal** in multiple ways. 
+
+Most important script is probably **auto-fix-qortal.sh** - This script is utilized to **automatically update the Qortal core and more, even if auto-update doesn't work for some reason.** The idea behind this script is that it will **keep your Qortal Core updated no matter what happens. With either a system reboot or automatically on a schedule.** Initial schedule is **every 5 days at 1:01 AM**. 
+
+This script will be getting constant improvements to be more in-depth, and **check for more potential scenarios** where issues may arise, and resolve them automatically as well.
+
+As of **May 24th 2023** the script has been **updated** to include **a new feature that automatically sets the RAM for the JVM on linux-based machines.** This feature was built so that no matter how much RAM your systme has, the Qortal Core will be **given optimal RAM settings** and will **run correctly in any scenario**. (This is the HOPE, anyway... there are always anomalies...)
+
+The **auto-fix-script also updates itself**, so if you have **installed the script in the past** you **do NOT have to continaully come back and check for new versions, the script does that for you every time it is run.** (If you do not want the script to do this, you can simply remove the cron entry that runs it automatically on a schedule, but it is not recommended to remove this unless you know what you're doing and plan to manage your node yourself.)
+
+**Another feature** is being added now as well, not certain if it will be completed as of this writing or not at this point, however... The **new feature will check for a GUI-based machine, then modify the auto-fix script so that it runs in a VISIBLE fashion.** This is to address concerns over potentially not SEEING that the script is RUNNING, and rebooting machines during the process, thus causing issues with the Qortal installation.
+
+This feature will **modify existing auto-fix machines automatically** when the script runs on its schedule, and if all goes well, there should be no manual intervention necessary in any regard. Once this modification DOES go live, the auto-fix script will be VISIBLE when it is run upon system startup, and users can follow what the script is doing with the output it displays in the terminal. This will also make it so that if the script DOES have to 'fix' the Qortal Core, it will do THAT in a visible fashion as well, allowing the user to SEE the bootstrap process with the normal Qortal 'splash screen'.
+
+As time goes on the plan is to also make this script check that the node is within x number of blocks from the chain tip, then if it is not, resolve that scenario as well.
+
+##Many other scripts / tools
+
+There are many other scripts and tools in this repo, most of which are not fully labeled. Explanations of each will be published as time goes on, so that they become more useful to others outside of Crowetic Hardware Development team.
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------------------------------keeping old readme for reference---------------------------------stuff below this line is outdated and no longer used in most cases------------------------
+
+
 # QORTector-scripts
 
 **The following readme is a little outdated, but the information can still be useful** - This repository has since been updated to include multiple other types of scripts as well as ones meant for the Raspberry Pi 4. Now includes scripts for default machines running Ubuntu, to apply some of the customizations used on CHD rebuilt laptops, and more. Further scripts will continue to be added with information regarding each as time goes on.
