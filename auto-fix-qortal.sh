@@ -11,7 +11,7 @@ CYAN='\033[0;36m'         # Cyan
 WHITE='\033[0;37m'        # White
 NC='\033[0m'              # No Color
 
-echo "${CYAN} checking internet connection ${NC}\n"
+echo "${YELLOW} checking internet connection ${NC}\n"
 
 INTERNET_STATUS="UNKNOWN"
 TIMESTAMP=`date +%s`
@@ -118,12 +118,12 @@ if command -v gnome-terminal >/dev/null 2>&1 ; then
     echo "${YELLOW} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
     sleep 2
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron && crontab auto-fix-GUI-cron && rm auto-fix-GUI-cron
-    echo "${CYAN} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${CYAN} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
+    echo "${YELLOW} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${YELLOW} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop && mv auto-fix-qortal-GUI.desktop ~/.config/autostart
-    echo "${CYAN} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
+    echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
     exit 1
 
-else echo "${CYAN} Non-GUI system detected, skipping 'auto-fix-visible' setup ${NC}\n" 
+else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup ${NC}\n" 
 
 fi
 
