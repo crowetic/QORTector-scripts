@@ -119,7 +119,7 @@ if command -v gnome-terminal >/dev/null 2>&1 ; then
     sleep 2
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron && crontab auto-fix-GUI-cron && rm auto-fix-GUI-cron
     echo "${YELLOW} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${YELLOW} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
-    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop && mkdir ~/.config/autostart && mv auto-fix-qortal-GUI.desktop ~/.config/autostart
+    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop && mkdir ~/.config/autostart && mv auto-fix-qortal-GUI.desktop ~/.config/autostart/
     echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
     exit 1
 
