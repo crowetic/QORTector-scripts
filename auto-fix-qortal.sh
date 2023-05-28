@@ -99,12 +99,14 @@ else
     rm -rf db
     rm ~/qortal/qortal.jar
     rm log.t*
-    mv ~/qortal.jar ~/qortal 
+    cp ~/qortal.jar ~/qortal 
+    rm ~/qortal.jar
     rm ~/remote.md5 local.md5 
     ./start.sh
     mkdir ~/qortal/new-scripts
     mkdir ~/qortal/new-scripts/backups
-    mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
+    cp ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
+    rm ~/qortal/new-scripts/auto-fix-qortal.sh
     cp ~/auto-fix-qortal.sh ~/qortal/new-scripts/backups/original.sh
     cd ~/qortal/new-scripts
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
@@ -117,9 +119,14 @@ if command -v gnome-terminal >/dev/null 2>&1 ; then
 
     echo "${YELLOW} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
     sleep 2
-    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron && crontab auto-fix-GUI-cron && rm auto-fix-GUI-cron
+    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
+    crontab auto-fix-GUI-cron
+    rm auto-fix-GUI-cron
     echo "${YELLOW} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${YELLOW} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
-    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop && mkdir ~/.config/autostart && mv auto-fix-qortal-GUI.desktop ~/.config/autostart/
+    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop
+    mkdir ~/.config/autostart
+    cp auto-fix-qortal-GUI.desktop ~/.config/autostart
+    rm ~/auto-fix-qortal-GUI.desktop
     echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
     exit 1
 
