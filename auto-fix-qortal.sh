@@ -27,7 +27,7 @@ TIMESTAMP=`date +%s`
 	fi
     else
         if [ "$INTERNET_STATUS" = "UP" ]; then
-            echo "${RED}Internet Connection is DOWN, please fix connection and restart device${NC}\n `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
+            echo "${RED}Internet Connection is DOWN, please fix connection and restart device, script will re-run automatically after 7 min.${NC}\n `date +%Y-%m-%dT%H:%M:%S%Z` $((`date +%s`-$TIMESTAMP))";
             INTERNET_STATUS="DOWN"
 	    sleep 30
 	    exit 1
@@ -76,7 +76,7 @@ REMOTE=$(cat ~/remote.md5)
 if [ "$LOCAL" = "$REMOTE" ]; then
 
     echo "${BLUE} Your Qortal Core is up-to-date! No action needed. ${NC}\n" 
-    sleep 5 
+    sleep 3
     rm ~/qortal.jar 
     rm ~/qortal/local.md5 remote.md5 
     mkdir ~/qortal/new-scripts
