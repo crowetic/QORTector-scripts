@@ -1,7 +1,5 @@
 {
     "apiDocumentationEnabled":true,
-    "minBlockchainPeers": 5,
-    "minOutboundPeers": 15,
-    "maxPeers": 42,
+    "maxPeers": 60,
     "apiRestricted":false
 }
