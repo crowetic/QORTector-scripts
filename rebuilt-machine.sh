@@ -11,13 +11,13 @@ CYAN='\033[0;36m'         # Cyan
 WHITE='\033[0;37m'        # White
 NC='\033[0m'              # No Color
 
-echo "${PURPLE} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n" 
+echo "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n" 
 
 sudo apt update 
 sudo apt -y upgrade
-sudo apt -y install unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2 htop net-tools
+sudo apt -y install unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop
 
-echo "${BLUE} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
+echo "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
 curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
 unzip qortal*.zip
@@ -30,7 +30,7 @@ curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
 chmod +x qort
 
 
-echo "${PURPLE} DOWNLOADING QORTAL UI AppImage AND RENAMING ${NC}\n"
+echo "${YELLOW} DOWNLOADING QORTAL UI AppImage AND RENAMING ${NC}\n"
 
 cd 
 cd Desktop
@@ -38,7 +38,7 @@ curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-S
 mv Qortal-Setup*.AppImage Qortal-UI
 chmod +x Qortal-UI
 
-echo "${CYAN} DOWNLOADING PICTURE FILES AND OTHER SCRIPTS ${NC}\n"
+echo "${YELLOW} DOWNLOADING PICTURE FILES AND OTHER SCRIPTS ${NC}\n"
 
 cd
 
@@ -72,8 +72,9 @@ crontab rebuilt-machine-cron
 
 rm -R Machine-files
 rm Machine-files.zip
+rm rebuilt-machine-cron
 
-echo "${CYAN} REBOOTING MACHINE - USE CINNAMON DESKTOP ENVIRONMENT UPON REBOOT BY CLICKING LOGIN NAME THEN SETTINGS ICON AT BOTTOM RIGHT, AND CHANGING TO CINNAMON ${NC}\n" 
+echo "${YELLOW} REBOOTING MACHINE - USE CINNAMON DESKTOP ENVIRONMENT UPON REBOOT BY CLICKING LOGIN NAME THEN SETTINGS ICON AT BOTTOM RIGHT, AND CHANGING TO CINNAMON ${NC}\n" 
 
 sudo reboot
 
