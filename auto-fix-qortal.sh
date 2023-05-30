@@ -34,10 +34,10 @@ TIMESTAMP=`date +%s`
         fi
     fi
 
-            
-            
-    
-totalm=$(free -m | awk '/^Mem:/{print $2}') 
+
+
+
+totalm=$(free -m | awk '/^Mem:/{print $2}')
 
 echo "${YELLOW} Checking system RAM ... $totalm System RAM ... Configuring system for optimal RAM settings...${NC}\n"
     if [ "$totalm" -le 6000 ]; then
@@ -51,15 +51,14 @@ echo "${YELLOW} Checking system RAM ... $totalm System RAM ... Configuring syste
     fi
 
 
-    
-        
 
 
-echo "${YELLOW} Checking hash of qortal.jar on liocal machine VS newest released qortal.jar on github ${NC}\n" 
+
+echo "${YELLOW} Checking hash of qortal.jar on liocal machine VS newest released qortal.jar on github ${NC}\n"
 
 cd ~/qortal
 md5sum qortal.jar > "local.md5"
-cd 
+cd
 
 
 echo "${CYAN} Grabbing newest released jar to check hash ${NC}\n"
@@ -67,18 +66,18 @@ echo "${CYAN} Grabbing newest released jar to check hash ${NC}\n"
 curl -L -O https://github.com/qortal/qortal/releases/latest/download/qortal.jar
 
 md5sum qortal.jar > "remote.md5"
- 
 
-LOCAL=$(cat ~/qortal/local.md5) 
+
+LOCAL=$(cat ~/qortal/local.md5)
 REMOTE=$(cat ~/remote.md5)
 
 
 if [ "$LOCAL" = "$REMOTE" ]; then
 
-    echo "${BLUE} Your Qortal Core is up-to-date! No action needed. ${NC}\n" 
+    echo "${BLUE} Your Qortal Core is up-to-date! No action needed. ${NC}\n"
     sleep 3
-    rm ~/qortal.jar 
-    rm ~/qortal/local.md5 remote.md5 
+    rm ~/qortal.jar
+    rm ~/qortal/local.md5 remote.md5
     mkdir ~/qortal/new-scripts
     mkdir ~/qortal/new-scripts/backups
     mv ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
@@ -88,10 +87,10 @@ if [ "$LOCAL" = "$REMOTE" ]; then
     chmod +x auto-fix-qortal.sh
     cd
     cp ~/qortal/new-scripts/auto-fix-qortal.sh .
-    
 
-else 
-    
+
+else
+
     echo "${RED} Your Qortal Core is OUTDATED, refreshing and starting qortal... ${NC}\n"
     cd qortal
     killall -9 java
@@ -99,9 +98,9 @@ else
     rm -rf db
     rm ~/qortal/qortal.jar
     rm log.t*
-    cp ~/qortal.jar ~/qortal 
+    cp ~/qortal.jar ~/qortal
     rm ~/qortal.jar
-    rm ~/remote.md5 local.md5 
+    rm ~/remote.md5 local.md5
     ./start.sh
     mkdir ~/qortal/new-scripts
     mkdir ~/qortal/new-scripts/backups
@@ -115,25 +114,34 @@ else
     cp ~/qortal/new-scripts/auto-fix-qortal.sh .
 fi
 
-if command -v gnome-terminal >/dev/null 2>&1 ; then 
+if command -v raspi-config >/dev/null 2>&1 ; then
+	echo "${YELLOW} Raspberry Pi machine detected, creating pi cron and exiting...${NC}\n"
+	curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
+	crontab auto-fix-cron
+	rm auto-fix-cron
+	exit 1
+    else echo "${YELLOW} Not a Raspberry pi machine, continuing...${NC}\n"
 
-    echo "${YELLOW} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
-    sleep 2
-    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
-    crontab auto-fix-GUI-cron
-    rm auto-fix-GUI-cron
-    echo "${YELLOW} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${YELLOW} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
-    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop
-    mkdir ~/.config/autostart
-    cp auto-fix-qortal-GUI.desktop ~/.config/autostart
-    rm ~/auto-fix-qortal-GUI.desktop
-    echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
-    exit 1
+fi
 
-else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup ${NC}\n" 
+    if command -v gnome-terminal >/dev/null 2>&1 ; then
+
+        echo "${YELLOW} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
+        sleep 2
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
+        crontab auto-fix-GUI-cron
+        rm auto-fix-GUI-cron
+        echo "${YELLOW} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${YELLOW} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop
+        mkdir ~/.config/autostart
+        cp auto-fix-qortal-GUI.desktop ~/.config/autostart
+        rm ~/auto-fix-qortal-GUI.desktop
+        echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
+        exit 1
+
+    else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup ${NC}\n"
 
 fi
 
 sleep 10
 exit 1
-
