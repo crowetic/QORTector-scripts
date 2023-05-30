@@ -33,7 +33,7 @@ fi
 # Limits Java JVM stack size and maximum heap usage.
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
-JVM_MEMORY_ARGS="-Xss1250k -Xmx2750m"
+JVM_MEMORY_ARGS="-Xss1250k -Xmx2350m"
 
 # Although java.net.preferIPv4Stack is supposed to be false
 # by default in Java 11, on some platforms (e.g. FreeBSD 12),
