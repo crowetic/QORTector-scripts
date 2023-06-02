@@ -33,7 +33,7 @@ chmod +x qort
 echo "${YELLOW} DOWNLOADING QORTAL UI AppImage AND RENAMING ${NC}\n"
 
 cd 
-cd Desktop
+cd qortal
 curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-amd64.AppImage
 mv Qortal-Setup*.AppImage Qortal-UI
 chmod +x Qortal-UI
@@ -47,8 +47,9 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/ref
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh
 
+
 chmod +x *.sh
-mv check-qortal-status.sh ~/Desktop
+mv check-qortal-status.sh ~/qortal
 
 unzip Machine-files.zip
 
