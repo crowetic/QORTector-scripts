@@ -35,14 +35,14 @@ TIMESTAMP=`date +%s`
         fi
     fi
 
-if $(uname -m | grep 'armv7l'); then
-  echo "${WHITE} 32bit ARM detected, using ARM 32bit compatible modified start script${NC}\n"
-  curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
-  chmod +x start-modified-memory-args.sh
-  mv start-modified-memory-args.sh ~/qortal/start.sh
-else
-  echo "${WHITE} Machine is not ARM 32bit, continuing to check memory and assign correct start script...${NC}\n"
-fi
+  if [ "$(uname -m | grep 'armv7l')" != "" ]; then
+      echo "${WHITE} 32bit ARM detected, using ARM 32bit compatible modified start script${NC}\n"
+      curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
+      chmod +x start-modified-memory-args.sh
+      mv start-modified-memory-args.sh ~/qortal/start.sh
+  else
+      echo "${WHITE} Machine is not ARM 32bit, continuing to check memory and assign correct start script...${NC}\n"
+  fi
 
 
 totalm=$(free -m | awk '/^Mem:/{print $2}')
