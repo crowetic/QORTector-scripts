@@ -35,32 +35,6 @@ TIMESTAMP=`date +%s`
         fi
     fi
 
-  if [ "$(uname -m | grep 'armv7l')" != "" ]; then
-      echo "${WHITE} 32bit ARM detected, using ARM 32bit compatible modified start script${NC}\n"
-      curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
-      chmod +x start-modified-memory-args.sh
-      mv start-modified-memory-args.sh ~/qortal/start.sh
-  else
-      echo "${WHITE} Machine is not ARM 32bit, continuing to check memory and assign correct start script...${NC}\n"
-  fi
-
-
-totalm=$(free -m | awk '/^Mem:/{print $2}')
-
-echo "${YELLOW} Checking system RAM ... $totalm System RAM ... Configuring system for optimal RAM settings...${NC}\n"
-    if [ "$totalm" -le 6000 ]; then
-        echo "${WHITE} Machine has less than 6GB of RAM, Downloading correct start script for your configuration...${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh && mv start-modified-memory-args.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
-    elif [ "$totalm" -ge 6001 ] && [ "$totalm" -le 16000 ]; then
-        echo "${WHITE} Machine has between 6GB and 16GB of RAM, Downloading correct start script for your configuration...${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
-    else echo "${WHITE} Machine has more than 16GB of RAM, using default start script and continuing...${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/start.sh && mv start.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
-    fi
-
-
-
-
 
 echo "${YELLOW} Checking hash of qortal.jar on liocal machine VS newest released qortal.jar on github ${NC}\n"
 
@@ -122,6 +96,15 @@ else
     cp ~/qortal/new-scripts/auto-fix-qortal.sh .
 fi
 
+  if [ "$(uname -m | grep 'armv7l')" != "" ]; then
+      echo "${WHITE} 32bit ARM detected, using ARM 32bit compatible modified start script${NC}\n"
+      curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
+      chmod +x start-modified-memory-args.sh
+      mv start-modified-memory-args.sh ~/qortal/start.sh
+  else
+      echo "${WHITE} Machine is not ARM 32bit, continuing to check memory and assign correct start script...${NC}\n"
+  fi
+
 if command -v raspi-config >/dev/null 2>&1 ; then
 	echo "${YELLOW} Raspberry Pi machine detected, creating pi cron and exiting...${NC}\n"
 	curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
@@ -131,6 +114,21 @@ if command -v raspi-config >/dev/null 2>&1 ; then
     else echo "${YELLOW} Not a Raspberry pi machine, continuing...${NC}\n"
 
 fi
+
+totalm=$(free -m | awk '/^Mem:/{print $2}')
+
+echo "${YELLOW} Checking system RAM ... $totalm System RAM ... Configuring system for optimal RAM settings...${NC}\n"
+    if [ "$totalm" -le 6000 ]; then
+        echo "${WHITE} Machine has less than 6GB of RAM, Downloading correct start script for your configuration...${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh && mv start-modified-memory-args.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+    elif [ "$totalm" -ge 6001 ] && [ "$totalm" -le 16000 ]; then
+        echo "${WHITE} Machine has between 6GB and 16GB of RAM, Downloading correct start script for your configuration...${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+    else echo "${WHITE} Machine has more than 16GB of RAM, using default start script and continuing...${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/start.sh && mv start.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+    fi
+
+
 
     if command -v gnome-terminal >/dev/null 2>&1 ; then
 
