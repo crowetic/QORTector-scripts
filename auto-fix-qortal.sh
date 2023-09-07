@@ -124,8 +124,8 @@ echo "${YELLOW} Checking system RAM ... $totalm System RAM ... Configuring syste
     elif [ "$totalm" -ge 6001 ] && [ "$totalm" -le 16000 ]; then
         echo "${WHITE} Machine has between 6GB and 16GB of RAM, Downloading correct start script for your configuration...${NC}\n"
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
-    else echo "${WHITE} Machine has more than 16GB of RAM, using default start script and continuing...${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/start.sh && mv start.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+    else echo "${WHITE} Machine has more than 16GB of RAM, using high-RAM start script and continuing...${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-high-RAM.sh && mv start-high-RAM.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
     fi
 
 
