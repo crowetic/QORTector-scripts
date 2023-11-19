@@ -33,13 +33,13 @@ fi
 # Limits Java JVM stack size and maximum heap usage.
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
-JVM_MEMORY_ARGS="-Xss4096k -Xmx4400m"
+JVM_MEMORY_ARGS="-Xss256m -Xmx4128m -XX:MaxRAM=4172m -XX:+UseSerialGC"
 
 # Although java.net.preferIPv4Stack is supposed to be false
 # by default in Java 11, on some platforms (e.g. FreeBSD 12),
 # it is overridden to be true by default. Hence we explicitly
 # set it to false to obtain desired behaviour.
-nohup nice -n 20 java \
+nohup nice -n 10 java \
 	-Djava.net.preferIPv4Stack=false \
 	${JVM_MEMORY_ARGS} \
 	-jar qortal.jar \
