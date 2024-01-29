@@ -16,6 +16,9 @@ echo "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\
 sudo apt update 
 sudo apt -y upgrade
 sudo apt -y install unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip
+# TODO - check if the system is ubuntu, if so then remove the bullshit ubuntu-advantage-tools, then re-install gnome-software.
+#sudo apt -y --purge remove ubuntu-advantage-tools 
+#sudo apt -y install gnome-software
 
 echo "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
