@@ -110,6 +110,9 @@ if command -v raspi-config >/dev/null 2>&1 ; then
 	curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
 	crontab auto-fix-cron
 	rm auto-fix-cron
+ 	curl -L -o https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh
+  	mv start-6001*.sh ~/qortal/start.sh 
+   	chmod +x ~/qortal/*.sh
 	exit 1
     else echo "${YELLOW} Not a Raspberry pi machine, continuing...${NC}\n"
 
