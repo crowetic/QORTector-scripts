@@ -139,14 +139,22 @@ if command -v raspi-config >/dev/null 2>&1 ; then
         mv start-modified-memory-args.sh ~/qortal/start.sh
         check_qortal
     else
-        echo "${WHITE} Machine is not ARM 32bit, adding correct start script and continuing...${NC}\n"
+        echo "${WHITE} Machine is not ARM 32bit, checking RAM amount and adding correct start script...${NC}\n"
+        totalm=$(free -m | awk '/^Mem:/{print $2}')
+        echo "${YELLOW} configuring auto-fix cron...${NC}\n"
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
         crontab auto-fix-cron
         rm -rf auto-fix-cron
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh
-        mv start-6001*.sh ~/qortal/start.sh 
-        chmod +x ~/qortal/*.sh
-        check_qortal
+        
+        if [ "$totalm" -le 6000 ]; then
+            echo "${WHITE} 4GB 64bit pi detected, grabbing correct start script and continuing...${NC}\n"
+            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/4GB-start.sh && mv 4GB-start.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+            check_qortal
+        else
+            echo "${WHITE} 8GB 64bit pi detected, grabbing correct start script and continuing...${NC}\n"
+            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+            check_qortal
+        fi
     fi
 else echo "${YELLOW} Not a Raspberry pi machine, continuing...${NC}\n"
     check_memory
