@@ -14,14 +14,14 @@ NC='\033[0m'              # No Color
 echo "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n" 
 
 sudo apt update 
+# TODO - check if the system is ubuntu, if so then remove the bullshit ubuntu-advantage-tools, then re-install gnome-software - for now, just purge it and install gnome-software assuming it's an ubuntu-compatible distro.
+sudo apt -y --purge remove ubuntu-advantage-tools
 sudo apt -y upgrade
-sudo apt -y install unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip
-# TODO - check if the system is ubuntu, if so then remove the bullshit ubuntu-advantage-tools, then re-install gnome-software.
-#sudo apt -y --purge remove ubuntu-advantage-tools 
-#sudo apt -y install gnome-software
+sudo apt -y install gnome-software unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip
 
 echo "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
+cd 
 curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
 unzip qortal*.zip
 rm qortal*.zip
