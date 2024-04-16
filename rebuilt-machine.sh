@@ -22,6 +22,11 @@ sudo apt -y install gnome-software unzip vim curl default-jre cinnamon-desktop-e
 echo "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
 cd 
+if [ -d qortal ]; then
+  echo "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
+  mkdir -p backups
+  mv qortal backups/
+fi
 curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
 unzip qortal*.zip
 rm qortal*.zip
@@ -33,9 +38,13 @@ curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
 chmod +x qort
 
 
-echo "${YELLOW} DOWNLOADING QORTAL UI AppImage AND RENAMING ${NC}\n"
+
 
 cd 
+if [ -f qortal/Qortal-UI ]; then
+  echo "${PURPLE} PREVIOUS Qortal-UI FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
+  mv qortal/Qortal-UI ~/backups/
+fi 
 cd qortal
 curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-amd64.AppImage
 mv Qortal-Setup*.AppImage Qortal-UI
@@ -59,30 +68,37 @@ unzip Machine-files.zip
 
 mv Machine-files/Pictures/*.* ~/Pictures/
 
-
 curl -L -O https://cloud.qortal.org/s/8z4sRiwJCPqM4Fi/download/Qortal-TheFuture-Wallpaper.png
 mv Qortal-The*.png ~/Pictures/
 
 
 curl -L -O https://cloud.qortal.org/s/6d8qoEkQRDSCTqn/download/rebuilt-machine-setup.txt
 mv rebuilt-machine-setup.txt ~/Desktop
-
+if [ -d ~/Pictures/wallpapers ]; then
+  echo "${PURPLE} PREVIOUS wallpapers folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
+  mv ~/Pictures/wallpapers ~/backups
+fi
+if [ -d ~/Pictures/icons ]; then
+  echo "${PURPLE} PREVIOUS icons folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
+  mv ~/Pictures/icons ~/backups
+fi
 mkdir -p ~/Pictures/wallpapers
 mkdir -p ~/Pictures/icons
-mv ~/Pictures/wallpaper*.jpeg ~/Pictures/wallpapers
+mv ~/Pictures/Wallpaper*.jpeg ~/Pictures/wallpapers
 mv ~/Pictures/Qortal-The*.png ~/Pictures/wallpapers
 mv ~/Pictures/*.* ~/Pictures/icons
 
 
 echo "${YELLOW} FINISHING UP ${NC}\n"
 
+username=$(whoami)
+echo "@reboot sleep 399 && ./auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-startup.log\" 2>&1" >> "rebuilt-machine-cron"
+echo "1 1 */5 * * /home/$(whoami)/auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-01.log\" 2>&1" >> "rebuilt-machine-cron"
 chmod +x *.sh
 
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/rebuilt-machine-cron
 crontab rebuilt-machine-cron
 
 rm -rf Machine-files Machine-files.zip rebuilt-machine-cron
-
 
 echo "${YELLOW} REBOOTING MACHINE IN 10 SECONDS - USE CINNAMON DESKTOP ENVIRONMENT UPON REBOOT BY CLICKING LOGIN NAME THEN SETTINGS ICON AT BOTTOM RIGHT, AND CHANGING TO CINNAMON ${NC}\n" 
 
