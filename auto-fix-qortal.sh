@@ -217,7 +217,7 @@ cd
 cp ~/qortal/new-scripts/auto-fix-qortal.sh .
 echo "${YELLOW} Auto-fix script run complete.${NC}\n"
 sleep 5 
-exit 1
+exit
 }
 
 # QORTAL BLOCK HEIGHT CHECKS FIRST WITH JQ THEN WITH PYTHON, IF BOTH FAIL, SKIP CHECKS.
@@ -232,17 +232,21 @@ local_height=$(curl -sS "http://localhost:12391/blocks/height")
 
 if [ -z ${local_height} ]; then
 	echo "${RED} local API call for block height returned empty, IS YOUR QORTAL CORE RUNNING? ${NC}\n"
-	no_local_height
+	#no_local_height
 fi
 
-if [ ${local_height} -eq ${previous_local_height} ]; then
-	echo "${RED} local height has not changed since previous script run... waiting 3 minutes and checking height again, if height still hasn't changed, forcing bootstrap... ${NC}\n"
-	sleep 188
-	checked_height=$(curl "localhost:12391/blocks/height")
-	sleep 2
-	if [ ${checked_height} -eq ${previous_local_height} ]; then
-		echo "${RED} block height still has not changed... forcing bootstrap... ${NC}\n"
-		force_bootstrap
+if [ -n ${previous_local_height} ]; then
+
+	if [ "${local_height}" = "${previous_local_height}" ]; then
+		echo "${RED} local height has not changed since previous script run... waiting 3 minutes and checking height again, if height still hasn't changed, forcing bootstrap... ${NC}\n"
+		sleep 188
+		checked_height=$(curl "localhost:12391/blocks/height")
+		sleep 2
+		if [ "${checked_height}" = "${previous_local_height}" ]; then
+			echo "${RED} block height still has not changed... forcing bootstrap... ${NC}\n"
+			#force_bootstrap
+		fi
+		
 	fi
 fi
 
@@ -260,35 +264,31 @@ update_script
 }
 
 remote_height_checks() {
+    height_api_qortal_org=$(curl -sS --connect-timeout 10 "https://api.qortal.org/blocks/height")
+    height_qortal_link=$(curl -sS --connect-timeout 10 "https://qortal.link/blocks/height")
+    local_height=$(curl -sS --connect-timeout 10 "http://localhost:12391/blocks/height")
 
-height_api_qortal_org=$(curl -sS "https://api.qortal.org/blocks/height")
-height_api_qortal_online=$(curl -sS "https://api.qortal.online/blocks/height")
-height_qortal_link=$(curl -sS "https://qortal.link/blocks/height")
-height_qortal_name=$(curl -sS "https://qortal.name/blocks/height")
+    if [ -z "$height_api_qortal_org" ] || [ -z "$height_qortal_link" ]; then
+        echo "${RED}Failed to fetch data from one or more remote URLs. Skipping remote node checks and updating script ${NC}\n" >&2
+        update_script
+    fi
 
-#declare -a remote_node_heights #declare an array
-
-#remote_node_heights+=$height_api_qortal_online
-#remote_node_heights+=$height_qortal_link
-#remote_node_heights+=$height_qortal_name
-#remote_node_heights+=$height_api_qortal_org
-
-
-if [[ ${height_api_qortal_org} - 1500 <= ${local_height} && ${local_height} <= ${height_api_qortal_org} + 1500 ]]; then
-	echo "${YELOW}Local height${NC}${GREEN} (${local_height}) ${NC}${YELLOW}is within 1500 block range of node height${NC} ${CYAN}(${height_api_qortal_org})${NC}." >&2
-    	echo "${CYAN}api.qortal.org height checks${NC} ${GREEN}PASSED${NC}${YELLOW} updating script...${NC}"
-    	update_script
-  	else 
-  		echo "${RED}node is outside the 1500 block range of api.qortal.org, checking another node to be sure...${NC}"
-  		if [[ ${height_api_qortal_online} - 1500 <= ${local_height} && ${local_height} <= ${height_api_qortal_online} + 1500 ]]; then
-  			echo "${CYAN}api.qortal.online height checks${NC} ${GREEN}PASSED${NC}${YELLOW} updating script...${NC}"
-  			update_script
-  		else
-  			echo "${RED} SECOND remote node check FAILED... assuming local node needs bootstrapping... bootstrapping in 5 seconds...${NC}\n"
-  			force_bootstrap
-  		fi
-fi >&2
+    if [ "$height_api_qortal_org" -ge $((local_height - 1500)) ] && [ "$local_height" -le $((height_api_qortal_org + 1500)) ]; then
+        echo "${YELLOW}Local height (${local_height}) is within 1500 block range of node height (${height_api_qortal_org}).${NC}" >&2
+        echo "${CYAN}api.qortal.org height checks PASSED updating script...${NC}"
+        update_script
+    else
+        echo "${RED}Node is outside the 1500 block range of api.qortal.org, checking another node to be sure...${NC}"
+        if [ "$height_qortal_link" -ge $((local_height - 1500)) ] && [ "$local_height" -le $((height_qortal_link + 1500)) ]; then
+            echo "${CYAN}qortal.link height checks PASSED updating script...${NC}"
+            update_script
+        else
+            echo "${RED}SECOND remote node check FAILED... assuming local node needs bootstrapping... bootstrapping in 5 seconds...${NC}\n"
+            force_bootstrap
+        fi
+    fi
 }
+
 
 
 check_internet
