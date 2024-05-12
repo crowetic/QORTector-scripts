@@ -51,7 +51,7 @@ LOCAL_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion":"q
 REMOTE_VERSION=$(curl -s "https://api.github.com/repos/qortal/qortal/releases/latest" | grep -oP '"tag_name": "v\K[^"]*' | tr -d '.')
 
 if [ "$LOCAL_VERSION" -ge "$REMOTE_VERSION" ]; then
-    echo "${GREEN} Local version is higher than or equal to the remote version, no qortal changes necessary, updating scripts and continuing...${NC}\n"
+    echo "${GREEN} Local version is higher than or equal to the remote version, no qortal updates needed... continuing...${NC}\n"
     check_for_GUI   
 else
     check_hash_update_qortal
@@ -59,11 +59,11 @@ fi
 }
 
 check_hash_update_qortal() {
-echo "${YELLOW} Your Qortal version is outdated, checking hash of qortal.jar on local machine VS newest released qortal.jar on github and updating your qortal.jar... ${NC}\n"
+echo "${YELLOW} Your Qortal version is outdated or initial API call check failed. Proceeding to hash check, checking hash of qortal.jar on local machine VS newest released qortal.jar on github and updating your qortal.jar if needed... ${NC}\n"
 cd ~/qortal || exit
 md5sum qortal.jar > "local.md5"
 cd
-echo "${CYAN} Grabbing newest released jar to check hash ${NC}\n"
+echo "${CYAN} Grabbing newest released jar to check hash... ${NC}\n"
 curl -L -O https://github.com/qortal/qortal/releases/latest/download/qortal.jar
 md5sum qortal.jar > "remote.md5"
 
@@ -71,11 +71,11 @@ LOCAL=$(cat ~/qortal/local.md5)
 REMOTE=$(cat ~/remote.md5)
 
 if [ "$LOCAL" = "$REMOTE" ]; then
-    echo "${YELLOW} Hash check says your Qortal core is UP-TO-DATE, checking environment and updating scripts... ${NC}\n"
+    echo "${YELLOW} Hash check says your Qortal core is UP-TO-DATE, checking environment... ${NC}\n"
     check_for_GUI
     exit 1
 else
-    echo "${RED} Hash check confirmed your qortal core is OUTDATED, refreshing and starting qortal...then checking for environment and updating scripts ${NC}\n"
+    echo "${RED} Hash check confirmed your qortal core is OUTDATED, updating, bootstrapping, and starting qortal...then checking environment and updating scripts... ${NC}\n"
     cd qortal
     killall -9 java
     sleep 3
@@ -121,6 +121,7 @@ if [ -n "$DISPLAY" ]; then
 else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup ${NC}\n"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron-new
     crontab auto-fix-cron-new
+    rm -rf auto-fix-cron-new
     update_script
 fi
 }
@@ -143,9 +144,10 @@ if [ -n "$DISPLAY" ]; then
 
     check_height
 
-else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup... configuring  checking node height... ${NC}\n"
+else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup... ${NC}${CYAN}configuring cron then checking node height... ${NC}\n"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron-new
     crontab auto-fix-cron-new
+    rm -rf auto-fix-cron-new
 
     check_height
 fi
@@ -233,7 +235,8 @@ local_height=$(curl -sS "http://localhost:12391/blocks/height")
 
 if [ -z ${local_height} ]; then
 	echo "${RED} local API call for block height returned empty, IS YOUR QORTAL CORE RUNNING? ${NC}\n"
-	#no_local_height
+	echo "${RED} script not currently configured to handle this, check your core manually or await script updates... script will automatically update every time it is run... ${NC}\n"
+	no_local_height
 fi
 
 if [ -n ${previous_local_height} ]; then
