@@ -139,13 +139,13 @@ if [ -n "$DISPLAY" ]; then
     rm -rf ~/auto-fix-qortal-GUI.desktop
     echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
     echo "${CYAN} continuing to verify node height...${NC}\n"
-    #update_script
+
     check_height
 
 else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup... configuring  checking node height... ${NC}\n"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron-new
     crontab auto-fix-cron-new
-    #update_script
+
     check_height
 fi
 }
@@ -228,49 +228,35 @@ if [ -f auto_fix_last_height.txt ]; then
 	previous_local_height=$(cat auto_fix_last_height.txt)
 fi
 
-heightjq=$(curl -sS "http://localhost:12391/admin/status" | jq '.height')
+local_height=$(curl -sS "http://localhost:12391/blocks/height")
 
-if [ -z "$heightjq" ]; then 
-	echo "obtaining height with jq failed, trying python..."
-	heightpy=$(python -c "import json,urllib.request; print(json.loads(urllib.request.urlopen('http://localhost:12391/admin/status').read().decode())['height'])")
-	
-	if [ -z "${heightpy}" ]; then
-		echo "obtaining height with python also failed, skipping block height checks...is there something wrong with Qortal?"
-		no_local_height
-	fi
-	
-	echo "${heightpy}" > "auto_fix_last_height.txt"
-	echo "${heightpy} is height from python, since python worked, we are setting local_height variable to heightpy"
-	local_height=${heightpy}
-	
-	# CHECK FOR HEIGHT BEING THE SAME AS LAST SCRIPT RUN
-	if [ $previous_local_height -eq $heightpy ]; then
-		echo "height check found height hasn't changed since last script run! bootstrapping!"
-		force_boostrap
-	fi
-	
-	remote_height_checks
-fi 
+if [ -z ${local_height} ]; then
+	echo "${RED} local API call for block height returned empty, IS YOUR QORTAL CORE RUNNING? ${NC}\n"
+	no_local_height
+fi
 
-if [ -n ${heightjq} ]; then
-	echo "${heightjq} is height from jq, we will write this to a temp file and local_height variable and verify against other sources..."
-	echo "${heightjq}" > "auto_fix_last_height.txt"
-	local_height=${heightjq}
-	
-	if [ $previous_local_height -eq $heightjq ]; then
-		echo "height check found height hasn't changed since last script run! bootstrapping!"
+if [ ${local_height} -eq ${previous_local_height} ]; then
+	echo "${RED} local height has not changed since previous script run... waiting 3 minutes and checking height again, if height still hasn't changed, forcing bootstrap... ${NC}\n"
+	sleep 188
+	checked_height=$(curl "localhost:12391/blocks/height")
+	sleep 2
+	if [ ${checked_height} -eq ${previous_local_height} ]; then
+		echo "${RED} block height still has not changed... forcing bootstrap... ${NC}\n"
 		force_bootstrap
 	fi
-	remote_height_checks
 fi
+
+remote_height_checks
+
 }
 
 no_local_height() {
 # height checks failed, is qortal running? 
 # make another action here...
-echo "have to do other things, node may not be running?"
-echo "this portion of the script has not been configured yet"
-echo "${RED} Please check that your Qortal Core is running...${NC}\n"
+echo "${RED} script needs further additions in order to help your node, or node may not be running?${NC}\n"
+echo "${RED}this portion of the script has not been configured yet${NC}\n"
+echo "${RED} Please check that your Qortal Core is running... script will exit now until future updates add additional features...sorry the script couldn't resolve your issues! It will update automatically if you h ave it configured to run automatically!${NC}\n"
+update_script
 }
 
 remote_height_checks() {
@@ -280,24 +266,28 @@ height_api_qortal_online=$(curl -sS "https://api.qortal.online/blocks/height")
 height_qortal_link=$(curl -sS "https://qortal.link/blocks/height")
 height_qortal_name=$(curl -sS "https://qortal.name/blocks/height")
 
-declare -a remote_node_heights #declare an array
+#declare -a remote_node_heights #declare an array
 
 #remote_node_heights+=$height_api_qortal_online
 #remote_node_heights+=$height_qortal_link
 #remote_node_heights+=$height_qortal_name
-remote_node_heights+=$height_api_qortal_org
+#remote_node_heights+=$height_api_qortal_org
 
-for i in "${remote_node_heights[@]}"; do
-  	if (( ${i} - 1500 <= ${local_height} && ${local_height} <= ${i} + 1500 )); then
-    		echo "Local height (${local_height}) is within range of node height (${i}). Performing desired action." >&2
-    # Perform the desired action here, e.g., running a script or making another API call
-    		echo "node height is within range of remote nodes... height seems fine..."
-    		update_script
+
+if [[ ${height_api_qortal_org} - 1500 <= ${local_height} && ${local_height} <= ${height_api_qortal_org} + 1500 ]]; then
+	echo "${YELOW}Local height${NC}${GREEN} (${local_height}) ${NC}${YELLOW}is within 1500 block range of node height${NC} ${CYAN}(${height_api_qortal_org})${NC}." >&2
+    	echo "${CYAN}api.qortal.org height checks${NC} ${GREEN}PASSED${NC}${YELLOW} updating script...${NC}"
+    	update_script
   	else 
-  		echo "node is outside the range of remote node(s)... bootstrapping..."
-  		force_bootstrap
-  	fi >&2
-done
+  		echo "${RED}node is outside the 1500 block range of api.qortal.org, checking another node to be sure...${NC}"
+  		if [[ ${height_api_qortal_online} - 1500 <= ${local_height} && ${local_height} <= ${height_api_qortal_online} + 1500 ]]; then
+  			echo "${CYAN}api.qortal.online height checks${NC} ${GREEN}PASSED${NC}${YELLOW} updating script...${NC}"
+  			update_script
+  		else
+  			echo "${RED} SECOND remote node check FAILED... assuming local node needs bootstrapping... bootstrapping in 5 seconds...${NC}\n"
+  			force_bootstrap
+  		fi
+fi >&2
 }
 
 
