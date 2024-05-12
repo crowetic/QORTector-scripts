@@ -90,11 +90,12 @@ fi
 }
 
 force_bootstrap() {
-echo "${RED} height checks revealed issues, forcing bootstrap... ${NC}\n"
+echo "${RED} height check found issues, forcing bootstrap... ${NC}\n"
 cd qortal
 killall -9 java
 sleep 3
 rm -rf db log.t* qortal.log run.log run.pid
+sleep 5
 ./start.sh
 cd 
 update_script
@@ -244,7 +245,7 @@ if [ -n ${previous_local_height} ]; then
 		sleep 2
 		if [ "${checked_height}" = "${previous_local_height}" ]; then
 			echo "${RED} block height still has not changed... forcing bootstrap... ${NC}\n"
-			#force_bootstrap
+			force_bootstrap
 		fi
 		
 	fi
