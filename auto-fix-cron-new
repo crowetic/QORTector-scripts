@@ -1,1 +1,2 @@
 
+1 1 */5 * * ./auto-fix-qortal.sh > log-auto-fix-cron.log 2>&1
