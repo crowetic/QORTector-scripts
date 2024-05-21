@@ -43,7 +43,7 @@ echo "${YELLOW} Checking the version of qortal on local machine VS the version o
 
 core_running=$(curl -s localhost:12391/admin/status)
 if [ -z ${core_running} ]; then 
-	echo "${RED} CORE DOES NOT SEEM TO BE RUNING, WAITING 2 MINUTES IN CASE IT IS STILL STARTIG UP... ${NC}\n"
+	echo "${RED} CORE DOES NOT SEEM TO BE RUNING, WAITING 2 MINUTES IN CASE IT IS STILL STARTING UP... ${NC}\n"
 	sleep 120
 fi
 
@@ -235,7 +235,7 @@ local_height=$(curl -sS "http://localhost:12391/blocks/height")
 
 if [ -z ${local_height} ]; then
 	echo "${RED} local API call for block height returned empty, IS YOUR QORTAL CORE RUNNING? ${NC}\n"
-	echo "${RED} script not currently configured to handle this, check your core manually or await script updates... script will automatically update every time it is run... ${NC}\n"
+	echo "${RED} if this doesn't work, then the script encountered an issue that it isn't fully equipped to handle, it may fix it upon a restart, TRY RESTARTING THE COMPUTER and WAITING 15 MINUTES... ${NC}\n"
 	no_local_height
 fi
 
@@ -261,10 +261,22 @@ remote_height_checks
 no_local_height() {
 # height checks failed, is qortal running? 
 # make another action here...
-echo "${RED} script needs further additions in order to help your node, or node may not be running?${NC}\n"
-echo "${RED}this portion of the script has not been configured yet${NC}\n"
-echo "${RED} Please check that your Qortal Core is running... script will exit now until future updates add additional features...sorry the script couldn't resolve your issues! It will update automatically if you h ave it configured to run automatically!${NC}\n"
-update_script
+echo "${GREEN} Starting Qortal Core and sleeping for 2+ min to let it startup fully, PLEASE WAIT... ${NC}\n"
+cd ~/qortal
+./start.sh 
+sleep 160
+cd 
+echo "${GREEN} Checking if Qortal started correctly... ${NC}\n"
+local_height_check=$(curl -sS "http://localhost:12391/blocks/height")
+node_works=$(curl -sS "http://localhost:12391/admin/status")
+
+if [ -n ${local_height_check} ]; then
+	echo "${GREEN} local height is ${NC}${CYAN} ${local_height_check}${NC}\n"
+	echo "${GREEN} node is GOOD, re-trying height check and continuing...${NC}\n"
+	check_height
+else 
+	echo "${RED} starting Qortal Core FAILED... script will exit now until future updates add additional features...sorry the script couldn't resolve your issues! It will update automatically if you h ave it configured to run automatically! It is possible that the script will fix the issue IF YOU RESTART YOUR COMPUTER AND WAIT 15 MINUTES...${NC}\n"
+	update_script
 }
 
 remote_height_checks() {
@@ -277,13 +289,13 @@ remote_height_checks() {
         update_script
     fi
 
-    if [ "$height_api_qortal_org" -ge $((local_height - 1500)) ] && [ "$local_height" -le $((height_api_qortal_org + 1500)) ]; then
+    if [ "$height_api_qortal_org" -ge $((local_height - 1500)) ] && [ "$height_api_qortal_org" -le $((local_height + 1500)) ]; then
         echo "${YELLOW}Local height (${local_height}) is within 1500 block range of node height (${height_api_qortal_org}).${NC}" >&2
         echo "${CYAN}api.qortal.org height checks PASSED updating script...${NC}"
         update_script
     else
         echo "${RED}Node is outside the 1500 block range of api.qortal.org, checking another node to be sure...${NC}"
-        if [ "$height_qortal_link" -ge $((local_height - 1500)) ] && [ "$local_height" -le $((height_qortal_link + 1500)) ]; then
+        if [ "$height_qortal_link" -ge $((local_height - 1500)) ] && [ "$height_qortal_link" -le $((local_height+ 1500)) ]; then
             echo "${CYAN}qortal.link height checks PASSED updating script...${NC}"
             update_script
         else
