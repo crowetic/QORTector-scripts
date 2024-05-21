@@ -277,6 +277,7 @@ if [ -n ${local_height_check} ]; then
 else 
 	echo "${RED} starting Qortal Core FAILED... script will exit now until future updates add additional features...sorry the script couldn't resolve your issues! It will update automatically if you h ave it configured to run automatically! It is possible that the script will fix the issue IF YOU RESTART YOUR COMPUTER AND WAIT 15 MINUTES...${NC}\n"
 	update_script
+fi
 }
 
 remote_height_checks() {
