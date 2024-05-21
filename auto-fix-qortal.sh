@@ -258,6 +258,40 @@ remote_height_checks
 
 }
 
+check_height_2() { 
+
+if [ -f auto_fix_last_height.txt ]; then
+	previous_local_height=$(cat auto_fix_last_height.txt)
+fi
+
+local_height=$(curl -sS "http://localhost:12391/blocks/height")
+
+if [ -z ${local_height} ]; then
+	echo "${RED} SECOND height check failed, unsure what is going on, but a restart of the node and waiting may fix it... ${NC}\n"
+	echo "${RED} TRY RESTARTING THE COMPUTER and WAITING 15 MINUTES... ${NC}\n"
+	echo "Updating script and continuing..."
+	update_script
+fi
+
+if [ -n ${previous_local_height} ]; then
+
+	if [ "${local_height}" = "${previous_local_height}" ]; then
+		echo "${RED} local height has not changed since previous script run... waiting 3 minutes and checking height again, if height still hasn't changed, forcing bootstrap... ${NC}\n"
+		sleep 188
+		checked_height=$(curl "localhost:12391/blocks/height")
+		sleep 2
+		if [ "${checked_height}" = "${previous_local_height}" ]; then
+			echo "${RED} block height still has not changed... forcing bootstrap... ${NC}\n"
+			force_bootstrap
+		fi
+		
+	fi
+fi
+
+remote_height_checks
+
+}
+
 no_local_height() {
 # height checks failed, is qortal running? 
 # make another action here...
@@ -273,7 +307,7 @@ node_works=$(curl -sS "http://localhost:12391/admin/status")
 if [ -n ${local_height_check} ]; then
 	echo "${GREEN} local height is ${NC}${CYAN} ${local_height_check}${NC}\n"
 	echo "${GREEN} node is GOOD, re-trying height check and continuing...${NC}\n"
-	check_height
+	check_height_2
 else 
 	echo "${RED} starting Qortal Core FAILED... script will exit now until future updates add additional features...sorry the script couldn't resolve your issues! It will update automatically if you h ave it configured to run automatically! It is possible that the script will fix the issue IF YOU RESTART YOUR COMPUTER AND WAIT 15 MINUTES...${NC}\n"
 	update_script
