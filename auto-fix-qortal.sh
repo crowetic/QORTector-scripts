@@ -43,8 +43,8 @@ echo "${YELLOW} Checking the version of qortal on local machine VS the version o
 
 core_running=$(curl -s localhost:12391/admin/status)
 if [ -z ${core_running} ]; then 
-	echo "${RED} CORE DOES NOT SEEM TO BE RUNING, WAITING 2 MINUTES IN CASE IT IS STILL STARTING UP... ${NC}\n"
-	sleep 120
+	echo "${RED} CORE DOES NOT SEEM TO BE RUNING, WAITING 1 MINUTE IN CASE IT IS STILL STARTING UP... ${NC}\n"
+	sleep 60
 fi
 
 LOCAL_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion":"qortal-\K[^-]*' | sed 's/-.*//' | tr -d '.')
