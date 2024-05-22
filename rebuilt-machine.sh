@@ -38,8 +38,6 @@ curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
 chmod +x qort
 
 
-
-
 cd 
 if [ -f qortal/Qortal-UI ]; then
   echo "${PURPLE} PREVIOUS Qortal-UI FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
@@ -60,40 +58,30 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/aut
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh
 
-
 chmod +x *.sh
-mv check-qortal-status.sh ~/qortal
-
-unzip Machine-files.zip
-
-mv Machine-files/Pictures/*.* ~/Pictures/
-
-curl -L -O https://cloud.qortal.org/s/8z4sRiwJCPqM4Fi/download/Qortal-TheFuture-Wallpaper.png
-mv Qortal-The*.png ~/Pictures/
-
 
 curl -L -O https://cloud.qortal.org/s/6d8qoEkQRDSCTqn/download/rebuilt-machine-setup.txt
 mv rebuilt-machine-setup.txt ~/Desktop
 if [ -d ~/Pictures/wallpapers ]; then
   echo "${PURPLE} PREVIOUS wallpapers folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
+  mkdir -p ~/backups
   mv ~/Pictures/wallpapers ~/backups
 fi
 if [ -d ~/Pictures/icons ]; then
   echo "${PURPLE} PREVIOUS icons folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
+  mkdir -p ~/backups
   mv ~/Pictures/icons ~/backups
 fi
-mkdir -p ~/Pictures/wallpapers
-mkdir -p ~/Pictures/icons
-mv ~/Pictures/Wallpaper*.jpeg ~/Pictures/wallpapers
-mv ~/Pictures/Qortal-The*.png ~/Pictures/wallpapers
-mv ~/Pictures/*.* ~/Pictures/icons
 
+unzip Machine-files.zip
+
+mv Machine-files/Pictures ~/
 
 echo "${YELLOW} FINISHING UP ${NC}\n"
 
 username=$(whoami)
 echo "@reboot sleep 399 && ./auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-startup.log\" 2>&1" >> "rebuilt-machine-cron"
-echo "1 1 */5 * * /home/$(whoami)/auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-01.log\" 2>&1" >> "rebuilt-machine-cron"
+echo "1 1 */3 * * /home/$(whoami)/auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-01.log\" 2>&1" >> "rebuilt-machine-cron"
 chmod +x *.sh
 
 crontab rebuilt-machine-cron
