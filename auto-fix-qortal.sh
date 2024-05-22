@@ -295,10 +295,56 @@ remote_height_checks
 no_local_height() {
 # height checks failed, is qortal running? 
 # make another action here...
+echo "${WHITE} Checking if node is bootstrapping or not...${NC}\n"
+
+# Check if the main log file exists
+if [ -f ~/qortal/qortal.log ]; then
+  if tail -n 5 ~/qortal/qortal.log | grep -E -i 'bootstrap|bootstrapping' > /dev/null; then
+    echo "${RED} NODE SEEMS TO BE BOOTSTRAPPING, UPDATING SCRIPT AND EXITING, NEXT RUN WILL FIND/FIX ANY ISSUES ${NC}\n"
+    update_script
+  fi
+else
+  echo "Checking for old log method..."
+  old_log_found=false
+
+  # Check for old log files and process them
+  for log_file in ~/qortal/log.t*; do
+    if [ -f "$log_file" ]; then
+      old_log_found=true
+      echo "Old log method found, backing up old logs and updating logging method..."
+      
+      # Create backup directory if it doesn't exist
+      mkdir -p ~/qortal/backup/logs
+      
+      # Move old log files to the backup directory
+      mv ~/qortal/log.t* ~/qortal/backup/logs
+      mv ~/qortal/log4j2.properties ~/qortal/backup/logs
+      
+      # Download the new log4j2.properties file
+      curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/log4j2.properties
+      
+      # Move the new log4j2.properties file to the qortal directory
+      mv log4j2.properties ~/qortal
+
+      echo -e "${RED}Stopping Qortal to apply new logging method...${NC}\n"
+      
+      # Stop Qortal to apply changes
+      cd ~/qortal
+      ./stop.sh 
+      cd ~
+      break
+    fi
+  done
+
+  if ! $old_log_found; then
+    echo "No old log files found."
+  fi
+fi
+
 echo "${GREEN} Starting Qortal Core and sleeping for 2+ min to let it startup fully, PLEASE WAIT... ${NC}\n"
 cd ~/qortal
 ./start.sh 
-sleep 160
+sleep 144
 cd 
 echo "${GREEN} Checking if Qortal started correctly... ${NC}\n"
 local_height_check=$(curl -sS "http://localhost:12391/blocks/height")
