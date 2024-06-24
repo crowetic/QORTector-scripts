@@ -1,0 +1,7 @@
+"maxPeers": 50,
+"minOutboundPeers": 12,
+"minBlockchainPeers": 2,
+"apiRestricted": false,
+"allowConnectionsWithOlderPeerVersions": false,
+"minPeerVersion": "4.5.1",
+"apiWhitelistEnabled": false
