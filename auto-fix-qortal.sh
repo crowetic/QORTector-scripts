@@ -38,6 +38,7 @@ else
 fi
 }
 
+
 check_for_pi(){
 if command -v raspi-config >/dev/null 2>&1 ; then
 
@@ -75,6 +76,7 @@ else echo "${YELLOW} Not a Raspberry pi machine, continuing...${NC}\n"
 fi
 }
 
+
 check_qortal() {
 echo "${YELLOW} Checking the version of qortal on local machine VS the version on github... ${NC}\n"
 
@@ -95,8 +97,9 @@ else
 fi
 }
 
+
 check_hash_update_qortal() {
-echo "${YELLOW} Your Qortal version is outdated or initial API call check failed. Proceeding to hash check, checking hash of qortal.jar on local machine VS newest released qortal.jar on github and updating your qortal.jar if needed... ${NC}\n"
+echo "${RED}API-call-based version checking FAILED${NC}${YELLOW}. ${NC}${CYAN}Proceeding to HASH CHECK${NC}${YELLOW}, checking hash of qortal.jar on local machine VS newest released qortal.jar on github and updating your qortal.jar if needed... ${NC}\n"
 cd ~/qortal || exit
 md5sum qortal.jar > "local.md5"
 cd
@@ -108,11 +111,11 @@ LOCAL=$(cat ~/qortal/local.md5)
 REMOTE=$(cat ~/remote.md5)
 
 if [ "$LOCAL" = "$REMOTE" ]; then
-    echo "${YELLOW} Hash check says your Qortal core is UP-TO-DATE, checking environment... ${NC}\n"
+    echo "${CYAN} Hash check says your Qortal core is UP-TO-DATE, checking environment... ${NC}\n"
     check_for_GUI
     exit 1
 else
-    echo "${RED} Hash check confirmed your qortal core is OUTDATED, updating, bootstrapping, and starting qortal...then checking environment and updating scripts... ${NC}\n"
+    echo "${RED} Hash check confirmed your qortal core is OUTDATED, ${NC}${YELLOW}updating, bootstrapping, and starting qortal...then checking environment and updating scripts... ${NC}\n"
     cd qortal
     killall -9 java
     sleep 3
@@ -122,11 +125,13 @@ else
     rm ~/remote.md5 local.md5
     ./start.sh
     cd 
+    
     check_for_GUI_already_bootstrapped
 fi
 }
 
-check_for_GUI(){
+
+check_for_GUI() {
 if [ -n "$DISPLAY" ]; then
     echo "${CYAN} Machine is logged in via GUI, setting up auto-fix-visible for GUI-based machines... ${NC}\n"
     echo "${YELLOW} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
@@ -139,7 +144,7 @@ if [ -n "$DISPLAY" ]; then
     mkdir -p ~/.config/autostart
     cp auto-fix-qortal-GUI.desktop ~/.config/autostart
     rm -rf ~/auto-fix-qortal-GUI.desktop
-    echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a fashion you can SEE, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
+    echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a pop-up terminal, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
     echo "${CYAN} continuing to verify node height...${NC}\n"
 
     check_height
@@ -153,7 +158,8 @@ else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup.
 fi
 }
 
-check_for_GUI_already_bootstrapped(){
+
+check_for_GUI_already_bootstrapped() {
 if [ -n "$DISPLAY" ]; then
     echo "${CYAN} Machine is logged in via GUI, setting up auto-fix-visible for GUI-based machines... ${NC}\n" 
     echo "${YELLOW} Setting up auto-fix-visible on GUI-based system... first, creating new crontab entry without auto-fix-startup... ${NC}\n"
@@ -178,8 +184,8 @@ else echo "${YELLOW} Non-GUI system detected, skipping 'auto-fix-visible' setup 
 fi
 }
 
-check_height() {
 
+check_height() {
 local_height=$(curl -sS "http://localhost:12391/blocks/height")
 
 if [ -f auto_fix_last_height.txt ]; then
@@ -210,6 +216,7 @@ fi
 remote_height_checks
 }
 
+
 no_local_height() {
 # height checks failed, is qortal running? 
 # make another action here...
@@ -229,7 +236,7 @@ else
   for log_file in ~/qortal/log.t*; do
     if [ -f "$log_file" ]; then
       old_log_found=true
-      echo "Old log method found, backing up old logs and updating logging method..."
+      echo "${YELLOW}Old log method found, backing up old logs and updating logging method...${NC}\n"
       mkdir -p ~/qortal/backup/logs
       # Move old log files to the backup directory
       mv ~/qortal/log.t* ~/qortal/backup/logs
@@ -266,10 +273,11 @@ if [ -n ${local_height_check} ]; then
 	echo "${GREEN} node is GOOD, re-trying height check and continuing...${NC}\n"
 	check_height_2
 else 
-	echo "${RED} starting Qortal Core FAILED... script will exit now until future updates add additional features...sorry the script couldn't resolve your issues! It will update automatically if you h ave it configured to run automatically! It is possible that the script will fix the issue IF YOU RESTART YOUR COMPUTER AND WAIT 15 MINUTES...${NC}\n"
+	echo "${RED} starting Qortal Core FAILED... script will exit now until future updates add additional features...sorry the script couldn't resolve your issues! It will update automatically if you have it configured to run automatically! ${NC}${CYAN}It is possible that the script will fix the issue IF YOU RESTART YOUR COMPUTER AND WAIT 15 MINUTES...${NC}\n"
 	update_script
 fi
 }
+
 
 remote_height_checks() {
     height_api_qortal_org=$(curl -sS --connect-timeout 10 "https://api.qortal.org/blocks/height")
@@ -298,8 +306,8 @@ remote_height_checks() {
     fi
 }
 
-check_height_2() { 
 
+check_height_2() { 
 local_height=$(curl -sS "http://localhost:12391/blocks/height")
 
 if [ -f auto_fix_last_height.txt ]; then
@@ -321,8 +329,8 @@ fi
 
 if [ -z ${local_height} ]; then
 	echo "${RED} SECOND height check failed, unsure what is going on, but a restart of the node and waiting may fix it... ${NC}\n"
-	echo "${RED} TRY RESTARTING THE COMPUTER and WAITING 15 MINUTES... ${NC}\n"
-	echo "Updating script and continuing..."
+	echo "${CYAN} TRY RESTARTING THE COMPUTER and WAITING 15 MINUTES... ${NC}\n"
+	
 	update_script
 else
 	echo ${local_height} > auto_fix_last_height.txt
@@ -330,6 +338,7 @@ fi
 
 remote_height_checks
 }
+
 
 force_bootstrap() {
 echo "${RED} height check found issues, forcing bootstrap... ${NC}\n"
@@ -343,7 +352,9 @@ cd
 update_script
 }
 
-update_script(){
+
+update_script() {
+echo "${YELLOW}Updating script to newest version and backing up old one...${NC}\n"
 mkdir -p ~/qortal/new-scripts
 mkdir -p ~/qortal/new-scripts/backups
 cp ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
