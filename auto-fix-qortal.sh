@@ -290,13 +290,13 @@ remote_height_checks() {
     fi
 
     if [ "$height_api_qortal_org" -ge $((local_height - 1500)) ] && [ "$height_api_qortal_org" -le $((local_height + 1500)) ]; then
-        echo "${YELLOW}Local height ${NC}(${CYAN}${local_height}${NC})${YELLOW} is within 1500 block range of node height ${NC}(${GREEN}${height_api_qortal_org}${NC})."
+        echo "${YELLOW}Local height ${NC}(${CYAN}${local_height}${NC})${YELLOW} is within 1500 block range of api.qortal.org node height ${NC}(${GREEN}${height_api_qortal_org}${NC})."
         echo "${GREEN}api.qortal.org height checks PASSED updating script...${NC}"
         update_script
     else
         echo "${RED}Node is outside the 1500 block range of api.qortal.org, checking another node to be sure...${NC}"
-        if [ "$height_qortal_link" -ge $((local_height - 1500)) ] && [ "$height_qortal_link" -le $((local_height+ 1500)) ]; then
-            echo "${YELLOW}Local height ${NC}(${CYAN}${local_height}${NC})${YELLOW} is within 1500 block range of node height ${NC}(${GREEN}${height_qortal_link}${NC})."
+        if [ "$height_qortal_link" -ge $((local_height - 1500)) ] && [ "$height_qortal_link" -le $((local_height + 1500)) ]; then
+            echo "${YELLOW}Local height ${NC}(${CYAN}${local_height}${NC})${YELLOW} is within 1500 block range of qortal.link node height ${NC}(${GREEN}${height_qortal_link}${NC})."
             echo "${GREEN}qortal.link height checks PASSED updating script...${NC}"
             update_script
         else
