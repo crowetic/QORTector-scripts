@@ -46,6 +46,7 @@ server {
 }
     
 server {
+    listen 443 ssl;
     server_name $DOMAIN;
     ssl_certificate $CERT_PATH;
     ssl_certificate_key $CERT_KEY_PATH;
