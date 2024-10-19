@@ -73,17 +73,17 @@ check_qortal_version() {
 }
 
 download_qortal_core() {
-  if ! check_qortal_version; then
+  if [ $SHOULD_UPDATE_QORTAL -eq 0 ]; then
     cd
     if [ -d qortal ]; then
       echo "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
-      mkdir -p backups
-      mv -f qortal backups/
+      mkdir -p ~/backups
+      mv -f ~/qortal ~/backups/
     fi
     curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
     unzip qortal*.zip
     rm -rf qortal*.zip
-    cd qortal
+    cd ~/qortal
     rm -rf settings.json
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/settings.json
     chmod +x *.sh
@@ -100,7 +100,7 @@ download_qortal_ui() {
     echo "${PURPLE} PREVIOUS Qortal-UI FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
     mv ~/qortal/Qortal-UI ~/backups/
   fi 
-  cd qortal
+  cd ~/qortal
   if [ "$ARCHITECTURE" = "aarch64" ] || [ "$ARCHITECTURE" = "arm64" ]; then
     curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-arm64.AppImage
     mv Qortal-Setup-arm64.AppImage Qortal-UI
@@ -123,17 +123,17 @@ download_other_files() {
   chmod +x *.sh
 
   curl -L -O https://cloud.qortal.org/s/6d8qoEkQRDSCTqn/download/rebuilt-machine-setup.txt
-  mv -f rebuilt-machine-setup.txt ~/Desktop
+  mv -f ~/rebuilt-machine-setup.txt ~/Desktop
   
   if [ -d ~/Pictures/wallpapers ]; then
     echo "${PURPLE} PREVIOUS wallpapers folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
     mkdir -p ~/backups
-    mv -f ~/Pictures/wallpapers ~/backups
+    mv -f ~/Pictures/wallpapers ~/backups/
   fi
   if [ -d ~/Pictures/icons ]; then
     echo "${PURPLE} PREVIOUS icons folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
     mkdir -p ~/backups
-    mv -f ~/Pictures/icons ~/backups
+    mv -f ~/Pictures/icons ~/backups/
   fi
   
   unzip Machine-files.zip
@@ -158,6 +158,8 @@ finish_up() {
 check_distro
 check_display
 update_and_install_packages
+check_qortal_version
+SHOULD_UPDATE_QORTAL=$?
 download_qortal_core
 download_qortal_ui
 download_other_files
