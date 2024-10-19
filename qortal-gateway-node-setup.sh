@@ -39,6 +39,13 @@ configure_nginx() {
     # Create nginx configuration
     cat <<EOF > "qortal-gateway-node"
 server {
+    listen 80 default_server;
+    server_name _;
+    
+    return 301 https://\$host\$request_uri;
+}
+    
+server {
     server_name $DOMAIN;
     ssl_certificate $CERT_PATH;
     ssl_certificate_key $CERT_KEY_PATH;
