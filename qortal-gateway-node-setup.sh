@@ -65,6 +65,12 @@ EOF
 }
 
 configure_qortal_settings() {
+    # Check if Qortal core is running
+    QORTAL_RUNNING=false
+    if curl -s localhost:12391/admin/status > /dev/null; then
+        QORTAL_RUNNING=true
+        echo "Qortal core is currently running. It will be restarted after settings modification."
+    fi
     # Modify settings.json in ~/qortal directory
     SETTINGS_PATH="$HOME/qortal/settings.json"
     if [[ -f $SETTINGS_PATH ]]; then
@@ -107,7 +113,13 @@ configure_qortal_settings() {
 }
 EOF
 
-# No need to move settings.json, it is already being created in the correct path
+# Restart Qortal core if it was running before settings modification
+    if [[ $QORTAL_RUNNING == true ]]; then
+        echo "Restarting Qortal core...Please wait...will take ~30 seconds..."
+        cd ~/qortal
+        ./stop.sh && sleep 25 && ./start.sh
+        cd
+    fi
 }
 
 setup_cron() {
