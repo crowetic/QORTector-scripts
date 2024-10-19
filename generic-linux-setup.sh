@@ -20,6 +20,14 @@ check_distro() {
   fi
 }
 
+check_display() {
+  if command -v xrandr > /dev/null; then
+    DISPLAY_AVAILABLE=true
+  else
+    DISPLAY_AVAILABLE=false
+  fi
+}
+
 update_and_install_packages() {
   echo "${YELLOW} UPDATING DEBIAN-BASED SYSTEM AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n"
   
@@ -29,8 +37,12 @@ update_and_install_packages() {
 
   PACKAGES="gnome-software unzip vim curl openjdk-17-jre zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors"
 
+  if [ "$DISPLAY_AVAILABLE" = true ]; then
+    PACKAGES="$PACKAGES cinnamon-desktop-environment"
+  fi
+
   for PACKAGE in $PACKAGES; do
-    if ! dpkg -l | grep -qw $PACKAGE; then
+    if ! sudo dpkg -l | grep -qw $PACKAGE; then
       echo "${YELLOW} Installing $PACKAGE... ${NC}"
       sudo apt -y install $PACKAGE
     else
@@ -41,7 +53,7 @@ update_and_install_packages() {
 
 check_qortal_version() {
   LATEST_VERSION=$(curl -s https://api.github.com/repos/Qortal/qortal/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
-  INSTALLED_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion": "qortal-\K([^"]+)' || echo "")
+  INSTALLED_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion": "qortal-\K[^"]+' || echo "")
 
   if [ "$LATEST_VERSION" = "$INSTALLED_VERSION" ]; then
     echo "${GREEN} Qortal Core is up-to-date (version: $INSTALLED_VERSION). Skipping reinstallation. ${NC}\n"
@@ -53,36 +65,43 @@ check_qortal_version() {
 }
 
 download_qortal_core() {
-  if check_qortal_version; then
+  if ! check_qortal_version; then
     cd
     if [ -d qortal ]; then
       echo "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
       mkdir -p backups
-      mv qortal backups/
+      mv -f qortal backups/
     fi
     curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
     unzip qortal*.zip
-    rm qortal*.zip
+    rm -rf qortal*.zip
     cd qortal
-    rm settings.json
+    rm -rf settings.json
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/settings.json
     chmod +x *.sh
     curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
     chmod +x qort
     echo "$LATEST_VERSION" > version.txt
+    cd
   fi
 }
 
 download_qortal_ui() {
-  cd
-  if [ -f qortal/Qortal-UI ]; then
+  ARCHITECTURE=$(uname -m)
+  if [ -f ~/qortal/Qortal-UI ]; then
     echo "${PURPLE} PREVIOUS Qortal-UI FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
-    mv qortal/Qortal-UI ~/backups/
+    mv ~/qortal/Qortal-UI ~/backups/
   fi 
   cd qortal
-  curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-amd64.AppImage
-  mv Qortal-Setup*.AppImage Qortal-UI
+  if [ "$ARCHITECTURE" = "aarch64" ] || [ "$ARCHITECTURE" = "arm64" ]; then
+    curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-arm64.AppImage
+    mv Qortal-Setup-arm64.AppImage Qortal-UI
+  else
+    curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-amd64.AppImage
+    mv Qortal-Setup-amd64.AppImage Qortal-UI
+  fi
   chmod +x Qortal-UI
+  cd
 }
 
 download_other_files() {
@@ -96,21 +115,21 @@ download_other_files() {
   chmod +x *.sh
 
   curl -L -O https://cloud.qortal.org/s/6d8qoEkQRDSCTqn/download/rebuilt-machine-setup.txt
-  mv rebuilt-machine-setup.txt ~/Desktop
+  mv -f rebuilt-machine-setup.txt ~/Desktop
   
   if [ -d ~/Pictures/wallpapers ]; then
     echo "${PURPLE} PREVIOUS wallpapers folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
     mkdir -p ~/backups
-    mv ~/Pictures/wallpapers ~/backups
+    mv -f ~/Pictures/wallpapers ~/backups
   fi
   if [ -d ~/Pictures/icons ]; then
     echo "${PURPLE} PREVIOUS icons folder FOUND, BACKING UP ORIGINAL TO '~/backups/' AND RE-INSTALLING ${NC}\n"
     mkdir -p ~/backups
-    mv ~/Pictures/icons ~/backups
+    mv -f ~/Pictures/icons ~/backups
   fi
   
   unzip Machine-files.zip
-  mv Machine-files/Pictures ~/
+  mv -f ~/Machine-files/Pictures ~/
 }
 
 setup_cron_jobs() {
@@ -124,11 +143,12 @@ setup_cron_jobs() {
 }
 
 finish_up() {
-  echo "${YELLOW} SCRIPT EXECUTION FOR INSTALL SCRIPT COMPLETE. RESTARTING MACHINE IS RECOMMENDED. IF YOU ARE RUNNING THE GATEWAY NODE SETUP SCRIPT IT SHOULD CONTINUE NOW ON ITS OWN. ${NC}\n"
+  echo "${YELLOW} SCRIPT EXECUTION FOR INSTALL SCRIPT COMPLETE.${NC} ${RED}RESTARTING MACHINE IS RECOMMENDED.${NC}${GREEN} IF YOU ARE RUNNING THE GATEWAY NODE SETUP SCRIPT IT SHOULD CONTINUE NOW ON ITS OWN. ${NC}\n"
 }
 
 # Main script execution
 check_distro
+check_display
 update_and_install_packages
 download_qortal_core
 download_qortal_ui
