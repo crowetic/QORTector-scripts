@@ -52,14 +52,22 @@ update_and_install_packages() {
 }
 
 check_qortal_version() {
-  LATEST_VERSION=$(curl -s https://api.github.com/repos/Qortal/qortal/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
-  INSTALLED_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion": "qortal-\K[^"]+' || echo "")
+  echo "${YELLOW} Checking the version of qortal on local machine VS the version on github... ${NC}\n"
 
-  if [ "$LATEST_VERSION" = "$INSTALLED_VERSION" ]; then
-    echo "${GREEN} Qortal Core is up-to-date (version: $INSTALLED_VERSION). Skipping reinstallation. ${NC}\n"
+  core_running=$(curl -s localhost:12391/admin/status)
+  if [ -z "$core_running" ]; then 
+    echo "${RED} CORE DOES NOT SEEM TO BE RUNNING, WAITING 1 MINUTE IN CASE IT IS STILL STARTING UP... ${NC}\n"
+    sleep 60
+  fi
+
+  LOCAL_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion":"qortal-\K[^-]*' | sed 's/-.*//' | tr -d '.')
+  REMOTE_VERSION=$(curl -s "https://api.github.com/repos/qortal/qortal/releases/latest" | grep -oP '"tag_name": "v\K[^"]*' | tr -d '.')
+
+  if [ "$LOCAL_VERSION" -ge "$REMOTE_VERSION" ]; then
+    echo "${GREEN} Local version is higher than or equal to the remote version, no qortal updates needed... continuing...${NC}\n"
     return 1
   else
-    echo "${YELLOW} Updating Qortal Core to version $LATEST_VERSION... ${NC}\n"
+    echo "${YELLOW} Updating Qortal Core to version $REMOTE_VERSION... ${NC}\n"
     return 0
   fi
 }
@@ -81,7 +89,7 @@ download_qortal_core() {
     chmod +x *.sh
     curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
     chmod +x qort
-    echo "$LATEST_VERSION" > version.txt
+    echo "$REMOTE_VERSION" > version.txt
     cd
   fi
 }
@@ -129,7 +137,7 @@ download_other_files() {
   fi
   
   unzip Machine-files.zip
-  mv -f ~/Machine-files/Pictures ~/
+  mv -f ~/Machine-files/Pictures ~/Pictures/
 }
 
 setup_cron_jobs() {
@@ -155,3 +163,4 @@ download_qortal_ui
 download_other_files
 setup_cron_jobs
 finish_up
+
