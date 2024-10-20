@@ -11,6 +11,9 @@ CYAN='\033[0;36m'         # Cyan
 WHITE='\033[0;37m'        # White
 NC='\033[0m'              # No Color
 
+PI_32_DETECTED=false
+PI_64_DETECTED=false
+
 # Function to update the script
 initial_update() {
     if [ ! -f ~/auto_fix_updated ]; then
@@ -58,10 +61,10 @@ check_for_pi() {
         
         if [ "$(uname -m | grep 'armv7l')" != "" ]; then
             echo "${WHITE} 32bit ARM detected, using ARM 32bit compatible modified start script${NC}\n"
-            32_BIT_PI_DETECTED=true
+            PI_32_DETECTED=true
         else
             echo "${WHITE} 64bit ARM detected, proceeding accordingly...${NC}\n"
-            64_BIT_PI_DETECTED=true
+            PI_64_DETECTED=true
         fi
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
@@ -298,7 +301,7 @@ check_hash_update_qortal() {
 check_for_GUI() {
     if [ -n "$DISPLAY" ]; then
         echo "${CYAN} Machine is logged in via GUI, setting up auto-fix-visible for GUI-based machines... ${NC}\n"
-        if [ "$32_BIT_PI_DETECTED" = true ] || [ "$64_BIT_PI_DETECTED" = true ]; then
+        if [ "${PI_32_DETECTED}" = true ] || [ "${PI_64_DETECTED}" = true ]; then
             echo "${YELLOW} Pi machine detected with GUI, skipping autostart setup for GUI and setting cron jobs instead...${NC}\n"
             setup_pi_cron
         else
