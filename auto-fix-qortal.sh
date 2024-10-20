@@ -184,35 +184,32 @@ check_peer_count() {
 
 zero_peer_settings_mod() {
     echo "${YELLOW} Modifying settings for zero peers detected...${NC}\n"
-    mkdir -p ~/backups/qortal-settings
+    
+    # Define backup file name
     BACKUP_FILE=~/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json
+
+    # Create backup folder if not exists and backup settings.json
+    mkdir -p ~/backups/qortal-settings
     cp ~/qortal/settings.json "$BACKUP_FILE"
 
+    # If jq is installed, use jq to modify settings.json
     if command -v jq >/dev/null 2>&1; then
-        # Using jq to modify JSON if available
-        if jq -e '.allowConnectionsWithOlderPeerVersions' ~/qortal/settings.json >/dev/null; then
-            jq '.allowConnectionsWithOlderPeerVersions = false' ~/qortal/settings.json > tmp.$$.json && mv tmp.$$.json ~/qortal/settings.json
-        else
-            jq '. + {"allowConnectionsWithOlderPeerVersions": false}' ~/qortal/settings.json > tmp.$$.json && mv tmp.$$.json ~/qortal/settings.json
-        fi
+        echo "${YELLOW} Using jq to modify settings.json...${NC}\n"
+        
+        # Modify or add necessary settings
+        jq '.allowConnectionsWithOlderPeerVersions = false | .minPeerVersion = "4.6.0"' ~/qortal/settings.json > tmp.$$.json && mv tmp.$$.json ~/qortal/settings.json
 
-        if jq -e '.minPeerVersion' ~/qortal/settings.json >/dev/null; then
-            jq '.minPeerVersion = "4.6.0"' ~/qortal/settings.json > tmp.$$.json && mv tmp.$$.json ~/qortal/settings.json
-        else
-            jq '. + {"minPeerVersion": "4.6.0"}' ~/qortal/settings.json > tmp.$$.json && mv tmp.$$.json ~/qortal/settings.json
-        fi
-
-        # Verify the JSON structure is valid
+        # Validate the modified JSON
         if ! jq empty ~/qortal/settings.json >/dev/null 2>&1; then
             echo "${RED} Error: settings.json is invalid after modifications. Restoring backup... ${NC}\n"
             cp "$BACKUP_FILE" ~/qortal/settings.json
             return 1
         fi
     else
-        # Fallback: using sed if jq is not available
+        # If jq is not available, fallback to using sed and other text processing
         echo "${YELLOW} jq is not installed, using sed for settings modifications...${NC}\n"
-        
-        # Ensure settings.json modifications
+
+        # Ensure settings.json modifications with sed
         if ! grep -q '"allowConnectionsWithOlderPeerVersions"' ~/qortal/settings.json; then
             sed -i '/^{/a \  "allowConnectionsWithOlderPeerVersions": false,' ~/qortal/settings.json
         else
@@ -225,7 +222,7 @@ zero_peer_settings_mod() {
             sed -i 's/"minPeerVersion":.*/"minPeerVersion": "4.6.0",/' ~/qortal/settings.json
         fi
 
-        # Validate JSON format
+        # Validate JSON structure
         if ! grep -q '}' ~/qortal/settings.json; then
             echo "}" >> ~/qortal/settings.json
         fi
@@ -241,6 +238,7 @@ zero_peer_settings_mod() {
     sleep 45
     ./start.sh
     cd 
+
     # Verify if Qortal started correctly
     sleep 240
     core_status=$(curl -s localhost:12391/admin/status)
