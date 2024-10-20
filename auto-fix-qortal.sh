@@ -131,7 +131,7 @@ check_peer_count() {
         if [ "$line_count" -gt 20 ]; then
             peer_count=20  # Set to a reasonable value indicating peers are present
         else
-            peer_count=$line_count
+            peer_count=0
         fi
     fi
 
@@ -149,7 +149,7 @@ check_peer_count() {
             if [ "$line_count" -gt 20 ]; then
                 peer_count=20
             else
-                peer_count=$line_count
+                peer_count=0
             fi
         fi
 
@@ -167,7 +167,7 @@ check_peer_count() {
                 if [ "$line_count" -gt 20 ]; then
                     peer_count=20
                 else
-                    peer_count=$line_count
+                    peer_count=0
                 fi
             fi
 
@@ -176,9 +176,9 @@ check_peer_count() {
                 zero_peer_settings_mod
             fi
         fi
-    else
-        check_for_GUI
     fi
+    
+    check_for_GUI 
 }
 
 
