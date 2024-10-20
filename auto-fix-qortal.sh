@@ -18,7 +18,7 @@ PI_64_DETECTED=false
 initial_update() {
     if [ ! -f ~/auto_fix_updated ]; then
         echo "${YELLOW}Checking for the latest version of the script...${NC}\n"
-        curl -L -o ~/auto-fix-qortal.sh https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
         chmod +x ~/auto-fix-qortal.sh
         echo "${GREEN}Script updated. Restarting...${NC}\n"
         touch ~/auto_fix_updated
