@@ -15,11 +15,11 @@ NC='\033[0m'              # No Color
 initial_update() {
     if [ ! -f ~/auto_fix_updated ]; then
         echo "${YELLOW}Checking for the latest version of the script...${NC}\n"
-        curl -L -o ~/auto-fix-qortal.sh https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
+        curl -L -O ~/auto-fix-qortal.sh https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
         chmod +x ~/auto-fix-qortal.sh
         echo "${GREEN}Script updated. Restarting...${NC}\n"
         touch ~/auto_fix_updated
-        exec ~/auto-fix-qortal.sh
+        ./auto-fix-qortal.sh
     else
         check_internet
     fi
