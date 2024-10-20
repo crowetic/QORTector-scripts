@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Block Chinese IP ranges
+# List of Chinese IP ranges
 declare -a ip_ranges=(
     "36.0.0.0/8"
     "39.0.0.0/8"
@@ -32,14 +32,19 @@ declare -a ip_ranges=(
     "203.0.0.0/8"
 )
 
-# Loop through the IP ranges and add iptables rules to block them
+# Loop through the IP ranges and add iptables rules to block inbound and outbound traffic
 for ip_range in "${ip_ranges[@]}"
 do
+    # Block inbound traffic
     sudo iptables -A INPUT -s $ip_range -j DROP
-    echo "Blocked IP range: $ip_range"
+    echo "Blocked inbound traffic from IP range: $ip_range"
+
+    # Block outbound traffic
+    sudo iptables -A OUTPUT -d $ip_range -j DROP
+    echo "Blocked outbound traffic to IP range: $ip_range"
 done
 
-# Add connection limit rule
+# Add connection limit rule on port 12392
 sudo iptables -A INPUT -p tcp --syn --dport 12392:12392 -m connlimit --connlimit-above 15 --connlimit-mask 32 -j REJECT --reject-with tcp-reset
 echo "Connection limit rule added on port 12392"
 
