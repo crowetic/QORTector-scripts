@@ -27,7 +27,8 @@ case $OPTION in
 
             for i in {1..15}; do
                 log "Forcing sync with: $NODE (attempt $i)"
-                RESPONSE=$(./qort admin/forcesync "$NODE")
+                ./qort admin/forcesync "$NODE"
+                RESPONSE=$(curl -s -X POST localhost:12391/admin/forcesync -H "X-API-KEY:$API_KEY" -d "$NODE")
                 if [[ "$RESPONSE" == *"true"* ]]; then
                     log "Sync successful, sleeping for 1 hour"
                     sleep 3600
@@ -49,7 +50,8 @@ case $OPTION in
 
             for i in {1..15}; do
                 log "Forcing sync via curl with: $NODE (attempt $i)"
-                RESPONSE=$(curl -X POST localhost:12391/admin/forcesync -H "X-API-KEY:$API_KEY" -d "$NODE")
+                curl -X POST localhost:12391/admin/forcesync -H "X-API-KEY:$API_KEY" -d "$NODE"
+                RESPONSE=$?
                 if [[ "$RESPONSE" == *"true"* ]]; then
                     log "Sync successful, sleeping for 1 hour"
                     sleep 3600
