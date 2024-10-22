@@ -10,14 +10,23 @@ fi
 OPTION=$1
 NODE=$2
 
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
 case $OPTION in
     1)
         while true; do
+            log "Deleting known peers"
             ./qort DELETE peers/known
             sleep 3
+
+            log "Adding peer: $NODE"
             ./qort peers "$NODE"
             sleep 3
+
             for i in {1..7}; do
+                log "Forcing sync with: $NODE (attempt $i)"
                 ./qort admin/forcesync "$NODE"
                 sleep 3
             done
@@ -25,11 +34,16 @@ case $OPTION in
         ;;
     2)
         while true; do
+            log "Deleting known peers via curl"
             curl -X DELETE localhost:12391/peers/known -H "X-API-KEY:$API_KEY"
             sleep 1
+
+            log "Adding peer via curl: $NODE"
             curl -X POST localhost:12391/peers -H "X-API-KEY:$API_KEY" -d "$NODE"
             sleep 1
+
             for i in {1..7}; do
+                log "Forcing sync via curl with: $NODE (attempt $i)"
                 curl -X POST localhost:12391/admin/forcesync -H "X-API-KEY:$API_KEY" -d "$NODE"
                 sleep 1
             done
