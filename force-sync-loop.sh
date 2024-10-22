@@ -19,7 +19,7 @@ case $OPTION in
         while true; do
             log "Deleting known peers"
             ./qort DELETE peers/known
-            sleep 3
+            sleep 2
 
             log "Adding peer: $NODE"
             ./qort peers "$NODE"
@@ -36,16 +36,16 @@ case $OPTION in
         while true; do
             log "Deleting known peers via curl"
             curl -X DELETE localhost:12391/peers/known -H "X-API-KEY:$API_KEY"
-            sleep 1
+            sleep 2
 
             log "Adding peer via curl: $NODE"
             curl -X POST localhost:12391/peers -H "X-API-KEY:$API_KEY" -d "$NODE"
-            sleep 1
+            sleep 3
 
             for i in {1..7}; do
                 log "Forcing sync via curl with: $NODE (attempt $i)"
                 curl -X POST localhost:12391/admin/forcesync -H "X-API-KEY:$API_KEY" -d "$NODE"
-                sleep 1
+                sleep 3
             done
         done
         ;;
