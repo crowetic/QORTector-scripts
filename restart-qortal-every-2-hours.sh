@@ -6,7 +6,9 @@ QORTAL_DIR=~/qortal
 # Check if screen is installed
 if command -v screen &> /dev/null; then
   echo "Screen is installed, running script in a screen session..."
-  screen -S qortal_restart -dm bash -c "$(realpath $0)"
+  SCRIPT_NAME="restart-qortal-every-2-hours.sh"
+  cp "$0" "$QORTAL_DIR/$SCRIPT_NAME"
+  screen -S qortal_restart -dm bash "$QORTAL_DIR/$SCRIPT_NAME"
   exit 0
 else
   echo "Screen is not installed, running script normally..."
