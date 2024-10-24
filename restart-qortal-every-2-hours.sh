@@ -14,8 +14,15 @@ if command -v screen &> /dev/null; then
   log "Screen is installed, running script in a screen session..."
   SCRIPT_NAME="restart-qortal-every-2-hours.sh"
   SCRIPT_PATH="$(realpath "$BASH_SOURCE")"
+  log "Copying script from '$SCRIPT_PATH' to '$QORTAL_DIR/$SCRIPT_NAME'..."
   cp "$SCRIPT_PATH" "$QORTAL_DIR/$SCRIPT_NAME"
+  log "Attempting to run script in screen..."
   screen -S qortal_restart -dm bash -c "cd $QORTAL_DIR && bash $SCRIPT_NAME"
+  if [ $? -eq 0 ]; then
+    log "Script successfully started in screen session 'qortal_restart'."
+  else
+    log "Failed to start script in screen session."
+  fi
   exit 0
 else
   log "Screen is not installed, running script normally..."
