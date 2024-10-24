@@ -8,27 +8,32 @@ while true; do
   cd "$QORTAL_DIR" || exit
 
   # Stop Qortal core
-  ./stop.sh
+  ./stop.sh &> stop_output.log
 
-  # Wait for 45 seconds
+  # Wait for 30 seconds
   sleep 30
 
-  if [ -f "$QORTAL_DIR/db/blockchain.lck" ]; then
-  
-  	# Kill all Java processes
-  	killall -9 java
+  # Check if stop script succeeded
+  if ! grep -q "Qortal ended gracefully" stop_output.log; then
+    # Stop script did not complete successfully, kill Java process
+    echo "Stop script did not complete successfully, force killing Java..."
+    killall -9 java
 
-  	# Remove blockchain lock file
-  	rm -rf "$QORTAL_DIR/db/blockchain.lck"
+    # Remove blockchain lock file
+    rm -rf "$QORTAL_DIR/db/blockchain.lck"
   fi
+
   # Start Qortal core
   ./start.sh
 
-  # Wait for 2 hours before restarting again, while tailing the log file
+  # Wait for 2 hours while logging output
   sleep 2h &
-  tail -f "$QORTAL_DIR/qortal.log"
+  sleep_pid=$!
+  tail -f "$QORTAL_DIR/qortal.log" &
+  tail_pid=$!
 
-  # Kill the tail process after sleep is done
-  kill $!
+  # Wait for the sleep to finish, then kill the tail process
+  wait $sleep_pid
+  kill $tail_pid
 done
 
