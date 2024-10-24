@@ -8,7 +8,8 @@ while true; do
   cd "$QORTAL_DIR" || exit
 
   # Stop Qortal core
-  ./stop.sh &> stop_output.log
+  ./stop.sh &> stop_output.log &
+  stop_pid=$!
 
   # Wait for 30 seconds
   sleep 30
@@ -21,7 +22,12 @@ while true; do
 
     # Remove blockchain lock file
     rm -rf "$QORTAL_DIR/db/blockchain.lck"
+  else
+    echo "Qortal stopped gracefully."
   fi
+
+  # Ensure stop process completes
+  wait $stop_pid
 
   # Start Qortal core
   ./start.sh
