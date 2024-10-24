@@ -12,7 +12,7 @@ log() {
 # Check if screen is installed
 if command -v screen &> /dev/null; then
   log "Screen is installed, running script in a screen session..."
-  screen -S qortal_restart -dm bash -c "cd $(pwd) && bash $(realpath "$0")"
+  screen -S qortal_restart -dm bash -c "cd $QORTAL_DIR && ./$(basename "$0")"
   if [ $? -eq 0 ]; then
     log "Script successfully started in screen session 'qortal_restart'."
   else
