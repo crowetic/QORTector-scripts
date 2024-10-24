@@ -11,14 +11,16 @@ while true; do
   ./stop.sh
 
   # Wait for 45 seconds
-  sleep 45
+  sleep 30
 
-  # Kill all Java processes
-  killall -9 java
+  if [ -f "$QORTAL_DIR/db/blockchain.lck" ]; then
+  
+  	# Kill all Java processes
+  	killall -9 java
 
-  # Remove blockchain lock file
-  rm -rf "$QORTAL_DIR/db/blockchain.lck"
-
+  	# Remove blockchain lock file
+  	rm -rf "$QORTAL_DIR/db/blockchain.lck"
+  fi
   # Start Qortal core
   ./start.sh
 
