@@ -11,22 +11,14 @@ log() {
 
 # Check if screen is installed
 if command -v screen &> /dev/null; then
-  log "Screen is installed, creating wrapper and running script in a screen session..."
+  log "Screen is installed, attempting to run script in a screen session..."
 
-  # Wrapper script name and path
-  WRAPPER_SCRIPT="$QORTAL_DIR/start_qortal_wrapper.sh"
-
-  # Create a wrapper script to start the main script
-  echo "#!/bin/bash" > "$WRAPPER_SCRIPT"
-  echo "bash $(realpath "$0")" >> "$WRAPPER_SCRIPT"
-  chmod +x "$WRAPPER_SCRIPT"
-
-  # Run the wrapper script in screen
-  screen -S qortal_restart -dm bash -c "cd $QORTAL_DIR && ./start_qortal_wrapper.sh"
+  # Run the script in screen
+  screen -S qortal_restart -dm bash -c "$(realpath "$0")"
   if [ $? -eq 0 ]; then
-    log "Wrapper script successfully started in screen session 'qortal_restart'."
+    log "Script successfully started in screen session 'qortal_restart'."
   else
-    log "Failed to start wrapper script in screen session."
+    log "Failed to start script in screen session."
   fi
   exit 0
 else
