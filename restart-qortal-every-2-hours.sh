@@ -9,22 +9,25 @@ log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
-# Check if screen is installed
-if command -v screen &> /dev/null; then
-  log "Screen is installed, attempting to run script in a screen session..."
-
-  # Run the script in screen
-  screen -S qortal_restart -dm bash -c "$(realpath "$0")"
-  if [ $? -eq 0 ]; then
-    log "Script successfully started in screen session 'qortal_restart'."
+# Check if running in screen
+if [ -z "$RUNNING_IN_SCREEN" ]; then
+  # Check if screen is installed
+  if command -v screen &> /dev/null; then
+    log "Screen is installed, running script in a screen session..."
+    export RUNNING_IN_SCREEN=1
+    screen -S qortal_restart -dm bash -c "RUNNING_IN_SCREEN=1 $(realpath "$0")"
+    if [ $? -eq 0 ]; then
+      log "Script successfully started in screen session 'qortal_restart'."
+    else
+      log "Failed to start script in screen session."
+    fi
+    exit 0
   else
-    log "Failed to start script in screen session."
+    log "Screen is not installed, running script normally..."
   fi
-  exit 0
-else
-  log "Screen is not installed, running script normally..."
 fi
 
+# Main script loop
 while true; do
   # Navigate to Qortal directory
   log "Navigating to Qortal directory..."
