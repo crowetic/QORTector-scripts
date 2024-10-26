@@ -3,7 +3,7 @@
 # Path to the Qortal folder
 QORTAL_DIR=~/qortal
 LOG_FILE="$QORTAL_DIR/peer_monitor_log.txt"
-PEER_THRESHOLD=5
+PEER_THRESHOLD=15
 CONSECUTIVE_CHECKS=2
 CHECK_INTERVAL=300 # 5 minutes in seconds
 
