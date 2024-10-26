@@ -36,16 +36,12 @@ get_number_of_connections() {
 
   if command -v jq &> /dev/null; then
     log "jq is installed, using jq to parse response."
-    local connections=$(echo "$result" | jq -r '.numberOfConnections')
+    echo "$result" | jq -r '.numberOfConnections'
   else
     log "jq not installed, executing sed backup method."
-    local connections=$(echo "$result" | sed -n 's/.*"numberOfConnections":\([0-9]*\).*/\1/p')
+    echo "$result" | sed -n 's/.*"numberOfConnections":\([0-9]*\).*/\1/p'
   fi
-
-  log "Number of connections: $connections"
-  echo "$connections"
 }
-
 
 # Main monitoring loop
 consecutive_fail_or_low_count=0
@@ -96,12 +92,19 @@ while true; do
     fi
 
     # Ensure stop process completes
-    log "Waiting for stop process to complete..."
+if ps -p $stop_pid > /dev/null; then
     wait $stop_pid
+else
+    log "Stop process already terminated or failed."
+fi
 
     # Start Qortal core
-    log "Starting Qortal core..."
-    ./start.sh
+log "Executing start script..."
+log "Starting Qortal core..."
+if ./start.sh; then
+  log "Qortal core started successfully."
+else
+  log "Failed to start Qortal core."; fi
 
     # Reset consecutive low count
     consecutive_fail_or_low_count=0
