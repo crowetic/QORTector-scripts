@@ -17,7 +17,7 @@ if [ -z "$RUNNING_IN_SCREEN" ]; then
     export RUNNING_IN_SCREEN=1
     #screen -S qortal_restart -dm bash -c "RUNNING_IN_SCREEN=1 $(realpath "$0")"
     script_path=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
-    screen -S qortal_peer_monitor -dm bash -c "RUNNING_IN_SCREEN=1 $script_path"
+    screen -S qortal_restart -dm bash -c "RUNNING_IN_SCREEN=1 $script_path"
     if [ $? -eq 0 ]; then
       log "Script successfully started in screen session 'qortal_restart'."
     else
