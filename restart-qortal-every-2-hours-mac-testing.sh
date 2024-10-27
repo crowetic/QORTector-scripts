@@ -37,8 +37,7 @@ while true; do
 
   # Stop Qortal core
   log "Stopping Qortal core..."
-  ./stop.sh &> stop_output.log &
-  stop_pid=$!
+  ./stop.sh &> stop_output.log
 
   # Wait for 60 seconds
   sleep 60
@@ -55,24 +54,13 @@ while true; do
     log "Qortal stopped gracefully."
   fi
 
-  # Ensure stop process completes
-  log "Waiting for stop process to complete..."
-  wait $stop_pid
-
   # Start Qortal core
   log "Starting Qortal core..."
   ./start.sh
 
   # Wait for 2 hours while logging output
   log "Waiting for 2 hours before restarting..."
-  sleep 2h &
-  sleep_pid=$!
-  tail -f "$QORTAL_DIR/qortal.log" &
-  tail_pid=$!
+  sleep 2h
 
-  # Wait for the sleep to finish, then kill the tail process
-  wait $sleep_pid
-  log "2-hour wait complete, killing tail process..."
-  kill $tail_pid
 done
 
