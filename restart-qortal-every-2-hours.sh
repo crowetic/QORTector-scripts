@@ -38,8 +38,8 @@ while true; do
   ./stop.sh &> stop_output.log &
   stop_pid=$!
 
-  # Wait for 30 seconds
-  sleep 30
+  # Wait for 60 seconds
+  sleep 60
 
   # Check if stop script succeeded
   if ! grep -q "Qortal ended gracefully" stop_output.log; then
