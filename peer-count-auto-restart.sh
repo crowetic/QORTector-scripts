@@ -81,7 +81,7 @@ if [ "$USE_SCREEN" = true ]; then
   if screen -list | grep -q "peer_count_monitor"; then
     log "Screen session 'peer_count_monitor' already exists. Attaching to existing session."
     log "Acceptable peer count set: $ACCEPTABLE_PEERS"
-    screen -xr peer_count_monitor
+    screen -x peer_count_monitor
   else
     screen -dmS peer_count_monitor bash -c "$(declare -f log get_number_of_connections restart_qortal main_loop); ACCEPTABLE_PEERS=$ACCEPTABLE_PEERS; main_loop"
     log "Started in a new screen session."
