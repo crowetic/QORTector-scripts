@@ -64,13 +64,14 @@ main_loop() {
 
     if [ -z "$number_of_connections" ]; then
       log "Failed to retrieve number of connections."
-    elif [[ "$NUMBER_OF_CONNECTIONS" =~ ^[0-9]+$ ]] && [ "$NUMBER_OF_CONNECTIONS" -lt "$ACCEPTABLE_PEERS" ]; then
+    elif [[ "$number_of_connections" =~ ^[0-9]+$ ]] && [ "$number_of_connections" -lt "$ACCEPTABLE_PEERS" ]; then
       log "Number of connections ($number_of_connections) is below acceptable threshold ($ACCEPTABLE_PEERS). Restarting Qortal..."
       restart_qortal
     else
       log "Number of connections: ($number_of_connections) - is acceptable. No restarting needed..."
       log "Set peer count: $ACCEPTABLE_PEERS"
     fi
+
 
     sleep 300  # Wait for 5 minutes before next check
   done
