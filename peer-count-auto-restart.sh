@@ -72,7 +72,6 @@ main_loop() {
       log "Set peer count: $ACCEPTABLE_PEERS"
     fi
 
-
     sleep 300  # Wait for 5 minutes before next check
   done
 }
@@ -84,7 +83,8 @@ if [ "$USE_SCREEN" = true ]; then
     log "Acceptable peer count set: $ACCEPTABLE_PEERS"
     screen -x peer_count_monitor
   else
-    screen -dmS peer_count_monitor bash -c "$(declare -f log get_number_of_connections restart_qortal main_loop); ACCEPTABLE_PEERS=$ACCEPTABLE_PEERS; main_loop"
+    screen -dmS peer_count_monitor bash -c "$(declare -f log get_number_of_connections restart_qortal main_loop); ACCEPTABLE_PEERS=$ACCEPTABLE_PEERS; QORTAL_DIR=$QORTAL_DIR; LOG_FILE=$LOG_FILE; main_loop"
+ main_loop"
     log "Started in a new screen session."
     log "Acceptable peer count set: $ACCEPTABLE_PEERS"
   fi
