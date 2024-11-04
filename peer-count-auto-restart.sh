@@ -56,9 +56,9 @@ restart_qortal() {
 
 # Main loop function
 main_loop() {
-  log "Sleeping 3 minutes until first peer check..."
+  log "Sleeping 25 seconds until first peer check..."
   log "Number of acceptable peers set: $ACCEPTABLE_PEERS"
-  sleep 180  # Wait for 3 minutes before starting checks
+  sleep 25  # Wait for 25 seconds before starting checks
   while true; do
     number_of_connections=$(get_number_of_connections)
 
