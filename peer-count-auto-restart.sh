@@ -72,7 +72,7 @@ main_loop() {
       log "Set peer count: $ACCEPTABLE_PEERS"
     fi
 
-    sleep 300  # Wait for 5 minutes before next check
+    sleep 600  # Wait for 10 minutes before next check
   done
 }
 
