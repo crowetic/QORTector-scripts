@@ -49,7 +49,7 @@ restart_qortal() {
     exit 1
   }
   ./stop.sh
-  sleep 25
+  sleep 45
   ./start.sh
   log "Qortal restarted."
 }
