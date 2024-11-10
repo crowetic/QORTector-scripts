@@ -33,7 +33,7 @@ fi
 # Limits Java JVM stack size and maximum heap usage.
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
-JVM_MEMORY_ARGS="-Xss512m -Xmx2128m -XX:MaxRAM=2172m -XX:+UseSerialGC"
+JVM_MEMORY_ARGS="-XX:MaxRAMPercentage=60 -XX:+UseG1GC -Xss512k -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./heapdump.hprof -Xlog:gc*:file=gc.log:time,uptime,level,tags"
 
 # Although java.net.preferIPv4Stack is supposed to be false
 # by default in Java 11, on some platforms (e.g. FreeBSD 12),
