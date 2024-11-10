@@ -110,7 +110,7 @@ check_qortal() {
 
     if [ "$LOCAL_VERSION" -ge "$REMOTE_VERSION" ]; then
         echo "${GREEN} Local version is higher than or equal to the remote version, no qortal updates needed... continuing...${NC}\n"
-        check_peer_count   
+        check_for_GUI  
     else
         check_hash_update_qortal
     fi
@@ -183,8 +183,8 @@ check_peer_count() {
 
 
 zero_peer_settings_mod() {
-    echo "${YELLOW} Modifying settings for zero peers detected...${NC}\n"
-    
+    echo "${YELLOW} this should not be seen... skipping${NC}\n"
+    check_for_GUI
     # Define backup file name
     BACKUP_FILE=~/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json
 
@@ -260,8 +260,7 @@ zero_peer_settings_mod() {
 
 
 block_china() {
-    echo "${YELLOW} Blocking Chinese peers and applying rate-limiting to Qortal P2P port...${NC}\n"
-    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/block-china.sh && chmod +x block-china.sh && ./block-china.sh
+    echo "${YELLOW} no longer doing this... shouldn't be seeing this...${NC}\n"
 }
 
 check_hash_update_qortal() {
@@ -278,7 +277,7 @@ check_hash_update_qortal() {
 
     if [ "$LOCAL" = "$REMOTE" ]; then
         echo "${CYAN} Hash check says your Qortal core is UP-TO-DATE, checking environment... ${NC}\n"
-        check_peer_count
+        check_for_GUI
         exit 1
     else
         echo "${RED} Hash check confirmed your qortal core is OUTDATED, ${NC}${YELLOW}updating, bootstrapping, and starting qortal...then checking environment and updating scripts... ${NC}\n"
@@ -292,7 +291,7 @@ check_hash_update_qortal() {
         ./start.sh
         cd 
         
-        check_peer_count
+        check_for_GUI
     fi
 }
 
