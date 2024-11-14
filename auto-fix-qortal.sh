@@ -450,8 +450,9 @@ remote_height_checks() {
             echo "${GREEN}qortal.link height checks PASSED updating script...${NC}"
             update_script
         else
-            echo "${RED}SECOND remote node check FAILED... ${NC}${YELLOW}assuming local node needs bootstrapping... bootstrapping in 5 seconds...${NC}\n"
-            force_bootstrap
+            echo "${RED}SECOND remote node check FAILED... ${NC}${YELLOW}assuming local node needs bootstrapping... bootstrapping in 5 seconds...SKIPPING DUE TO TEMPORARY BOOTSTRAP CLUSTER ISSUE...${NC}\n"
+            #force_bootstrap
+            update_script
         fi
     fi
 }
