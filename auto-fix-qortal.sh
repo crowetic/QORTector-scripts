@@ -450,9 +450,9 @@ remote_height_checks() {
             echo "${GREEN}qortal.link height checks PASSED updating script...${NC}"
             update_script
         else
-            echo "${RED}SECOND remote node check FAILED... ${NC}${YELLOW}assuming local node needs bootstrapping... bootstrapping in 5 seconds...SKIPPING DUE TO TEMPORARY BOOTSTRAP CLUSTER ISSUE...${NC}\n"
-            #force_bootstrap
-            update_script
+            echo "${RED}SECOND remote node check FAILED... ${NC}${YELLOW}assuming local node needs bootstrapping... bootstrapping in 5 seconds...${NC}\n"
+            force_bootstrap
+            #update_script
         fi
     fi
 }
@@ -481,7 +481,7 @@ update_script() {
     chmod +x auto-fix-qortal.sh
     cd
     cp ~/qortal/new-scripts/auto-fix-qortal.sh .
-    rm ~/auto_fix_updated
+    rm -rf ~/auto_fix_updated
     echo "${YELLOW} Auto-fix script run complete.${NC}\n"
     sleep 5 
     exit
