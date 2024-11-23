@@ -518,7 +518,6 @@ potentially_update_settings() {
 
 update_script() {
     echo "${YELLOW}Updating script to newest version and backing up old one...${NC}\n"
-    mkdir -p "${HOME}/qortal/new-scripts"
     mkdir -p "${HOME}/qortal/new-scripts/backups"
     cp "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" "${HOME}/qortal/new-scripts/backups"
     rm -rf "${HOME}/qortal/new-scripts/auto-fix-qortal.sh"
