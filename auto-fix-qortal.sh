@@ -478,6 +478,7 @@ force_bootstrap() {
 potentially_update_settings() {
 
     echo "Backing up settings to backup-settings.json..."
+    echo "Changing to qortal directory..."
     cd "${HOME}/qortal"
     cp settings.json backup-settings.json
     
