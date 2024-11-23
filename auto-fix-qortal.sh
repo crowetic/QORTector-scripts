@@ -484,22 +484,22 @@ potentially_update_settings() {
 
     SETTINGS_FILE="settings.json"
 
-    echo "${YELLOW}Checking for ${GREEN}archivingPause${NC} setting...${NC}"
+    echo "${YELLOW}Checking for${NC} ${GREEN}archivingPause${NC} ${YELLOW}setting...${NC}"
     if grep -q '"archivingPause"' "${SETTINGS_FILE}"; then
-        echo "${BLUE}archivingPause exists... updating value...${NC}"
+        echo "${BLUE}archivingPause exists...${NC}${GREEN} updating value...${NC}"
         if command -v jq &> /dev/null; then
-            echo "${GREEN}jq exists, using jq to modify setting...${NC}"
+            echo "${GREEN}jq exists,${NC}${YELLOW} using jq to modify setting...${NC}"
             jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > "settings.tmp" && mv "settings.tmp" "${SETTINGS_FILE}"
             if [ $? -ne 0 ]; then
-                echo "${RED}jq edit failed, modifying with sed...${NC}" 
+                echo "${RED}jq edit failed${NC}, ${YELLOW}modifying with sed...${NC}" 
                 sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
             fi
         else
-            echo "${RED}jq doesn't exist, modifying with sed...${NC}" 
+            echo "${BLUE}jq doesn't exist, modifying with sed...${NC}" 
             sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
         fi
     else
-        echo "${RED}archivingPause doesn't exist, adding...${NC}"
+        echo "${BLUE}archivingPause doesn't exist, adding...${NC}"
         if command -v jq &> /dev/null; then 
             echo "${BLUE}jq exists, adding with jq...${NC}"
             jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > settings.tmp && mv settings.tmp "${SETTINGS_FILE}"
@@ -508,7 +508,7 @@ potentially_update_settings() {
                 sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
             fi
         else
-            echo "${RED}jq doesn't exist, adding with sed...${NC}"
+            echo "${BLUE}jq doesn't exist, adding with sed...${NC}"
             sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
         fi
     fi     
@@ -528,6 +528,7 @@ update_script() {
     chmod +x auto-fix-qortal.sh
     cd
     cp "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" "${HOME}/auto-fix-qortal.sh"
+    chmod +x auto-fix-qortal.sh
     rm -rf "${HOME}/auto_fix_updated"
     echo "${YELLOW} Auto-fix script run complete.${NC}\n"
     sleep 5 
