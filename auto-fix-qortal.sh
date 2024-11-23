@@ -16,12 +16,12 @@ PI_64_DETECTED=false
 
 # Function to update the script
 initial_update() {
-    if [ ! -f ~/auto_fix_updated ]; then
+    if [ ! -f "${HOME}/auto_fix_updated" ]; then
         echo "${YELLOW}Checking for the latest version of the script...${NC}\n"
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
-        chmod +x ~/auto-fix-qortal.sh
+        chmod +x "${HOME}/auto-fix-qortal.sh"
         echo "${GREEN}Script updated. Restarting...${NC}\n"
-        touch ~/auto_fix_updated
+        touch "${HOME}/auto_fix_updated"
         ./auto-fix-qortal.sh
     else
         check_internet
@@ -39,8 +39,9 @@ check_internet() {
         if [ "$INTERNET_STATUS" != "UP" ]; then
             echo "${BLUE}Internet connection is UP, continuing${NC}\n   $(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
             INTERNET_STATUS="UP"
-            rm -rf ~/Desktop/check-qortal-status.sh
-            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh ~/qortal && chmod +x ~/qortal/check-qortal-status.sh
+            rm -rf "${HOME}/Desktop/check-qortal-status.sh"
+            cd
+            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh "${HOME}/qortal" && chmod +x "${HOME}/qortal/check-qortal-status.sh"
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh && chmod +x start-qortal.sh
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh && chmod +x refresh-qortal.sh
             check_for_pi
@@ -66,7 +67,7 @@ check_for_pi() {
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
             crontab auto-fix-cron
             chmod +x start-modified-memory-args.sh
-            mv start-modified-memory-args.sh ~/qortal/start.sh
+            mv start-modified-memory-args.sh "${HOME}/qortal/start.sh"
             check_qortal
         else
             echo "${WHITE} 64bit ARM detected, proceeding accordingly...${NC}\n"
@@ -87,13 +88,13 @@ check_memory() {
 
     if [ "$totalm" -le 6000 ]; then
         echo "${WHITE} Machine has less than 6GB of RAM, Downloading correct start script for your configuration...${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/4GB-start.sh && mv 4GB-start.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/4GB-start.sh && mv 4GB-start.sh "${HOME}/qortal/start.sh" && chmod +x "${HOME}/qortal/start.sh"
     elif [ "$totalm" -ge 6001 ] && [ "$totalm" -le 16000 ]; then
         echo "${WHITE} Machine has between 6GB and 16GB of RAM, Downloading correct start script for your configuration...${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-6001-to-16000m.sh && mv start-6001-to-16000m.sh "${HOME}/qortal/start.sh" && chmod +x "${HOME}/qortal/start.sh"
     else
         echo "${WHITE} Machine has more than 16GB of RAM, using high-RAM start script and continuing...${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-high-RAM.sh && mv start-high-RAM.sh ~/qortal/start.sh && chmod +x ~/qortal/start.sh
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-high-RAM.sh && mv start-high-RAM.sh "${HOME}/qortal/start.sh" && chmod +x "${HOME}/qortal/start.sh"
     fi
 
     check_qortal
@@ -189,23 +190,23 @@ zero_peer_settings_mod() {
     echo "${YELLOW} this should not be seen... skipping${NC}\n"
     check_for_GUI
     # Define backup file name
-    BACKUP_FILE=~/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json
+    BACKUP_FILE="${HOME}/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json"
 
     # Create backup folder if not exists and backup settings.json
-    mkdir -p ~/backups/qortal-settings
-    cp ~/qortal/settings.json "$BACKUP_FILE"
+    mkdir -p "${HOME}/backups/qortal-settings"
+    cp "${HOME}/qortal/settings.json" "$BACKUP_FILE"
 
     # If jq is installed, use jq to modify settings.json
     if command -v jq >/dev/null 2>&1; then
         echo "${YELLOW} Using jq to modify settings.json...${NC}\n"
         
         # Modify or add necessary settings
-        jq '.allowConnectionsWithOlderPeerVersions = false | .minPeerVersion = "4.6.0"' ~/qortal/settings.json > tmp.$$.json && mv tmp.$$.json ~/qortal/settings.json
+        jq '.allowConnectionsWithOlderPeerVersions = false | .minPeerVersion = "4.6.0"' "${HOME}/qortal/settings.json" > tmp.$$.json && mv tmp.$$.json "${HOME}/qortal/settings.json"
 
         # Validate the modified JSON
-        if ! jq empty ~/qortal/settings.json >/dev/null 2>&1; then
+        if ! jq empty "${HOME}/qortal/settings.json" >/dev/null 2>&1; then
             echo "${RED} Error: settings.json is invalid after modifications. Restoring backup... ${NC}\n"
-            cp "$BACKUP_FILE" ~/qortal/settings.json
+            cp "$BACKUP_FILE" "${HOME}/qortal/settings.json"
             return 1
         fi
     else
@@ -213,25 +214,25 @@ zero_peer_settings_mod() {
         echo "${YELLOW} jq is not installed, using sed for settings modifications...${NC}\n"
 
         # Ensure settings.json modifications with sed
-        if ! grep -q '"allowConnectionsWithOlderPeerVersions"' ~/qortal/settings.json; then
-            sed -i '/^{/a \  "allowConnectionsWithOlderPeerVersions": false,' ~/qortal/settings.json
+        if ! grep -q '"allowConnectionsWithOlderPeerVersions"' "${HOME}/qortal/settings.json"; then
+            sed -i '/^{/a \  "allowConnectionsWithOlderPeerVersions": false,' "${HOME}/qortal/settings.json"
         else
-            sed -i 's/"allowConnectionsWithOlderPeerVersions":.*/"allowConnectionsWithOlderPeerVersions": false,/' ~/qortal/settings.json
+            sed -i 's/"allowConnectionsWithOlderPeerVersions":.*/"allowConnectionsWithOlderPeerVersions": false,/' "${HOME}/qortal/settings.json"
         fi
 
-        if ! grep -q '"minPeerVersion"' ~/qortal/settings.json; then
-            sed -i '/^{/a \  "minPeerVersion": "4.6.0",' ~/qortal/settings.json
+        if ! grep -q '"minPeerVersion"' "${HOME}/qortal/settings.json"; then
+            sed -i '/^{/a \  "minPeerVersion": "4.6.0",' "${HOME}/qortal/settings.json"
         else
-            sed -i 's/"minPeerVersion":.*/"minPeerVersion": "4.6.0",/' ~/qortal/settings.json
+            sed -i 's/"minPeerVersion":.*/"minPeerVersion": "4.6.0",/' "${HOME}/qortal/settings.json"
         fi
 
         # Validate JSON structure
-        if ! grep -q '}' ~/qortal/settings.json; then
-            echo "}" >> ~/qortal/settings.json
+        if ! grep -q '}' "${HOME}/qortal/settings.json"; then
+            echo "}" >> "${HOME}/qortal/settings.json"
         fi
 
         # Ensure the last line does not end with a comma
-        sed -i ':a;N;$!ba;s/,\n}/\n}/' ~/qortal/settings.json
+        sed -i ':a;N;$!ba;s/,\n}/\n}/' "${HOME}/qortal/settings.json"
     fi
 
     # Restart Qortal and verify
@@ -251,11 +252,11 @@ zero_peer_settings_mod() {
         core_status=$(curl -s localhost:12391/admin/status)
         if [ -z "$core_status" ]; then
             echo "${RED} Qortal still did not start correctly, restoring previous settings...${NC}\n"
-            cp "$BACKUP_FILE" ~/qortal/settings.json
-            bash ~/qortal/stop.sh
+            cp "$BACKUP_FILE" "${HOME}/qortal/settings.json"
+            bash "${HOME}/qortal/stop.sh"
             sleep 30
             killall -9 java
-            bash ~/qortal/start.sh
+            bash "${HOME}/qortal/start.sh"
         fi
     fi
     check_for_GUI
@@ -268,15 +269,15 @@ block_china() {
 
 check_hash_update_qortal() {
     echo "${RED}API-call-based version checking FAILED${NC}${YELLOW}. ${NC}${CYAN}Proceeding to HASH CHECK${NC}${YELLOW}, checking hash of qortal.jar on local machine VS newest released qortal.jar on github and updating your qortal.jar if needed... ${NC}\n"
-    cd ~/qortal
+    cd "${HOME}/qortal"
     md5sum qortal.jar > "local.md5"
     cd
     echo "${CYAN} Grabbing newest released jar to check hash... ${NC}\n"
     curl -L -O https://github.com/qortal/qortal/releases/latest/download/qortal.jar
     md5sum qortal.jar > "remote.md5"
 
-    LOCAL=$(cat ~/qortal/local.md5)
-    REMOTE=$(cat ~/remote.md5)
+    LOCAL=$(cat "${HOME}/qortal/local.md5")
+    REMOTE=$(cat "${HOME}/remote.md5")
 
     if [ "$LOCAL" = "$REMOTE" ]; then
         echo "${CYAN} Hash check says your Qortal core is UP-TO-DATE, checking environment... ${NC}\n"
@@ -284,13 +285,14 @@ check_hash_update_qortal() {
         exit 1
     else
         echo "${RED} Hash check confirmed your qortal core is OUTDATED, ${NC}${YELLOW}updating, bootstrapping, and starting qortal...then checking environment and updating scripts... ${NC}\n"
-        cd ~/qortal
+        cd "${HOME}/qortal"
         killall -9 java
         sleep 3
         rm -rf db log.t* qortal.log run.log run.pid qortal.jar
-        cp ~/qortal.jar ~/qortal
-        rm ~/qortal.jar
-        rm ~/remote.md5 local.md5
+        cp "${HOME}/qortal.jar" "${HOME}/qortal"
+        rm "${HOME}/qortal.jar"
+        rm "${HOME}/remote.md5" local.md5
+        potentially_update_settings
         ./start.sh
         cd 
         
@@ -312,9 +314,9 @@ check_for_GUI() {
             rm -rf auto-fix-GUI-cron
             echo "${YELLOW} Setting up new ${NC}\n ${WHITE} 'auto-fix-qortal-GUI.desktop' ${NC}\n ${YELLOW} file for GUI-based machines to run 7 min after startup in a visual fashion. Entry in 'startup' will be called ${NC}\n ${WHITE} 'auto-fix-visible' ${NC}\n"
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop
-            mkdir -p ~/.config/autostart
-            cp auto-fix-qortal-GUI.desktop ~/.config/autostart
-            rm -rf ~/auto-fix-qortal-GUI.desktop
+            mkdir -p "${HOME}/.config/autostart"
+            cp auto-fix-qortal-GUI.desktop "${HOME}/.config/autostart"
+            rm -rf "${HOME}/auto-fix-qortal-GUI.desktop"
             echo "${YELLOW} Your machine will now run 'auto-fix-qortal.sh' script in a pop-up terminal, 7 MIN AFTER YOU REBOOT your machine. The normal 'background' process for auto-fix-qortal will continue as normal.${NC}\n"
             echo "${CYAN} continuing to verify node height...${NC}\n"
 
@@ -328,8 +330,8 @@ check_for_GUI() {
 
 setup_pi_cron() {
     echo "${YELLOW} Setting up cron jobs for Raspberry Pi or headless machines... ${NC}\n"
-    mkdir -p ~/backups/cron-backups
-    crontab -l > ~/backups/cron-backups/crontab-backup-$(date +%Y%m%d%H%M%S)
+    mkdir -p "${HOME}/backups/cron-backups"
+    crontab -l > "${HOME}/backups/cron-backups/crontab-backup-$(date +%Y%m%d%H%M%S)"
 
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
     crontab auto-fix-cron
@@ -377,8 +379,8 @@ no_local_height() {
     echo "${WHITE} Checking if node is bootstrapping or not...${NC}\n"
 
     # Check if the main log file exists
-    if [ -f ~/qortal/qortal.log ]; then
-        if tail -n 5 ~/qortal/qortal.log | grep -E -i 'bootstrap|bootstrapping' > /dev/null; then
+    if [ -f "${HOME}/qortal/qortal.log" ]; then
+        if tail -n 5 "${HOME}/qortal/qortal.log" | grep -E -i 'bootstrap|bootstrapping' > /dev/null; then
             echo "${RED} NODE SEEMS TO BE BOOTSTRAPPING, UPDATING SCRIPT AND EXITING, NEXT RUN WILL FIND/FIX ANY ISSUES ${NC}\n"
             update_script
         fi
@@ -387,23 +389,23 @@ no_local_height() {
         old_log_found=false
 
         # Check for old log files and process them
-        for log_file in ~/qortal/log.t*; do
+        for log_file in "${HOME}/qortal/log.t*"; do
             if [ -f "$log_file" ]; then
                 old_log_found=true
                 echo "${YELLOW}Old log method found, backing up old logs and updating logging method...${NC}\n"
-                mkdir -p ~/qortal/backup/logs
+                mkdir -p "${HOME}/qortal/backup/logs"
                 # Move old log files to the backup directory
-                mv ~/qortal/log.t* ~/qortal/backup/logs
-                mv ~/qortal/log4j2.properties ~/qortal/backup/logs
+                mv "${HOME}/qortal/log.t*" "${HOME}/qortal/backup/logs"
+                mv "${HOME}/qortal/log4j2.properties" "${HOME}/qortal/backup/logs"
                 # Download the new log4j2.properties file
                 curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/log4j2.properties
                 # Move the new log4j2.properties file to the qortal directory
-                mv log4j2.properties ~/qortal
+                mv log4j2.properties "${HOME}/qortal"
                 echo -e "${RED}Stopping Qortal to apply new logging method...${NC}\n"
                 # Stop Qortal to apply changes
-                cd ~/qortal
+                cd "${HOME}/qortal"
                 ./stop.sh 
-                cd ~
+                cd 
                 break
             fi
         done
@@ -414,7 +416,8 @@ no_local_height() {
     fi
 
     echo "${GREEN} Starting Qortal Core and sleeping for 2.5 min to let it startup fully, PLEASE WAIT... ${NC}\n"
-    cd ~/qortal
+    potentially_update_settings
+    cd "${HOME}/qortal"
     ./start.sh 
     sleep 166
     cd 
@@ -462,7 +465,7 @@ remote_height_checks() {
 
 force_bootstrap() {
     echo "${RED} height check found issues, forcing bootstrap... ${NC}\n"
-    cd ~/qortal
+    cd "${HOME}/qortal"
     killall -9 java
     sleep 3
     rm -rf db log.t* qortal.log run.log run.pid
@@ -474,14 +477,12 @@ force_bootstrap() {
 
 potentially_update_settings() {
 
-    BACKUP_FILE="~/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json"
-    # Create backup folder if not exists and backup settings.json
-    echo "${GREEN}Creating backup directory ~/backups/qortal-settings...${NC}"
-    mkdir -p ~/backups/qortal-settings
-    echo "Backing up settings to ${BACKUP_FILE}..."
-    cp ~/qortal/settings.json "${BACKUP_FILE}"
+    echo "Backing up settings to backup-settings.json..."
+    cd "${HOME}/qortal"
+    cp settings.json backup-settings.json
+    
 
-    SETTINGS_FILE="~/qortal/settings.json"
+    SETTINGS_FILE="settings.json"
 
     echo "Checking for archivingPause setting..."
     if grep -q '"archivingPause"' "${SETTINGS_FILE}"; then
@@ -503,28 +504,27 @@ potentially_update_settings() {
             sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
         fi
     fi     
-
-    echo "Settings check complete! Exiting..."
-    exit
+    cd 
 }
 
 
 update_script() {
     echo "${YELLOW}Updating script to newest version and backing up old one...${NC}\n"
-    mkdir -p ~/qortal/new-scripts
-    mkdir -p ~/qortal/new-scripts/backups
-    cp ~/qortal/new-scripts/auto-fix-qortal.sh ~/qortal/new-scripts/backups
-    rm -rf ~/qortal/new-scripts/auto-fix-qortal.sh
-    cp ~/auto-fix-qortal.sh ~/qortal/new-scripts/backups/original.sh
-    cd ~/qortal/new-scripts
+    mkdir -p "${HOME}/qortal/new-scripts"
+    mkdir -p "${HOME}/qortal/new-scripts/backups"
+    cp "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" "${HOME}/qortal/new-scripts/backups"
+    rm -rf "${HOME}/qortal/new-scripts/auto-fix-qortal.sh"
+    cp "${HOME}/auto-fix-qortal.sh" "${HOME}/qortal/new-scripts/backups/original.sh"
+    cd "${HOME}/qortal/new-scripts"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
     chmod +x auto-fix-qortal.sh
     cd
-    cp ~/qortal/new-scripts/auto-fix-qortal.sh .
-    rm -rf ~/auto_fix_updated
+    cp "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" .
+    rm -rf "${HOME}/auto_fix_updated"
     echo "${YELLOW} Auto-fix script run complete.${NC}\n"
     sleep 5 
     potentially_update_settings
+    exit
 }
 
 initial_update
