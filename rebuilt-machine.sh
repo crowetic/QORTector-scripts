@@ -17,7 +17,7 @@ sudo apt update
 # TODO - check if the system is ubuntu, if so then remove the bullshit ubuntu-advantage-tools, then re-install gnome-software - for now, just purge it and install gnome-software assuming it's an ubuntu-compatible distro.
 sudo apt -y --purge remove ubuntu-advantage-tools
 sudo apt -y upgrade
-sudo apt -y install gnome-software unzip vim curl default-jre cinnamon-desktop-environment vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors
+sudo apt -y install gnome-software unzip vim curl openjdk-17-jre zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
 
 echo "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
