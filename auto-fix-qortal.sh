@@ -477,31 +477,38 @@ force_bootstrap() {
 
 potentially_update_settings() {
 
-    echo "Backing up settings to backup-settings.json..."
-    echo "Changing to qortal directory..."
+    echo "${GREEN}Backing up settings to backup-settings.json...${NC}"
+    echo "${YELLOW}Changing to qortal directory...${NC}"
     cd "${HOME}/qortal"
     cp settings.json backup-settings.json
-    
 
     SETTINGS_FILE="settings.json"
 
-    echo "Checking for archivingPause setting..."
+    echo "${YELLOW}Checking for ${GREEN}archivingPause${NC} setting...${NC}"
     if grep -q '"archivingPause"' "${SETTINGS_FILE}"; then
-        echo "archivingPause exists... updating value..."
+        echo "${BLUE}archivingPause exists... updating value...${NC}"
         if command -v jq &> /dev/null; then
-            echo "jq exists, using jq to modify setting..."
-            jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > settings.tmp && mv settings.tmp "${SETTINGS_FILE}"
+            echo "${GREEN}jq exists, using jq to modify setting...${NC}"
+            jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > "settings.tmp" && mv "settings.tmp" "${SETTINGS_FILE}"
+            if [ $? -ne 0 ]; then
+                echo "${RED}jq edit failed, modifying with sed...${NC}" 
+                sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
+            fi
         else
-            echo "jq doesn't exist, modifying with sed..." 
+            echo "${RED}jq doesn't exist, modifying with sed...${NC}" 
             sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
         fi
     else
-        echo "archivingPause doesn't exist, adding..."
+        echo "${RED}archivingPause doesn't exist, adding...${NC}"
         if command -v jq &> /dev/null; then 
-            echo "jq exists, adding with jq..."
+            echo "${BLUE}jq exists, adding with jq...${NC}"
             jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > settings.tmp && mv settings.tmp "${SETTINGS_FILE}"
+            if [ $? -ne 0 ]; then
+                echo "${RED}jq edit failed, modifying with sed...${NC}" 
+                sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
+            fi
         else
-            echo "jq doesn't exist, adding with sed..."
+            echo "${RED}jq doesn't exist, adding with sed...${NC}"
             sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
         fi
     fi     
@@ -520,7 +527,7 @@ update_script() {
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
     chmod +x auto-fix-qortal.sh
     cd
-    cp "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" .
+    cp "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" "${HOME}/auto-fix-qortal.sh"
     rm -rf "${HOME}/auto_fix_updated"
     echo "${YELLOW} Auto-fix script run complete.${NC}\n"
     sleep 5 
