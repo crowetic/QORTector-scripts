@@ -502,17 +502,19 @@ potentially_update_settings() {
         echo "${BLUE}archivingPause doesn't exist, adding...${NC}"
         if command -v jq &> /dev/null; then 
             echo "${BLUE}jq exists, adding with jq...${NC}"
-            jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > settings.tmp && mv settings.tmp "${SETTINGS_FILE}"
+            jq '. + {archivingPause: 999999999999}' "${SETTINGS_FILE}" > "settings.tmp" && mv "settings.tmp" "${SETTINGS_FILE}"
             if [ $? -ne 0 ]; then
                 echo "${RED}jq edit failed, modifying with sed...${NC}" 
-                sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
+                sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
             fi
         else
             echo "${BLUE}jq doesn't exist, adding with sed...${NC}"
             sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
         fi
     fi     
-    cd 
+
+    echo "${GREEN}Settings modification complete.${NC}"
+    cd "${HOME}"
 }
 
 
