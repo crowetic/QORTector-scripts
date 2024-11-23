@@ -71,6 +71,8 @@ check_for_pi() {
         else
             echo "${WHITE} 64bit ARM detected, proceeding accordingly...${NC}\n"
             PI_64_DETECTED=true
+            check_memory
+            
         fi
         
     else
@@ -472,14 +474,14 @@ force_bootstrap() {
 
 potentially_update_settings() {
 
-    BACKUP_FILE=~/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json
+    BACKUP_FILE="~/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json"
     # Create backup folder if not exists and backup settings.json
     echo "${GREEN}Creating backup directory ~/backups/qortal-settings...${NC}"
     mkdir -p ~/backups/qortal-settings
     echo "Backing up settings to ${BACKUP_FILE}..."
     cp ~/qortal/settings.json "${BACKUP_FILE}"
 
-    SETTINGS_FILE=~/qortal/settings.json
+    SETTINGS_FILE="~/qortal/settings.json"
 
     echo "Checking for archivingPause setting..."
     if grep -q '"archivingPause"' "${SETTINGS_FILE}"; then
