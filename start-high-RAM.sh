@@ -34,13 +34,29 @@ fi
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
 # Uncomment (remove '#' sign) line below if your system has less than 12GB of RAM for optimal RAM defaults
-JVM_MEMORY_ARGS="-XX:MaxRAMPercentage=40 -XX:+UseG1GC -Xss512k -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./heapdump.hprof"
+#JVM_MEMORY_ARGS="-XX:MaxRAMPercentage=40 -XX:+UseG1GC -Xss512k -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./heapdump.hprof"
+JVM_MEMORY_ARGS="
+  -Xms8000m \
+  -Xmx8000m \
+  -Xss4096k \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=./heapdump.hprof \
+  -XX:+UseG1GC \
+  -XX:MaxGCPauseMillis=300 \
+  -XX:InitiatingHeapOccupancyPercent=35 \
+  -XX:ParallelGCThreads=4 \
+  -XX:ConcGCThreads=2 \
+  -XX:G1HeapRegionSize=32m \
+  -XX:MaxTenuringThreshold=10 \
+  -XX:+AlwaysPreTouch 
+"
+
 
 # Although java.net.preferIPv4Stack is supposed to be false
 # by default in Java 11, on some platforms (e.g. FreeBSD 12),
 # it is overridden to be true by default. Hence we explicitly
 # set it to false to obtain desired behaviour.
-nohup nice -n 2 java \
+nohup nice -n 12 java \
 	-Djava.net.preferIPv4Stack=false \
 	${JVM_MEMORY_ARGS} \
 	-jar qortal.jar \

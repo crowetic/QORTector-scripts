@@ -1,10 +1,11 @@
 {
     "apiDocumentationEnabled":true,
-    "maxPeers": 77,
+    "maxPeers": 88,
     "minOutboundPeers": 22,
-    "maxNetworkThreadPoolSize": 660,
-    "repositoryConnectionPoolSize": 1880,
+    "maxNetworkThreadPoolSize": 600,
+    "repositoryConnectionPoolSize": 1220,
     "apiWhitelistEnabled": false,
-    "blockCacheSize": 333,
+    "blockCacheSize": 33,
+    "archiveInterval": 999999999999,
     "apiRestricted": false
 }

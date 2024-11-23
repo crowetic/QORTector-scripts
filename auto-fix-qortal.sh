@@ -62,16 +62,17 @@ check_for_pi() {
         if [ "$(uname -m | grep 'armv7l')" != "" ]; then
             echo "${WHITE} 32bit ARM detected, using ARM 32bit compatible modified start script${NC}\n"
             PI_32_DETECTED=true
+            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
+            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
+            crontab auto-fix-cron
+            chmod +x start-modified-memory-args.sh
+            mv start-modified-memory-args.sh ~/qortal/start.sh
+            check_qortal
         else
             echo "${WHITE} 64bit ARM detected, proceeding accordingly...${NC}\n"
             PI_64_DETECTED=true
         fi
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
-        crontab auto-fix-cron
-        chmod +x start-modified-memory-args.sh
-        mv start-modified-memory-args.sh ~/qortal/start.sh
-        check_qortal
+        
     else
         echo "${YELLOW} Not a Raspberry pi machine, continuing...${NC}\n"
         check_memory
@@ -469,6 +470,43 @@ force_bootstrap() {
     update_script
 }
 
+potentially_update_settings() {
+
+    BACKUP_FILE=~/backups/qortal-settings/settings-$(date +%Y%m%d%H%M%S).json
+    # Create backup folder if not exists and backup settings.json
+    echo "${GREEN}Creating backup directory ~/backups/qortal-settings...${NC}"
+    mkdir -p ~/backups/qortal-settings
+    echo "Backing up settings to ${BACKUP_FILE}..."
+    cp ~/qortal/settings.json "${BACKUP_FILE}"
+
+    SETTINGS_FILE=~/qortal/settings.json
+
+    echo "Checking for archivingPause setting..."
+    if grep -q '"archivingPause"' "${SETTINGS_FILE}"; then
+        echo "archivingPause exists... updating value..."
+        if command -v jq &> /dev/null; then
+            echo "jq exists, using jq to modify setting..."
+            jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > settings.tmp && mv settings.tmp "${SETTINGS_FILE}"
+        else
+            echo "jq doesn't exist, modifying with sed..." 
+            sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
+        fi
+    else
+        echo "archivingPause doesn't exist, adding..."
+        if command -v jq &> /dev/null; then 
+            echo "jq exists, adding with jq..."
+            jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > settings.tmp && mv settings.tmp "${SETTINGS_FILE}"
+        else
+            echo "jq doesn't exist, adding with sed..."
+            sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
+        fi
+    fi     
+
+    echo "Settings check complete! Exiting..."
+    exit
+}
+
+
 update_script() {
     echo "${YELLOW}Updating script to newest version and backing up old one...${NC}\n"
     mkdir -p ~/qortal/new-scripts
@@ -484,7 +522,8 @@ update_script() {
     rm -rf ~/auto_fix_updated
     echo "${YELLOW} Auto-fix script run complete.${NC}\n"
     sleep 5 
-    exit
+    potentially_update_settings
 }
+
 initial_update
 
