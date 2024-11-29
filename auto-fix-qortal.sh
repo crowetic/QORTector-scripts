@@ -539,9 +539,11 @@ update_script() {
     cp "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" "${HOME}/auto-fix-qortal.sh"
     chmod +x auto-fix-qortal.sh
     rm -rf "${HOME}/auto_fix_updated"
-    echo "${YELLOW} Auto-fix script run complete.${NC}\n"
-    sleep 5 
+    echo "${YELLOW} Checking for any settings changes required...${NC}"
+    sleep 2
     potentially_update_settings
+    echo "${YELLOW} Auto-fix script run complete.${NC}\n"
+    sleep 5
     exit
 }
 
