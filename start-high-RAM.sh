@@ -34,8 +34,8 @@ fi
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
 # Uncomment (remove '#' sign) line below if your system has less than 12GB of RAM for optimal RAM defaults
-#JVM_MEMORY_ARGS="-XX:MaxRAMPercentage=40 -XX:+UseG1GC -Xss512k -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./heapdump.hprof"
-JVM_MEMORY_ARGS="
+JVM_MEMORY_ARGS="-XX:MaxRAMPercentage=40 -XX:+UseG1GC -Xss1024k"
+#JVM_MEMORY_ARGS="
   -Xms8000m \
   -Xmx8000m \
   -Xss4096k \

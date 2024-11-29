@@ -13,6 +13,7 @@ NC='\033[0m'              # No Color
 
 PI_32_DETECTED=false
 PI_64_DETECTED=false
+UPDATED_SETTINGS=false
 
 # Function to update the script
 initial_update() {
@@ -476,46 +477,53 @@ force_bootstrap() {
 }
 
 potentially_update_settings() {
-
-    echo "${GREEN}Backing up settings to backup-settings.json...${NC}"
+    echo "${GREEN}Backing up settings to a timestamped backup file...${NC}"
     echo "${YELLOW}Changing to qortal directory...${NC}"
     cd "${HOME}/qortal"
-    cp settings.json backup-settings.json
+    if [ ${SETTINGS_UPDATED} ]; then
+    	echo "${YELLOW} Settings already updated this run, no need to attempt again...${NC}"
+    	return
+    fi
+    
+    TIMESTAMP=$(date +%Y%m%d%H%M%S)
+    BACKUP_FILE="backup-settings-${TIMESTAMP}.json"
+    cp settings.json "${BACKUP_FILE}"
 
     SETTINGS_FILE="settings.json"
 
     echo "${YELLOW}Checking for${NC} ${GREEN}archivingPause${NC} ${YELLOW}setting...${NC}"
     if grep -q '"archivingPause"' "${SETTINGS_FILE}"; then
-        echo "${BLUE}archivingPause exists...${NC}${GREEN} updating value...${NC}"
+        echo "${BLUE}archivingPause exists...${NC}${GREEN} removing it...${NC}"
         if command -v jq &> /dev/null; then
             echo "${GREEN}jq exists,${NC}${YELLOW} using jq to modify setting...${NC}"
-            jq '.archivingPause = 999999999999' "${SETTINGS_FILE}" > "settings.tmp" && mv "settings.tmp" "${SETTINGS_FILE}"
-            if [ $? -ne 0 ]; then
-                echo "${RED}jq edit failed${NC}, ${YELLOW}modifying with sed...${NC}" 
-                sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
+            jq 'del(.archivingPause)' "${SETTINGS_FILE}" > "settings.tmp"
+            if [ $? -eq 0 ]; then
+                mv "settings.tmp" "${SETTINGS_FILE}"
+                SETTINGS_UPDATED=true
+            else
+                echo "${RED}jq edit failed, restoring backup...${NC}"
+                mv "${BACKUP_FILE}" "${SETTINGS_FILE}"
+                return 1
             fi
         else
-            echo "${BLUE}jq doesn't exist, modifying with sed...${NC}" 
-            sed -i 's/"archivingPause"[[:space:]]*:[[:space:]]*[0-9]*/"archivingPause": 999999999999/' "${SETTINGS_FILE}"
+            echo "${BLUE}jq doesn't exist, modifying with sed...${NC}"
+            sed -i '/"archivingPause"[[:space:]]*:/d' "${SETTINGS_FILE}"
+            if [ $? -ne 0 ]; then
+                echo "${RED}sed edit failed, restoring backup...${NC}"
+                mv "${BACKUP_FILE}" "${SETTINGS_FILE}"
+                return 1
+            fi
+            SETTINGS_UPDATED=true
         fi
     else
-        echo "${BLUE}archivingPause doesn't exist, adding...${NC}"
-        if command -v jq &> /dev/null; then 
-            echo "${BLUE}jq exists, adding with jq...${NC}"
-            jq '. + {archivingPause: 999999999999}' "${SETTINGS_FILE}" > "settings.tmp" && mv "settings.tmp" "${SETTINGS_FILE}"
-            if [ $? -ne 0 ]; then
-                echo "${RED}jq edit failed, modifying with sed...${NC}" 
-                sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
-            fi
-        else
-            echo "${BLUE}jq doesn't exist, adding with sed...${NC}"
-            sed -i 's/}$/,"archivingPause": 999999999999}/' "${SETTINGS_FILE}"
-        fi
-    fi     
+        echo "${BLUE}archivingPause does not exist, no changes needed...${NC}"
+    fi
 
     echo "${GREEN}Settings modification complete.${NC}"
     cd "${HOME}"
+    return 0
 }
+
 
 
 update_script() {

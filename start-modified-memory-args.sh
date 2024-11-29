@@ -33,8 +33,8 @@ fi
 # Limits Java JVM stack size and maximum heap usage.
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
-#JVM_MEMORY_ARGS="-Xss1256k -Xms1750m -Xmx1750m"
-JVM_MEMORY_ARGS="
+JVM_MEMORY_ARGS="-Xss1256k -Xms1750m -Xmx1750m"
+#JVM_MEMORY_ARGS="
   -Xms1750m \
   -Xmx1750m \
   -Xss1212k \
