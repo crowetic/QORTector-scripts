@@ -34,21 +34,7 @@ fi
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
 JVM_MEMORY_ARGS="-XX:MaxRAMPercentage40 -XX:+UseG1GC -Xss512k"
-#JVM_MEMORY_ARGS="
-  -Xms6000m \
-  -Xmx6000m \
-  -Xss2048k \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=./heapdump.hprof \
-  -XX:+UseG1GC \
-  -XX:MaxGCPauseMillis=300 \
-  -XX:InitiatingHeapOccupancyPercent=55 \
-  -XX:ParallelGCThreads=4 \
-  -XX:ConcGCThreads=2 \
-  -XX:G1HeapRegionSize=32m \
-  -XX:MaxTenuringThreshold=10 \
-  -XX:+AlwaysPreTouch 
-"
+
 
 # Although java.net.preferIPv4Stack is supposed to be false
 # by default in Java 11, on some platforms (e.g. FreeBSD 12),
