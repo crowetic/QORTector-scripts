@@ -326,13 +326,14 @@ potentially_update_settings() {
     
     TIMESTAMP=$(date +%Y%m%d%H%M%S)
     BACKUP_FOLDER="${HOME}/qortal/qortal-backup/auto-fix-settings-backup"
+    mkdir -p "$BACKUP_FOLDER"
     if [ -f backup-settings*.json ]; then
         mv backup-settings*.json "${BACKUP_FOLDER}"
     fi
     BACKUP_FILE="backup-settings-${TIMESTAMP}.json"
     cp settings.json "${BACKUP_FILE}"
     SETTINGS_FILE="settings.json"
-    mkdir -p "$BACKUP_FOLDER"
+    
     
     
 
