@@ -429,7 +429,7 @@ update_script() {
     sleep 2
     potentially_update_settings
     rm -rf ${HOME}/qortal.jar ${HOME}/run.pid ${HOME}/run.log ${HOME}/remote.md5 ${HOME}/qortal/local.md5
-    mkdir -P ${HOME}/backups && mv ${HOME}/qortal/backup-settings* ${HOME}/backups
+    mkdir -p ${HOME}/backups && mv ${HOME}/qortal/backup-settings* ${HOME}/backups
     echo "${YELLOW}Auto-fix script run complete.${NC}\n"
     sleep 5
     exit
