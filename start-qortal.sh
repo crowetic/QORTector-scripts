@@ -1,8 +1,14 @@
 #!/bin/bash
 
+# Define color codes for output
+RED='\033[0;31m'
+NC='\033[0m' # No color
+
+
 # Check if Qortal is running
 QORTAL_RUNNING=$(pgrep -f 'java.*qortal' > /dev/null && echo 1 || echo 0)
 GUI_START="${HOME}/.config/autostart/start-qortal.desktop"
+QORTAL_LOG="${HOME}/qortal/qortal.log"
 
 if [[ -f "$GUI_START" ]]; then
     echo "Qortal is set to start via GUI. Checking if it is running..."
@@ -16,7 +22,12 @@ if [[ -f "$GUI_START" ]]; then
             echo "Qortal is running and responding. Exiting..."
             exit 0
         else
-            echo "Qortal is running but not responding. Restarting..."
+            echo "Qortal is running but not responding. Checking for bootstrapping..."
+            if tail -n 5 "$QORTAL_LOG" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
+                echo -e "${RED}Node seems to be bootstrapping, assuming it is fine, exiting...${NC}"
+                exit 0
+            fi
+            echo "Qortal is not bootstrapping. Restarting..."
             killall -9 java
             sleep 5
         fi
@@ -63,7 +74,12 @@ else
             echo "Qortal is responding. Exiting..."
             exit 0
         else
-            echo "Qortal is running but unresponsive. Restarting..."
+            echo "Qortal is running but unresponsive. Checking for bootstrapping..."
+            if tail -n 5 "$QORTAL_LOG" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
+                echo -e "${RED}Node seems to be bootstrapping, assuming it is operational... exiting...${NC}"
+                exit 0
+            fi
+            echo "Qortal is not bootstrapping. Restarting..."
             killall -9 java
             sleep 5
         fi
