@@ -5,7 +5,6 @@
     "maxNetworkThreadPoolSize": 600,
     "repositoryConnectionPoolSize": 1220,
     "apiWhitelistEnabled": false,
-    "blockCacheSize": 33,
-    "archiveInterval": 999999999999,
+    "blockCacheSize": 142,
     "apiRestricted": false
 }
