@@ -15,7 +15,7 @@ echo "${YELLOW} UPDATING AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n"
 
 sudo apt update 
 sudo apt -y upgrade
-sudo apt -y install unzip vim curl openjdk-17-jre p7zip-full htop net-tools bpytop ffmpeg sysbench smartmontools
+sudo apt -y install unzip vim curl openjdk-21-jre p7zip-full htop net-tools bpytop ffmpeg sysbench smartmontools jq 
 # TODO - check if the system is ubuntu, if so then remove the bullshit ubuntu-advantage-tools, then re-install gnome-software.
 #sudo apt -y --purge remove ubuntu-advantage-tools 
 #sudo apt -y install gnome-software
