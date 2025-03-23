@@ -106,17 +106,17 @@ mv "${HOME}/Pictures/icons/QLogo_512.png" "${HOME}/.icons/qortal/qortal-logo.png
 mv "${HOME}/Pictures/icons/qortal-ui.png" "${HOME}/.icons/qortal/qortal-ui.png"
 mv "${HOME}/Pictures/icons/qortal-hub-app-logo.png" "${HOME}/.icons/qortal/qortal-hub.png"
 
-rsync -raPz "${HOME}/.icons/qortal/*" "${HOME}/Pictures/icons/"
+rsync -raPz "${HOME}/.icons/qortal/" "${HOME}/Pictures/icons/"
 
 ### CINNAMON THEMING - ALWAYS APPLIES EVEN IF CINNAMON ISN'T ACTIVE ###
 echo -e "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
 
-mkdir -p "${HOME}/.themes" "${HOME}/.icons"
+mkdir -p "${HOME}/.themes"
 
 # Avoid cloning twice
-[ ! -d "${HOME}/.themes/Windows-10" ] && git clone https://github.com/B00merang-Project/Windows-10.git ~/.themes/Windows-10
-[ ! -d "${HOME}/.themes/Windows-10-Dark" ] && git clone https://github.com/B00merang-Project/Windows-10-Dark.git ~/.themes/Windows-10-Dark
-[ ! -d "${HOME}/.icons/Flatery" ] && git clone https://github.com/cbrnix/Flatery.git ~/.icons/Flatery
+[ ! -d "${HOME}/.themes/Windows-10" ] && git clone https://github.com/B00merang-Project/Windows-10.git "${HOME}/.themes/Windows-10"
+[ ! -d "${HOME}/.themes/Windows-10-Dark" ] && git clone https://github.com/B00merang-Project/Windows-10-Dark.git "${HOME}/.themes/Windows-10-Dark"
+[ ! -d "${HOME}/.icons/Flatery" ] && git clone https://github.com/cbrnix/Flatery.git "${HOME}/.icons/Flatery"
 
 ### APPLY THEMES (WILL WORK AFTER REBOOT TOO) ###
 echo -e "${YELLOW} APPLYING CINNAMON THEMES ${NC}\n"
@@ -133,7 +133,7 @@ echo -e "${YELLOW} CONFIGURING CINNAMON PANEL AND MENU ${NC}\n"
 # Custom icon and label
 gsettings set org.cinnamon.menu-use-custom-icon true
 gsettings set org.cinnamon.menu.use-custom-label true
-gsettings set org.cinnamon menu-icon-name "${HOME}/Pictures/blue-grey-menu-button.png"
+gsettings set org.cinnamon menu-icon-name "qortal-menu-button.png"
 gsettings set org.cinnamon menu-text "ortal-OS"
 gsettings set org.cinnamon menu-icon-size 42
 
@@ -205,6 +205,13 @@ echo -e "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
 crontab rebuilt-machine-cron
 rm -f rebuilt-machine-cron
 
-echo -e "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 10 SECONDS ${NC}\n"
+echo -e "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now...)${NC}\n"
 sleep 10
+echo -e "${YELLOW}20 seconds remaining...\n"
+sleep 9 
+echo -e "10 Seconds remaining...\n"
+sleep 4
+echo -e "5 seconds remaining...${NC}\n"
+sleep 3 
+echo "${GREEN} REBOOTING MACHINE NOW!${NC}\n"
 sudo reboot
