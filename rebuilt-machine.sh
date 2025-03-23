@@ -18,32 +18,31 @@ echo -e "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${N
 sudo apt update
 sudo apt -y --purge remove ubuntu-advantage-tools ubuntu-pro-client*
 sudo apt -y upgrade
-sudo apt -y install git jq tela-icon-theme gnome-software unzip vim curl openjdk-21-jre zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
+sudo apt -y install git jq gnome-software unzip vim curl openjdk-21-jre zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
 
 ### SET DEFAULT SESSION TO CINNAMON ###
 echo -e "${YELLOW} SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
 
-# Works for most LightDM or .xsession-compatible setups
-echo "cinnamon" > ~/.xsession
-chmod +x ~/.xsession
+# Works for most LightDM and GDM-based setups
+echo "cinnamon" > "$HOME/.xsession"
+chmod +x "$HOME/.xsession"
 
-# Optional fallback for LightDM users
-cat > ~/.dmrc <<EOL
+cat > "$HOME/.dmrc" <<EOL
 [Desktop]
 Session=cinnamon
 EOL
 
-echo -e "${GREEN} Cinnamon session has been set as default! ${NC}\n"
+echo -e "${GREEN} Cinnamon session will be loaded by default on next login! ${NC}\n"
 
 ### DOWNLOAD & INSTALL QORTAL CORE ###
 echo -e "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
-cd ~
+cd "$HOME"
 mkdir -p backups
 
 if [ -d qortal ]; then
   echo -e "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
-  mv qortal backups/qortal-$(date +%s)
+  mv qortal "backups/qortal-$(date +%s)"
 fi
 
 curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
@@ -55,7 +54,7 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/set
 curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
 chmod +x *.sh qort
 
-cd ~
+cd "$HOME"
 
 ### INSTALL QORTAL UI & HUB ###
 cd qortal
@@ -76,7 +75,7 @@ fi
 chmod +x Qortal-UI Qortal-Hub
 
 ### DOWNLOAD EXTRA FILES ###
-cd ~
+cd "$HOME"
 curl -L -O https://cloud.qortal.org/s/machine_files/download
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
@@ -86,34 +85,34 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/sta
 
 chmod +x *.sh
 unzip download
-rsync -raPz Machine-files/* ${HOME}
+rsync -raPz Machine-files/* "$HOME"
 rm -rf Machine-files download
 
-### CINNAMON DETECTION & THEMING ###
-if [ "$XDG_CURRENT_DESKTOP" = "X-Cinnamon" ] || [ -d "/usr/share/cinnamon" ]; then
-  echo -e "${YELLOW} CINNAMON DETECTED - INSTALLING WINDOWS 10 THEMES ${NC}\n"
+### CINNAMON THEMING - ALWAYS APPLIES EVEN IF CINNAMON ISN'T ACTIVE ###
+echo -e "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
 
-  mkdir -p ${HOME}/.themes
-  git clone https://github.com/B00merang-Project/Windows-10.git ~/.themes/Windows-10
-  git clone https://github.com/B00merang-Project/Windows-10-Dark.git ~/.themes/Windows-10-Dark
-  git clone https://github.com/cbrnix/Flatery.git ~/.icons/Flatery
+mkdir -p "${HOME}/.themes" "${HOME}/.icons"
 
-  echo -e "${YELLOW} APPLYING CINNAMON THEMES TO MATCH WINDOWS 10 ${NC}\n"
-  gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark"
-  gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Basic"
-  gsettings set org.cinnamon.theme name "Windows-10"
-  gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png"
-  gsettings set org.cinnamon.desktop.interface icon-theme "Flatery"
-else
-  echo -e "${RED} Cinnamon not detected, skipping Cinnamon theming. ${NC}"
-fi
+# Avoid cloning twice
+[ ! -d "${HOME}/.themes/Windows-10" ] && git clone https://github.com/B00merang-Project/Windows-10.git ~/.themes/Windows-10
+[ ! -d "${HOME}/.themes/Windows-10-Dark" ] && git clone https://github.com/B00merang-Project/Windows-10-Dark.git ~/.themes/Windows-10-Dark
+[ ! -d "${HOME}/.icons/Flatery" ] && git clone https://github.com/cbrnix/Flatery.git ~/.icons/Flatery
+
+### APPLY THEMES (WILL WORK AFTER REBOOT TOO) ###
+echo -e "${YELLOW} APPLYING CINNAMON THEMES ${NC}\n"
+
+gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark" || true
+gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Basic" || true
+gsettings set org.cinnamon.theme name "Windows-10" || true
+gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
+gsettings set org.cinnamon.desktop.interface icon-theme "Flatery" || true
 
 ### ADD DESKTOP SHORTCUTS ###
-echo -e "${YELLOW} CREATING DESKTOP LAUNCHERS FOR QORTAL APPLICATIONS ${NC}\n"
+echo -e "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
 
-mkdir -p ~/.local/share/applications
+mkdir -p "$HOME/.local/share/applications"
 
-cat > ~/.local/share/applications/qortal-ui.desktop <<EOL
+cat > "$HOME/.local/share/applications/qortal-ui.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal UI
 Comment=Launch Qortal User Interface
@@ -124,7 +123,7 @@ Type=Application
 Categories=Qortal;
 EOL
 
-cat > ~/.local/share/applications/qortal-hub.desktop <<EOL
+cat > "$HOME/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
@@ -136,7 +135,7 @@ Categories=Qortal;
 EOL
 
 ### CRONTAB SETUP ###
-echo -e "${YELLOW} FINISHING UP ${NC}\n"
+echo -e "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
 
 {
   echo "@reboot sleep 399 && /home/${username}/auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-startup.log\" 2>&1"
@@ -147,6 +146,6 @@ echo -e "${YELLOW} FINISHING UP ${NC}\n"
 crontab rebuilt-machine-cron
 rm -f rebuilt-machine-cron
 
-echo -e "${YELLOW} CINNAMON SET AS DEFAULT - MACHINE WILL REBOOT IN 10 SECONDS ${NC}\n"
+echo -e "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 10 SECONDS ${NC}\n"
 sleep 10
 sudo reboot
