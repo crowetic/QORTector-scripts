@@ -105,8 +105,8 @@ check_qortal() {
 
     core_running=$(curl -s localhost:12391/admin/status)
     if [ -z "$core_running" ]; then 
-        echo "${RED}CORE DOES NOT SEEM TO BE RUNNING, WAITING 1 MINUTE...${NC}\n"
-        sleep 60
+        echo "${RED}CORE DOES NOT SEEM TO BE RUNNING, WAITING 3 MINUTES...${NC}\n"
+        sleep 180
     fi
 
     LOCAL_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion":"qortal-\K[^-]*' | sed 's/-.*//' | tr -d '.')
