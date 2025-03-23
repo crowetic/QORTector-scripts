@@ -205,6 +205,9 @@ echo -e "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
 crontab rebuilt-machine-cron
 rm -f rebuilt-machine-cron
 
+echo -e "${YELLOW} Refreshing Cinnamon Panel/Menu to apply changes ${NC}"
+cinnamon --replace > /dev/null 2>&1 &
+
 echo -e "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now...)${NC}\n"
 sleep 10
 echo -e "${YELLOW}20 seconds remaining...\n"
