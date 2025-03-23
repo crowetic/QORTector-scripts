@@ -96,13 +96,14 @@ if [ "$XDG_CURRENT_DESKTOP" = "X-Cinnamon" ] || [ -d "/usr/share/cinnamon" ]; th
   mkdir -p ${HOME}/.themes
   git clone https://github.com/B00merang-Project/Windows-10.git ~/.themes/Windows-10
   git clone https://github.com/B00merang-Project/Windows-10-Dark.git ~/.themes/Windows-10-Dark
+  git clone https://github.com/cbrnix/Flatery.git ~/.icons/Flatery
 
   echo -e "${YELLOW} APPLYING CINNAMON THEMES TO MATCH WINDOWS 10 ${NC}\n"
   gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark"
   gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Basic"
   gsettings set org.cinnamon.theme name "Windows-10"
   gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png"
-  gsettings set org.cinnamon.desktop.interface icon-theme "Tela-dark"
+  gsettings set org.cinnamon.desktop.interface icon-theme "Flatery"
 else
   echo -e "${RED} Cinnamon not detected, skipping Cinnamon theming. ${NC}"
 fi
