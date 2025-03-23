@@ -107,6 +107,33 @@ gsettings set org.cinnamon.theme name "Windows-10" || true
 gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
 gsettings set org.cinnamon.desktop.interface icon-theme "Flatery" || true
 
+### CINNAMON PANEL + MENU CUSTOMIZATION ###
+echo -e "${YELLOW} CONFIGURING CINNAMON PANEL AND MENU ${NC}\n"
+
+# Custom icon and label
+gsettings set org.cinnamon.menu-use-custom-icon true
+gsettings set org.cinnamon.menu.use-custom-label true
+gsettings set org.cinnamon menu-icon-name "/home/${username}/Pictures/blue-grey-menu-button.png"
+gsettings set org.cinnamon menu-text "ortal-OS"
+gsettings set org.cinnamon menu-icon-size 42
+
+# Menu layout and content
+gsettings set org.cinnamon.menu.use-custom-menu-size false
+gsettings set org.cinnamon.menu.show-category-icons true
+gsettings set org.cinnamon.menu.category-icon-size 34
+gsettings set org.cinnamon.menu.show-application-icons true
+gsettings set org.cinnamon.menu.application-icon-size 24
+gsettings set org.cinnamon.menu.show-favorites true
+gsettings set org.cinnamon.menu.favorites-icon-size 42
+gsettings set org.cinnamon.menu.show-places true
+gsettings set org.cinnamon.menu.show-recent-files false
+
+# Menu behavior
+gsettings set org.cinnamon.menu.hover-switch true
+gsettings set org.cinnamon.menu.enable-autoscroll true
+gsettings set org.cinnamon.menu.enable-path-entry false
+
+
 ### ADD DESKTOP SHORTCUTS ###
 echo -e "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
 
