@@ -24,10 +24,10 @@ sudo apt -y install git jq gnome-software unzip vim curl openjdk-21-jre zlib1g-d
 echo -e "${YELLOW} SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
 
 # Works for most LightDM and GDM-based setups
-echo "cinnamon" > "$HOME/.xsession"
-chmod +x "$HOME/.xsession"
+echo "cinnamon" > "${HOME}/.xsession"
+chmod +x "${HOME}/.xsession"
 
-cat > "$HOME/.dmrc" <<EOL
+cat > "${HOME}/.dmrc" <<EOL
 [Desktop]
 Session=cinnamon
 EOL
@@ -37,7 +37,7 @@ echo -e "${GREEN} Cinnamon session will be loaded by default on next login! ${NC
 ### DOWNLOAD & INSTALL QORTAL CORE ###
 echo -e "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
-cd "$HOME"
+cd "${HOME}"
 mkdir -p backups
 
 if [ -d qortal ]; then
@@ -54,7 +54,7 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/set
 curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
 chmod +x *.sh qort
 
-cd "$HOME"
+cd "${HOME}"
 
 ### INSTALL QORTAL UI & HUB ###
 cd qortal
@@ -75,7 +75,7 @@ fi
 chmod +x Qortal-UI Qortal-Hub
 
 ### DOWNLOAD EXTRA FILES ###
-cd "$HOME"
+cd "${HOME}"
 curl -L -O https://cloud.qortal.org/s/machine_files/download
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
@@ -85,7 +85,7 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/sta
 
 chmod +x *.sh
 unzip download
-rsync -raPz Machine-files/* "$HOME"
+rsync -raPz Machine-files/* "${HOME}"
 rm -rf Machine-files download
 
 ### CINNAMON THEMING - ALWAYS APPLIES EVEN IF CINNAMON ISN'T ACTIVE ###
@@ -113,7 +113,7 @@ echo -e "${YELLOW} CONFIGURING CINNAMON PANEL AND MENU ${NC}\n"
 # Custom icon and label
 gsettings set org.cinnamon.menu-use-custom-icon true
 gsettings set org.cinnamon.menu.use-custom-label true
-gsettings set org.cinnamon menu-icon-name "/home/${username}/Pictures/blue-grey-menu-button.png"
+gsettings set org.cinnamon menu-icon-name "${HOME}/Pictures/blue-grey-menu-button.png"
 gsettings set org.cinnamon menu-text "ortal-OS"
 gsettings set org.cinnamon menu-icon-size 42
 
@@ -137,25 +137,25 @@ gsettings set org.cinnamon.menu.enable-path-entry false
 ### ADD DESKTOP SHORTCUTS ###
 echo -e "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
 
-mkdir -p "$HOME/.local/share/applications"
+mkdir -p "${HOME}/.local/share/applications"
 
-cat > "$HOME/.local/share/applications/qortal-ui.desktop" <<EOL
+cat > "${HOME}/.local/share/applications/qortal-ui.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal UI
 Comment=Launch Qortal User Interface
-Exec=/home/${username}/qortal/Qortal-UI
-Icon=/home/${username}/Pictures/qortal-ui.png
+Exec=${HOME}/qortal/Qortal-UI
+Icon=${HOME}/Pictures/qortal-ui.png
 Terminal=false
 Type=Application
 Categories=Qortal;
 EOL
 
-cat > "$HOME/.local/share/applications/qortal-hub.desktop" <<EOL
+cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec=/home/${username}/qortal/Qortal-Hub
-Icon=/home/${username}/Pictures/qortal-hub-app-logo.png
+Exec=${HOME}/qortal/Qortal-Hub
+Icon=${HOME}/Pictures/qortal-hub-app-logo.png
 Terminal=false
 Type=Application
 Categories=Qortal;
@@ -165,9 +165,9 @@ EOL
 echo -e "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
 
 {
-  echo "@reboot sleep 399 && /home/${username}/auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-startup.log\" 2>&1"
-  echo "@reboot /home/${username}/start-qortal-core.sh"
-  echo "1 1 */3 * * /home/${username}/auto-fix-qortal.sh > \"/home/${username}/qortal/auto-fix-01.log\" 2>&1"
+  echo "@reboot sleep 399 && ${HOME}/auto-fix-qortal.sh > \"${HOME}/qortal/auto-fix-startup.log\" 2>&1"
+  echo "@reboot ${HOME}/start-qortal-core.sh"
+  echo "1 1 */3 * * ${HOME}/auto-fix-qortal.sh > \"${HOME}/qortal/auto-fix-01.log\" 2>&1"
 } > rebuilt-machine-cron
 
 crontab rebuilt-machine-cron
