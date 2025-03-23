@@ -15,6 +15,18 @@ username=$(whoami)
 
 echo -e "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n"
 
+echo -e "${YELLOW} creating system folders that require admin permissions..."
+
+sudo mkdir -p /usr/share/desktop-directories
+
+sudo tee /usr/share/desktop-directories/qortal.directory > /dev/null <<EOL
+[Desktop Entry]
+Name=Qortal
+Comment=Qortal Applications
+Icon=qortal-logo
+Type=Directory
+EOL
+
 sudo apt update
 sudo apt -y --purge remove ubuntu-advantage-tools ubuntu-pro-client*
 sudo apt -y upgrade
@@ -87,6 +99,14 @@ chmod +x *.sh
 unzip download
 rsync -raPz Machine-files/* "${HOME}"
 rm -rf Machine-files download
+mkdir -p "${HOME}/.icons/qortal"
+
+mv "${HOME}/Pictures/icons/blue-grey-menu-button.png" "${HOME}/.icons/qortal/qortal-menu-button.png"
+mv "${HOME}/Pictures/icons/QLogo_512.png" "${HOME}/.icons/qortal/qortal-logo.png"
+mv "${HOME}/Pictures/icons/qortal-ui.png" "${HOME}/.icons/qortal/qortal-ui.png"
+mv "${HOME}/Pictures/icons/qortal-hub-app-logo.png" "${HOME}/.icons/qortal/qortal-hub.png"
+
+rsync -raPz "${HOME}/.icons/qortal/*" "${HOME}/Pictures/icons/"
 
 ### CINNAMON THEMING - ALWAYS APPLIES EVEN IF CINNAMON ISN'T ACTIVE ###
 echo -e "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
@@ -137,14 +157,25 @@ gsettings set org.cinnamon.menu.enable-path-entry false
 ### ADD DESKTOP SHORTCUTS ###
 echo -e "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
 
+mkdir -p "${HOME}/.local/share/desktop-directories"
+
+cat > "${HOME}/.local/share/desktop-directories/qortal.directory" <<EOL
+[Desktop Entry]
+Name=Qortal
+Comment=Qortal Applications
+Icon=qortal-logo
+Type=Directory
+EOL
+
+
 mkdir -p "${HOME}/.local/share/applications"
 
 cat > "${HOME}/.local/share/applications/qortal-ui.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal UI
 Comment=Launch Qortal User Interface
-Exec=${HOME}/qortal/Qortal-UI
-Icon=${HOME}/Pictures/qortal-ui.png
+Exec=/home/${username}/qortal/Qortal-UI
+Icon=qortal-ui
 Terminal=false
 Type=Application
 Categories=Qortal;
@@ -154,12 +185,13 @@ cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec=${HOME}/qortal/Qortal-Hub
-Icon=${HOME}/Pictures/qortal-hub-app-logo.png
+Exec=/home/${username}/qortal/Qortal-Hub
+Icon=qortal-hub
 Terminal=false
 Type=Application
 Categories=Qortal;
 EOL
+
 
 ### CRONTAB SETUP ###
 echo -e "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
