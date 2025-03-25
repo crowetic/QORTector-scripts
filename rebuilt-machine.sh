@@ -28,7 +28,6 @@ Type=Directory
 EOL
 
 sudo apt update
-sudo apt -y --purge remove ubuntu-advantage-tools ubuntu-pro-client ubuntu-pro-client-li0n
 sudo apt -y upgrade
 sudo apt -y install git jq gnome-software unzip vim curl openjdk-21-jre yaru-theme-icon yaru-theme-gtk yaru-theme-unity zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
 
