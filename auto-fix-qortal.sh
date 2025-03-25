@@ -191,20 +191,18 @@ setup_raspi_cron() {
     mkdir -p "${HOME}/backups/cron-backups"
     crontab -l > "${HOME}/backups/cron-backups/crontab-backup-$(date +%Y%m%d%H%M%S)"
 
-    echo -e "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
 
-    shopt -s nullglob
-    desktop_files=(${HOME}/.config/autostart/start-qortal*.desktop)
-    shopt -u nullglob
+    
+	echo -e "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
 
-    if [ ${#desktop_files[@]} -gt 0 ]; then
-        echo -e "${RED}Autostart desktop entry found! Using GUI-safe auto-fix cron only.${NC}\n"
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
-        crontab auto-fix-GUI-cron
-        rm -f auto-fix-GUI-cron
-        check_height
-        return
-    fi
+	if find "${HOME}/.config/autostart" -maxdepth 1 -name "start-qortal*.desktop" | grep -q .; then
+	    echo -e "${RED}Autostart desktop entry found! Using GUI-safe auto-fix cron only.${NC}\n"
+	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
+	    crontab auto-fix-GUI-cron
+	    rm -f auto-fix-GUI-cron
+	    check_height
+	    return
+	fi
 
     echo -e "${BLUE}No autostart entries found. Setting up full headless cron...${NC}\n"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
