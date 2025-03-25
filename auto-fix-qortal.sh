@@ -389,6 +389,23 @@ potentially_update_settings() {
     fi
 
     ### Step 4: Rotate backups (keep 2 newest) ###
+    
+    echo "${YELLOW}Rotating old backups (keeping only 2)...${NC}"
+    cd "${BACKUP_FOLDER}" || exit 1
+
+    backup_count=$(ls -1 backup-settings-*.json 2>/dev/null | wc -l)
+
+    if [ "$backup_count" -gt 2 ]; then
+        # List oldest first, delete all but the 2 most recent
+        for old_backup in $(ls -1tr backup-settings-*.json | head -n -$((backup_count - 2))); do
+            echo "Deleting old backup: $old_backup"
+            rm -f "$old_backup"
+        done
+    else
+        echo "${BLUE}No old backups to delete.${NC}"
+    fi
+
+    cd - >/dev/null || exit 1
 
     echo "${GREEN}Settings file is now valid. Proceeding...${NC}"
     cd || exit 1

@@ -93,6 +93,7 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/aut
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
+curl -L -O https://cloud.qortal.org/s/machinefilesnew/download
 
 chmod +x *.sh
 unzip download
