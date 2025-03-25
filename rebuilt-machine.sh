@@ -107,6 +107,8 @@ mv "${HOME}/Pictures/icons/qortal-ui.png" "${HOME}/.icons/qortal/qortal-ui.png"
 mv "${HOME}/Pictures/icons/qortal-hub-app-logo.png" "${HOME}/.icons/qortal/qortal-hub.png"
 
 rsync -raPz "${HOME}/.icons/qortal/" "${HOME}/Pictures/icons/"
+sudo mkdir -p /usr/local/share/icons/qortal
+rsync -raPz "${HOME}/.icons/qortal/" "/usr/local/share/icons/qortal/"
 
 ### CINNAMON THEMING - ALWAYS APPLIES EVEN IF CINNAMON ISN'T ACTIVE ###
 echo -e "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
@@ -127,23 +129,11 @@ fi
 echo -e "${YELLOW} APPLYING CINNAMON THEMES ${NC}\n"
 
 gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark" || true
-gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Basic" || true
+gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
 gsettings set org.cinnamon.theme name "Windows-10" || true
 gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
 gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark" || true
-
-### CINNAMON PANEL + MENU CUSTOMIZATION ###
-echo -e "${YELLOW} CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
-
-cat > "$HOME/apply-cinnamon-settings.sh" <<'EOL'
-#!/bin/bash
-sleep 5
-#testing without settting these settings first. 
-#gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10"
-#gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark"
-#gsettings set org.cinnamon.theme name "Windows-10"
-#gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark"
-#gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png"
+gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 
 gsettings set org.cinnamon.menu-use-custom-icon true
 gsettings set org.cinnamon.menu.use-custom-label true
@@ -164,7 +154,40 @@ gsettings set org.cinnamon.menu.hover-switch true
 gsettings set org.cinnamon.menu.enable-autoscroll true
 gsettings set org.cinnamon.menu.enable-path-entry false
 
-rm -f "$HOME/.config/autostart/apply-cinnamon-settings.desktop"
+### CINNAMON PANEL + MENU CUSTOMIZATION ###
+echo -e "${YELLOW} CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
+
+cat > "$HOME/apply-cinnamon-settings.sh" <<'EOL'
+#!/bin/bash
+sleep 5
+testing without settting these settings first. 
+gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10"
+gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark"
+gsettings set org.cinnamon.theme name "Windows-10"
+gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark"
+gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png"
+gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+
+gsettings set org.cinnamon.menu-use-custom-icon true
+gsettings set org.cinnamon.menu.use-custom-label true
+gsettings set org.cinnamon menu-icon-name "qortal-menu-button"
+gsettings set org.cinnamon menu-text "ortal-OS"
+gsettings set org.cinnamon menu-icon-size 42
+
+gsettings set org.cinnamon.menu.use-custom-menu-size false
+gsettings set org.cinnamon.menu.show-category-icons true
+gsettings set org.cinnamon.menu.category-icon-size 34
+gsettings set org.cinnamon.menu.show-application-icons true
+gsettings set org.cinnamon.menu.application-icon-size 24
+gsettings set org.cinnamon.menu.show-favorites true
+gsettings set org.cinnamon.menu.favorites-icon-size 42
+gsettings set org.cinnamon.menu.show-places true
+gsettings set org.cinnamon.menu.show-recent-files false
+gsettings set org.cinnamon.menu.hover-switch true
+gsettings set org.cinnamon.menu.enable-autoscroll true
+gsettings set org.cinnamon.menu.enable-path-entry false
+
+#rm -f "$HOME/.config/autostart/apply-cinnamon-settings.desktop"
 EOL
 
 chmod +x "$HOME/apply-cinnamon-settings.sh"
@@ -177,7 +200,6 @@ Type=Application
 Exec=$HOME/apply-cinnamon-settings.sh
 Hidden=false
 NoDisplay=false
-X-GNOME-Autostart-enabled=true
 Name=Apply Cinnamon Settings
 Comment=Reapplies Cinnamon panel, theme, and menu customizations
 EOL
