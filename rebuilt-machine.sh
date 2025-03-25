@@ -30,7 +30,7 @@ EOL
 sudo apt update
 sudo apt -y --purge remove ubuntu-advantage-tools ubuntu-pro-client*
 sudo apt -y upgrade
-sudo apt -y install git jq gnome-software unzip vim curl openjdk-21-jre zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
+sudo apt -y install git jq gnome-software unzip vim curl openjdk-21-jre yaru-theme-icon yaru-theme-gtk yaru-theme-unity zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
 
 ### SET DEFAULT SESSION TO CINNAMON ###
 echo -e "${YELLOW} SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
@@ -88,7 +88,7 @@ chmod +x Qortal-UI Qortal-Hub
 
 ### DOWNLOAD EXTRA FILES ###
 cd "${HOME}"
-curl -L -O https://cloud.qortal.org/s/machine_files/download
+
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh
@@ -113,10 +113,15 @@ echo -e "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
 
 mkdir -p "${HOME}/.themes"
 
+if [ ! -d "${HOME}/.themes/Windows-10" ]; then
+	wget -O Windows-10.zip "https://cinnamon-spices.linuxmint.com/files/themes/Windows-10.zip?time=$(date +%s)"
+	unzip Windows-10.zip
+	mv Windows-10 "${HOME}/.themes"
+	rm Windows-10.zip
+fi
+
 # Avoid cloning twice
-[ ! -d "${HOME}/.themes/Windows-10" ] && git clone https://github.com/B00merang-Project/Windows-10.git "${HOME}/.themes/Windows-10"
 [ ! -d "${HOME}/.themes/Windows-10-Dark" ] && git clone https://github.com/B00merang-Project/Windows-10-Dark.git "${HOME}/.themes/Windows-10-Dark"
-[ ! -d "${HOME}/.icons/Flatery" ] && git clone https://github.com/cbrnix/Flatery.git "${HOME}/.icons/Flatery"
 
 ### APPLY THEMES (WILL WORK AFTER REBOOT TOO) ###
 echo -e "${YELLOW} APPLYING CINNAMON THEMES ${NC}\n"
@@ -125,19 +130,27 @@ gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark" || tru
 gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Basic" || true
 gsettings set org.cinnamon.theme name "Windows-10" || true
 gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
-gsettings set org.cinnamon.desktop.interface icon-theme "Flatery" || true
+gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark" || true
 
 ### CINNAMON PANEL + MENU CUSTOMIZATION ###
-echo -e "${YELLOW} CONFIGURING CINNAMON PANEL AND MENU ${NC}\n"
+echo -e "${YELLOW} CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
 
-# Custom icon and label
+cat > "$HOME/apply-cinnamon-settings.sh" <<'EOL'
+#!/bin/bash
+sleep 5
+#testing without settting these settings first. 
+#gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10"
+#gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark"
+#gsettings set org.cinnamon.theme name "Windows-10"
+#gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark"
+#gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png"
+
 gsettings set org.cinnamon.menu-use-custom-icon true
 gsettings set org.cinnamon.menu.use-custom-label true
-gsettings set org.cinnamon menu-icon-name "qortal-menu-button.png"
+gsettings set org.cinnamon menu-icon-name "qortal-menu-button"
 gsettings set org.cinnamon menu-text "ortal-OS"
 gsettings set org.cinnamon menu-icon-size 42
 
-# Menu layout and content
 gsettings set org.cinnamon.menu.use-custom-menu-size false
 gsettings set org.cinnamon.menu.show-category-icons true
 gsettings set org.cinnamon.menu.category-icon-size 34
@@ -147,12 +160,27 @@ gsettings set org.cinnamon.menu.show-favorites true
 gsettings set org.cinnamon.menu.favorites-icon-size 42
 gsettings set org.cinnamon.menu.show-places true
 gsettings set org.cinnamon.menu.show-recent-files false
-
-# Menu behavior
 gsettings set org.cinnamon.menu.hover-switch true
 gsettings set org.cinnamon.menu.enable-autoscroll true
 gsettings set org.cinnamon.menu.enable-path-entry false
 
+rm -f "$HOME/.config/autostart/apply-cinnamon-settings.desktop"
+EOL
+
+chmod +x "$HOME/apply-cinnamon-settings.sh"
+
+mkdir -p "$HOME/.config/autostart"
+
+cat > "$HOME/.config/autostart/apply-cinnamon-settings.desktop" <<EOL
+[Desktop Entry]
+Type=Application
+Exec=$HOME/apply-cinnamon-settings.sh
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Apply Cinnamon Settings
+Comment=Reapplies Cinnamon panel, theme, and menu customizations
+EOL
 
 ### ADD DESKTOP SHORTCUTS ###
 echo -e "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
