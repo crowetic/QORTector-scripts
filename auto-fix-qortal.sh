@@ -11,8 +11,8 @@ CYAN='\033[0;36m'
 WHITE='\033[0;37m'
 NC='\033[0m' # No Color
 
-PI_32_DETECTED=false
-PI_64_DETECTED=false
+RASPI_32_DETECTED=false
+RASPI_64_DETECTED=false
 UPDATED_SETTINGS=false
 
 # Function to update the script initially if needed
@@ -45,7 +45,7 @@ check_internet() {
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh "${HOME}/qortal" && chmod +x "${HOME}/qortal/check-qortal-status.sh"
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh && chmod +x start-qortal.sh
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh && chmod +x refresh-qortal.sh
-            check_for_pi
+            check_for_raspi
         fi
     else
         # Internet is DOWN
@@ -58,13 +58,13 @@ check_internet() {
     fi
 }
 
-check_for_pi() {
+check_for_raspi() {
     if command -v raspi-config >/dev/null 2>&1; then
         echo "${YELLOW}Raspberry Pi machine detected, checking for 32bit or 64bit...${NC}\n"
         
         if [ "$(uname -m | grep 'armv7l')" != "" ]; then
             echo "${WHITE}32bit ARM detected, using ARM 32bit compatible modified start script${NC}\n"
-            PI_32_DETECTED=true
+            RASPI_32_DETECTED=true
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-modified-memory-args.sh
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-cron
             crontab auto-fix-cron
@@ -73,7 +73,7 @@ check_for_pi() {
             check_qortal
         else
             echo "${WHITE}64bit ARM detected, proceeding accordingly...${NC}\n"
-            PI_64_DETECTED=true
+            RASPI_64_DETECTED=true
             check_memory
         fi
     else
@@ -158,11 +158,11 @@ check_hash_update_qortal() {
 }
 
 check_for_GUI() {
-    if [ -n "$DISPLAY" ]; then
+    if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
         echo "${CYAN}Machine has GUI, setting up auto-fix-visible for GUI-based machines...${NC}\n"
-        if [ "${PI_32_DETECTED}" = true ] || [ "${PI_64_DETECTED}" = true ]; then
+        if [ "${RASPI_32_DETECTED}" = true ] || [ "${RASPI_64_DETECTED}" = true ]; then
             echo "${YELLOW}Pi machine with GUI, skipping autostart GUI setup, setting cron jobs instead...${NC}\n"
-            setup_pi_cron
+            setup_raspi_cron
         else
             echo "${YELLOW}Setting up auto-fix-visible on GUI-based system...${NC}\n"
             sleep 2
@@ -170,28 +170,49 @@ check_for_GUI() {
             crontab auto-fix-GUI-cron
             rm -rf auto-fix-GUI-cron
             curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal-GUI.desktop
+            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.desktop
             mkdir -p "${HOME}/.config/autostart"
             cp auto-fix-qortal-GUI.desktop "${HOME}/.config/autostart"
-            rm -rf "${HOME}/auto-fix-qortal-GUI.desktop"
+            cp start-qortal.desktop "${HOME}/.config/autostart"
+            rm -rf "${HOME}/auto-fix-qortal-GUI.desktop" "${HOME}/start-qortal.desktop"
             echo "${YELLOW}Auto-fix-qortal.sh will run in a pop-up terminal 7 min after startup.${NC}\n"
             echo "${CYAN}Continuing to verify node height...${NC}\n"
             check_height
         fi
     else
         echo "${YELLOW}Non-GUI system detected, configuring cron then checking node height...${NC}\n"
-        setup_pi_cron
+        setup_raspi_cron
     fi
 }
 
-setup_pi_cron() {
-    echo "${YELLOW}Setting up cron jobs for Raspberry Pi or headless machines...${NC}\n"
+setup_raspi_cron() {
+    echo -e "${YELLOW}Setting up cron jobs for Raspberry Pi or headless machines...${NC}\n"
+
     mkdir -p "${HOME}/backups/cron-backups"
     crontab -l > "${HOME}/backups/cron-backups/crontab-backup-$(date +%Y%m%d%H%M%S)"
+
+    echo -e "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
+
+    shopt -s nullglob
+    desktop_files=(${HOME}/.config/autostart/start-qortal*.desktop)
+    shopt -u nullglob
+
+    if [ ${#desktop_files[@]} -gt 0 ]; then
+        echo -e "${RED}Autostart desktop entry found! Using GUI-safe auto-fix cron only.${NC}\n"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
+        crontab auto-fix-GUI-cron
+        rm -f auto-fix-GUI-cron
+        check_height
+        return
+    fi
+
+    echo -e "${BLUE}No autostart entries found. Setting up full headless cron...${NC}\n"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
     crontab auto-fix-cron
-    rm -rf auto-fix-cron
+    rm -f auto-fix-cron
     check_height
 }
+
 
 check_height() {
     local_height=$(curl -sS "http://localhost:12391/blocks/height")
@@ -315,102 +336,76 @@ force_bootstrap() {
     
 
 potentially_update_settings() {
-    echo "${GREEN}Backing up settings and checking for modifications...${NC}"
+    echo "${GREEN}Validating settings.json...${NC}"
     cd "${HOME}/qortal" || exit 1
 
-    if [ "$UPDATED_SETTINGS" = true ]; then
-        echo "${YELLOW}Settings already updated this run, no need to attempt again...${NC}"
-        cd || exit 1
-        return
-    fi
-    
+    SETTINGS_FILE="settings.json"
     TIMESTAMP=$(date +%Y%m%d%H%M%S)
     BACKUP_FOLDER="${HOME}/qortal/qortal-backup/auto-fix-settings-backup"
-    mkdir -p "$BACKUP_FOLDER"
-    if [ -f backup-settings*.json ]; then
-        mv backup-settings*.json "${BACKUP_FOLDER}"
-    fi
     BACKUP_FILE="backup-settings-${TIMESTAMP}.json"
-    cp settings.json "${BACKUP_FILE}"
-    SETTINGS_FILE="settings.json"
-    
-    
-    
 
-    echo "${YELLOW}Checking if 'archivingPause' is present...${NC}"
-    if grep -q '"archivingPause"' "${SETTINGS_FILE}"; then
-        echo "${BLUE}'archivingPause' found, removing it...${NC}"
-        if command -v jq &> /dev/null; then
-            echo "${GREEN}jq found, using jq to remove setting...${NC}"
-            jq 'del(.archivingPause)' "${SETTINGS_FILE}" > "settings.tmp"
-            if [ $? -eq 0 ]; then
-                mv "settings.tmp" "${SETTINGS_FILE}"
-                UPDATED_SETTINGS=true
-                mv "${BACKUP_FILE}" "${BACKUP_FOLDER}"
-                mv "backup-settings*.json" "${BACKUP_FOLDER}"
+    mkdir -p "${BACKUP_FOLDER}"
+
+    # Step 1: Backup settings.json
+    cp "${SETTINGS_FILE}" "${BACKUP_FILE}"
+
+    ### Step 2: Validate with jq or fallback ###
+    is_valid_json=false
+    if command -v jq &>/dev/null; then
+        echo "${YELLOW}Using jq to validate JSON...${NC}"
+        if jq empty "${SETTINGS_FILE}" 2>/dev/null; then
+            is_valid_json=true
+            echo "${GREEN}settings.json is valid JSON.${NC}"
+        fi
+    else
+        echo "${YELLOW}jq not found, doing basic manual check...${NC}"
+        if grep -q '^{.*}$' "${SETTINGS_FILE}"; then
+            is_valid_json=true
+            echo "${GREEN}Basic structure appears valid (manual fallback).${NC}"
+        fi
+    fi
+
+    ### Step 3: If invalid, try to fix ###
+    if [ "${is_valid_json}" != true ]; then
+        echo "${RED}settings.json is invalid. Attempting fix...${NC}"
+
+        echo "${YELLOW}Trying to restore from backup: ${BACKUP_FILE}${NC}"
+        cp "${BACKUP_FILE}" "${SETTINGS_FILE}"
+
+        # Re-validate after restoring backup
+        if command -v jq &>/dev/null && jq empty "${SETTINGS_FILE}" 2>/dev/null; then
+            echo "${GREEN}Backup restored successfully and is valid.${NC}"
+        else
+            echo "${RED}Backup also invalid. Downloading default settings.json...${NC}"
+            curl -L -O "${SETTINGS_FILE}" "https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/settings.json"
+
+            # Final validation
+            if command -v jq &>/dev/null && jq empty "${SETTINGS_FILE}" 2>/dev/null; then
+                echo "${GREEN}Default settings.json downloaded and is valid.${NC}"
             else
-                echo "${RED}jq edit failed, restoring backup...${NC}"
-                cp "${BACKUP_FILE}" "${SETTINGS_FILE}"
-                mv "${BACKUP_FILE}" "${BACKUP_FOLDER}"
+                echo "${RED}Failed to recover a valid settings.json. Manual intervention required.${NC}"
                 cd || exit 1
                 return 1
             fi
-        else
-            # If jq is not available, use grep and sed:
-	    echo "${YELLOW}jq is not installed, using grep/sed for settings modifications...${NC}\n"
-
-	    # Remove the entire line containing "archivingPause"
-	    grep -v '"archivingPause"' "${HOME}/qortal/settings.json" > "${HOME}/qortal/settings.tmp" && mv "${HOME}/qortal/settings.tmp" "${HOME}/qortal/settings.json"
-
-	    # After removing that line, there might be a trailing comma in the previous line. 
-	    # For example:
-	    #   "someSetting": true,
-	    #   "anotherSetting": "value",
-	    #    "archivingPause": false
-	    # After removing the archivingPause line, we might have:
-	    #   "someSetting": true,
-	    #   "anotherSetting": "value",
-	    # If the removed line was the last entry before a closing bracket, this may leave a trailing comma.
-
-	    # The following sed command removes a trailing comma before a closing brace:
-	    sed -i 's/,\s*}/}/' "${HOME}/qortal/settings.json"
-	    if [ $? -ne 0 ]; then
-                echo "${RED}sed edit failed, restoring backup...${NC}"
-                mv "${BACKUP_FILE}" "${SETTINGS_FILE}"
-                if [ -f backup-settings*.json ]; then
-		    mv backup-settings*.json "${BACKUP_FOLDER}"
-		    cd || exit 1
-                    return 1
-                fi 
-            fi
-
-	    # If needed, also ensure the file still ends with a proper closing brace:
-	    # Just a sanity check if the JSON was formatted line by line originally.
-	    # The next line only adds a `}` if one is missing at the end of file.
-	    if ! tail -n1 "${HOME}/qortal/settings.json" | grep -q '}'; then
-	        echo "}" >> "${HOME}/qortal/settings.json"
-	    fi
-
-	    # At this point, we've removed the archivingPause line and fixed trailing commas.
-	    # The file should remain valid JSON assuming it was valid before.
-            
-            UPDATED_SETTINGS=true
-            mv "${BACKUP_FILE}" "${BACKUP_FOLDER}"
-            if [ -f backup-settings*.json ]; then
-		mv backup-settings*.json "${BACKUP_FOLDER}"
-		cd || exit 1
-                return 1
-            fi 
         fi
-    else
-        echo "${BLUE}'archivingPause' not present, no changes needed...${NC}"
-        return
     fi
 
-    echo "${GREEN}Settings modification complete.${NC}"
+    ### Step 4: Rotate backups (keep 2 newest) ###
+    echo "${YELLOW}Rotating backups (keeping only 2 most recent)...${NC}"
+    BACKUPS=($(ls -1t "${BACKUP_FOLDER}"/backup-settings-*.json 2>/dev/null))
+    if [ "${#BACKUPS[@]}" -gt 2 ]; then
+        OLD_BACKUPS=("${BACKUPS[@]:2}")  # All but first two
+        for old in "${OLD_BACKUPS[@]}"; do
+            echo "Deleting old backup: ${old}"
+            rm -f "${old}"
+        done
+    fi
+
+    echo "${GREEN}Settings file is now valid. Proceeding...${NC}"
     cd || exit 1
     return 0
 }
+
 
 update_script() {
     echo "${YELLOW}Updating script to newest version and backing up old one...${NC}\n"

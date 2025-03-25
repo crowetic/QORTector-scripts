@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Exec=./start-qortal-core.sh
+X-GNOME-Autostart-enabled=true
+NoDisplay=false
+Hidden=false
+Name[en_US]=start-qortal
+Comment[en_US]=start qortal core 6 seconds after boot
+X-GNOME-Autostart-Delay=6
