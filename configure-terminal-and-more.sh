@@ -1,41 +1,10 @@
 #!/bin/bash
 
 # Get default GNOME terminal profile ID
-PROFILE_ID=$(gsettings get org.gnome.Terminal.ProfilesList default | tr -d \')
-PROFILE_PATH="/org/gnome/terminal/legacy/profiles:/:$PROFILE_ID"
+#PROFILE_ID=$(gsettings get org.gnome.Terminal.ProfilesList default | tr -d \')
+#PROFILE_PATH="/org/gnome/terminal/legacy/profiles:/:$PROFILE_ID"
 
-### Configure GNOME Terminal ###
 
-# Disable theme colors so custom ones apply
-gsettings set ${PROFILE_PATH} use-theme-colors false
-
-# Set custom font
-gsettings set ${PROFILE_PATH} use-system-font false
-gsettings set ${PROFILE_PATH} font 'Ubuntu Mono 12'
-
-# Enable unlimited scrollback
-gsettings set ${PROFILE_PATH} scrollback-unlimited true
-
-# Set Solarized Dark palette
-SOLARIZED_PALETTE="['#073642', '#dc322f', '#859900', '#b58900', '#268bd2', '#d33682', '#2aa198', '#eee8d5', '#002b36', '#cb4b16', '#586e75', '#657b83', '#839496', '#6c71c4', '#93a1a1', '#fdf6e3']"
-gsettings set ${PROFILE_PATH} palette "$SOLARIZED_PALETTE"
-
-# Set background and foreground
-# Solarized Dark background and light green text (customized)
-gsettings set ${PROFILE_PATH} background-color '#002b36'
-gsettings set ${PROFILE_PATH} foreground-color '#aaff99'  # lighter green for text
-
-# Set bold color same as foreground
-gsettings set ${PROFILE_PATH} bold-color '#aaff99'
-gsettings set ${PROFILE_PATH} bold-color-same-as-fg true
-
-# Enable transparency (optional; 0.9 = 10% transparent)
-gsettings set ${PROFILE_PATH} use-transparent-background true
-gsettings set ${PROFILE_PATH} background-transparency-percent 10
-
-# Set default terminal window size
-gsettings set ${PROFILE_PATH} default-size-columns 135
-gsettings set ${PROFILE_PATH} default-size-rows 35
 
 ### Set Default Applications ###
 xdg-mime default org.gnome.TextEditor.desktop text/plain
@@ -48,6 +17,16 @@ xdg-mime default evince.desktop application/pdf
 
 
 set -e
+
+cat > terminal.conf <<EOL
+[:b1dcc9dd-5262-4d8d-a863-c897e6d979b9]
+background-color='rgb(12,30,34)'
+default-size-columns=135
+default-size-rows=35
+foreground-color='rgb(131,148,150)'
+palette=['rgb(7,54,66)', 'rgb(220,50,47)', 'rgb(43,201,123)', 'rgb(181,137,0)', 'rgb(38,139,210)', 'rgb(211,54,130)', 'rgb(42,161,152)', 'rgb(238,232,213)', 'rgb(0,43,54)', 'rgb(203,75,22)', 'rgb(88,110,117)', 'rgb(101,123,131)', 'rgb(131,148,150)', 'rgb(108,113,196)', 'rgb(147,161,161)', 'rgb(253,246,227)']
+use-theme-colors=false
+EOL
 
 echo "🖋 Applying Gedit settings..."
 
@@ -109,7 +88,8 @@ EON
 # Load into dconf
 dconf load /org/nemo/ < nemo-settings.conf
 dconf load /org/gnome/gedit/preferences/ < gedit.conf
-rm -f nemo-settings.conf gedit.conf
+dconf load /org/gnome/terminal/legacy/profiles:/ < terminal.conf
+rm -f nemo-settings.conf gedit.conf terminal.conf
 
 echo "✅ Nemo preferences applied."
 
