@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Regular Colors
 BLACK='\033[0;30m'
@@ -13,26 +13,17 @@ NC='\033[0m'
 
 username=$(whoami)
 
-echo -e "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n"
+echo "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n"
 
-echo -e "${YELLOW} creating system folders that require admin permissions..."
+echo "${YELLOW} creating system folders that require admin permissions..."
 
-sudo mkdir -p /usr/share/desktop-directories
-
-sudo tee /usr/share/desktop-directories/qortal.directory > /dev/null <<EOL
-[Desktop Entry]
-Name=Qortal
-Comment=Qortal Applications
-Icon=qortal-logo
-Type=Directory
-EOL
 
 sudo apt update
 sudo apt -y upgrade
 sudo apt -y install git jq gnome-software unzip vim curl openjdk-21-jre yaru-theme-icon yaru-theme-gtk yaru-theme-unity zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
 
 ### SET DEFAULT SESSION TO CINNAMON ###
-echo -e "${YELLOW} SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
+echo "${YELLOW} SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
 
 # Works for most LightDM and GDM-based setups
 echo "cinnamon" > "${HOME}/.xsession"
@@ -43,16 +34,16 @@ cat > "${HOME}/.dmrc" <<EOL
 Session=cinnamon
 EOL
 
-echo -e "${GREEN} Cinnamon session will be loaded by default on next login! ${NC}\n"
+echo "${GREEN} Cinnamon session will be loaded by default on next login! ${NC}\n"
 
 ### DOWNLOAD & INSTALL QORTAL CORE ###
-echo -e "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
+echo "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
 cd "${HOME}"
 mkdir -p backups
 
 if [ -d qortal ]; then
-  echo -e "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
+  echo "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
   mv qortal "backups/qortal-$(date +%s)"
 fi
 
@@ -98,20 +89,11 @@ curl -L -O https://cloud.qortal.org/s/machinefilesnew/download
 chmod +x *.sh
 unzip download
 rsync -raPz Machine-files/* "${HOME}"
-rm -rf Machine-files download
-mkdir -p "${HOME}/.icons/qortal"
 
-mv "${HOME}/Pictures/icons/blue-grey-menu-button.png" "${HOME}/.icons/qortal/qortal-menu-button.png"
-mv "${HOME}/Pictures/icons/QLogo_512.png" "${HOME}/.icons/qortal/qortal-logo.png"
-mv "${HOME}/Pictures/icons/qortal-ui.png" "${HOME}/.icons/qortal/qortal-ui.png"
-mv "${HOME}/Pictures/icons/qortal-hub-app-logo.png" "${HOME}/.icons/qortal/qortal-hub.png"
 
-rsync -raPz "${HOME}/.icons/qortal/" "${HOME}/Pictures/icons/"
-sudo mkdir -p /usr/local/share/icons/qortal
-rsync -raPz "${HOME}/.icons/qortal/" "/usr/local/share/icons/qortal/"
-
+rm -rf download Machine-files
 ### CINNAMON THEMING - ALWAYS APPLIES EVEN IF CINNAMON ISN'T ACTIVE ###
-echo -e "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
+echo "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
 
 mkdir -p "${HOME}/.themes"
 
@@ -126,7 +108,7 @@ fi
 [ ! -d "${HOME}/.themes/Windows-10-Dark" ] && git clone https://github.com/B00merang-Project/Windows-10-Dark.git "${HOME}/.themes/Windows-10-Dark"
 
 ### APPLY THEMES (WILL WORK AFTER REBOOT TOO) ###
-echo -e "${YELLOW} APPLYING CINNAMON THEMES ${NC}\n"
+echo "${YELLOW} APPLYING CINNAMON THEMES ${NC}\n"
 
 gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark" || true
 gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
@@ -155,7 +137,7 @@ gsettings set org.cinnamon.menu.enable-autoscroll true
 gsettings set org.cinnamon.menu.enable-path-entry false
 
 ### CINNAMON PANEL + MENU CUSTOMIZATION ###
-echo -e "${YELLOW} CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
+echo "${YELLOW} CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
 
 cat > "$HOME/apply-cinnamon-settings.sh" <<'EOL'
 #!/bin/bash
@@ -168,44 +150,69 @@ gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark"
 gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png"
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
 
-gsettings set org.cinnamon.menu-use-custom-icon true
-gsettings set org.cinnamon.menu.use-custom-label true
-gsettings set org.cinnamon menu-icon-name "qortal-menu-button"
-gsettings set org.cinnamon menu-text "ortal-OS"
-gsettings set org.cinnamon menu-icon-size 42
+echo "Downloading additional settings..."
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json
+mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
 
-gsettings set org.cinnamon.menu.use-custom-menu-size false
-gsettings set org.cinnamon.menu.show-category-icons true
-gsettings set org.cinnamon.menu.category-icon-size 34
-gsettings set org.cinnamon.menu.show-application-icons true
-gsettings set org.cinnamon.menu.application-icon-size 24
-gsettings set org.cinnamon.menu.show-favorites true
-gsettings set org.cinnamon.menu.favorites-icon-size 42
-gsettings set org.cinnamon.menu.show-places true
-gsettings set org.cinnamon.menu.show-recent-files false
-gsettings set org.cinnamon.menu.hover-switch true
-gsettings set org.cinnamon.menu.enable-autoscroll true
-gsettings set org.cinnamon.menu.enable-path-entry false
+# Copy your preconfigured menu JSON
+cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
 
-#rm -f "$HOME/.config/autostart/apply-cinnamon-settings.desktop"
 EOL
 
 chmod +x "$HOME/apply-cinnamon-settings.sh"
 
+echo "${GREEN} Downloading additional ${NC}${YELLOW}CINNAMON${NC}${GREEN}settings${NC}\n"
+
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json
+mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
+cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
+
+echo "${YELLOW} Configuring terminal, default apps, and more...${NC}\n"
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/configure-terminal-and-default-apps.sh
+chmod +x configure-terminal-and-more.sh
+./configure-terminal-and-more.sh 
+cd "${HOME}"
+
+echo "continuing desktop configuration..."
+
 mkdir -p "$HOME/.config/autostart"
 
-cat > "$HOME/.config/autostart/apply-cinnamon-settings.desktop" <<EOL
+cat > "$HOME/.local/share/applications/apply-cinnamon-settings.desktop" <<EOL
 [Desktop Entry]
 Type=Application
-Exec=$HOME/apply-cinnamon-settings.sh
+Exec=gnome-terminal -- ./apply-cinnamon-settings.sh
 Hidden=false
 NoDisplay=false
 Name=Apply Cinnamon Settings
 Comment=Reapplies Cinnamon panel, theme, and menu customizations
 EOL
 
+cat > "${HOME}/.config/autostart/auto-fix-qortal-GUI.desktop" <<EOL
+[Desktop Entry]
+Type=Application
+Exec=gnome-terminal -- ./auto-fix-qortal.sh
+X-GNOME-Autostart-enabled=true
+NoDisplay=false
+Hidden=false
+Name[en_US]=auto-fix-visible
+Comment[en_US]=Run auto-fix script visibly 7 min after system startup.
+X-GNOME-Autostart-Delay=420
+EOL
+
+cat > "${HOME}/.config/autostart/start-qortal.desktop" <<EOL
+[Desktop Entry]
+Type=Application
+Exec=./start-qortal-core.sh
+X-GNOME-Autostart-enabled=true
+NoDisplay=false
+Hidden=false
+Name[en_US]=start-qortal
+Comment[en_US]=start qortal core 6 seconds after boot
+X-GNOME-Autostart-Delay=6
+EOL
+
 ### ADD DESKTOP SHORTCUTS ###
-echo -e "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
+echo "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
 
 mkdir -p "${HOME}/.local/share/desktop-directories"
 
@@ -242,29 +249,32 @@ Type=Application
 Categories=Qortal;
 EOL
 
+echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
+cd "${HOME}/Pictures/icons/icons_theme"
+chmod +x add-qortal-icons-theme.sh
+./add-qortal-icons-theme.sh
+cd "${HOME}"
 
 ### CRONTAB SETUP ###
-echo -e "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
+echo "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
 
 {
-  echo "@reboot sleep 399 && ${HOME}/auto-fix-qortal.sh > \"${HOME}/qortal/auto-fix-startup.log\" 2>&1"
-  echo "@reboot ${HOME}/start-qortal-core.sh"
   echo "1 1 */3 * * ${HOME}/auto-fix-qortal.sh > \"${HOME}/qortal/auto-fix-01.log\" 2>&1"
 } > rebuilt-machine-cron
 
 crontab rebuilt-machine-cron
-rm -f rebuilt-machine-cron
+rm -f rebuilt-machine-cron configure-terminal-and-more.sh
 
-echo -e "${YELLOW} Refreshing Cinnamon Panel/Menu to apply changes ${NC}"
+echo "${YELLOW} Refreshing Cinnamon Panel/Menu to apply changes ${NC}"
 cinnamon --replace > /dev/null 2>&1 &
 
-echo -e "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now...)${NC}\n"
+echo "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now...)${NC}\n"
 sleep 10
-echo -e "${YELLOW}20 seconds remaining...\n"
+echo "${YELLOW}20 seconds remaining...${NC}\n"
 sleep 9 
-echo -e "10 Seconds remaining...\n"
+echo "${RED}10 Seconds remaining...${NC}\n"
 sleep 4
-echo -e "5 seconds remaining...${NC}\n"
+echo "${RED}5 seconds remaining...${NC}\n"
 sleep 3 
 echo "${GREEN} REBOOTING MACHINE NOW!${NC}\n"
 sudo reboot
