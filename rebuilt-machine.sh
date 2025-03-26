@@ -117,25 +117,6 @@ gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictur
 gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark" || true
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 
-gsettings set org.cinnamon.menu-use-custom-icon true
-gsettings set org.cinnamon.menu.use-custom-label true
-gsettings set org.cinnamon menu-icon-name "qortal-menu-button"
-gsettings set org.cinnamon menu-text "ortal-OS"
-gsettings set org.cinnamon menu-icon-size 42
-
-gsettings set org.cinnamon.menu.use-custom-menu-size false
-gsettings set org.cinnamon.menu.show-category-icons true
-gsettings set org.cinnamon.menu.category-icon-size 34
-gsettings set org.cinnamon.menu.show-application-icons true
-gsettings set org.cinnamon.menu.application-icon-size 24
-gsettings set org.cinnamon.menu.show-favorites true
-gsettings set org.cinnamon.menu.favorites-icon-size 42
-gsettings set org.cinnamon.menu.show-places true
-gsettings set org.cinnamon.menu.show-recent-files false
-gsettings set org.cinnamon.menu.hover-switch true
-gsettings set org.cinnamon.menu.enable-autoscroll true
-gsettings set org.cinnamon.menu.enable-path-entry false
-
 ### CINNAMON PANEL + MENU CUSTOMIZATION ###
 echo "${YELLOW} CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
 
