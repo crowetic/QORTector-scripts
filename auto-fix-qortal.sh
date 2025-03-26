@@ -105,8 +105,16 @@ check_qortal() {
 
     core_running=$(curl -s localhost:12391/admin/status)
     if [ -z "$core_running" ]; then 
-        echo "${RED}CORE DOES NOT SEEM TO BE RUNNING, WAITING 3 MINUTES...${NC}\n"
-        sleep 180
+    
+        echo "${CYAN} NODE DOES NOT SEEM TO BE RUNNING? CHECKING IF NODE IS BOOTSTRAPPING...${NC}\n"
+        
+        if tail -n 10 "${HOME}/qortal/qortal.log" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
+            echo "${RED}Node seems to be bootstrapping, updating script and exiting...${NC}\n"
+            update_script
+        fi
+        
+        echo "${RED}CORE DOES NOT SEEM TO BE RUNNING NOR BOOTSTRAPPING..., WAITING 2 MORE MINUTES IN CASE NODE IS SLOW AND STILL STARTING...${NC}\n"
+        sleep 120
     fi
 
     LOCAL_VERSION=$(curl -s localhost:12391/admin/info | grep -oP '"buildVersion":"qortal-\K[^-]*' | sed 's/-.*//' | tr -d '.')
@@ -126,11 +134,11 @@ check_qortal() {
 }
 
 check_hash_update_qortal() {
-    echo "${RED}API-based version check failed or outdated. Proceeding to HASH CHECK...${NC}\n"
+    echo "${RED}API-based version check failed and/or jar is outdated. Proceeding to HASH CHECK...${NC}\n"
     cd "${HOME}/qortal" || exit 1
     md5sum qortal.jar > "local.md5"
     cd || exit 1
-    echo "${CYAN}Grabbing newest released jar to check hash...${NC}\n"
+    echo "${CYAN}Grabbing newest core release jar to check hash...${NC}\n"
     curl -L -O https://github.com/qortal/qortal/releases/latest/download/qortal.jar
     md5sum qortal.jar > "remote.md5"
 
@@ -244,7 +252,7 @@ no_local_height() {
     echo "${WHITE}Checking if node is bootstrapping or not...${NC}\n"
 
     if [ -f "${HOME}/qortal/qortal.log" ]; then
-        if tail -n 5 "${HOME}/qortal/qortal.log" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
+        if tail -n 10 "${HOME}/qortal/qortal.log" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
             echo "${RED}Node seems to be bootstrapping, updating script and exiting...${NC}\n"
             update_script
         fi
