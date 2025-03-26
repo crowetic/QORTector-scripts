@@ -168,7 +168,7 @@ mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
 cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
 
 echo "${YELLOW} Configuring terminal, default apps, and more...${NC}\n"
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/configure-terminal-and-default-apps.sh
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/configure-terminal-and-more.sh
 chmod +x configure-terminal-and-more.sh
 ./configure-terminal-and-more.sh 
 cd "${HOME}"
