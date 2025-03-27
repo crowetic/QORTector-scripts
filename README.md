@@ -1,4 +1,35 @@
 # crowetic's QORTector-scripts
+
+## All scripts related to Qortal and linux (some Mac compatible) by crowetic.
+
+# Primary Scripts / Functions
+
+### 'rebuilt-machine.sh' 
+The rebuilt machine script is a FULL LINUX (Ubuntu based and potentially Debian although as-of-yet untested on Debian) SETUP SCRIPT. 
+- This script sets up linux
+- This script sets up Qortal
+- Qortal-UI (legacy UI) 
+- Qortal HUB (with launchers in the menu) 
+- Custom Qortal icon theme to be able to use 'qortal' 'qortal-ui' 'qortal-hub' 'qortal-menu-button' through 'qortal-menu-button-4' and more.
+- Qortal Core installation 
+- Full Qortal autoamtion 
+- Full Qortal integration 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 **This used to be a location for scripts solely related to the raspberry pi** - this is **no longer the case**. 
 
 This is now a location for multiple different **automation scripts** written by crowetic. They are focused on **automating Qortal** in multiple ways. 
