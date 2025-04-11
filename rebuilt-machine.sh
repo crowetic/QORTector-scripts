@@ -13,17 +13,28 @@ NC='\033[0m'
 
 username=$(whoami)
 
-echo "${YELLOW} UPDATING UBUNTU AND INSTALLING REQUIRED SOFTWARE PACKAGES ${NC}\n"
+echo "${YELLOW} 🛠 UPDATING 🛠 UBUNTU AND INSTALLING REQUIRED SOFTWARE 📦 PACKAGES 📦 ${NC}\n"
 
-echo "${YELLOW} creating system folders that require admin permissions..."
+echo "${YELLOW} ⚙️ creating system folders that require admin permissions..."
 
 
 sudo apt update
 sudo apt -y upgrade
-sudo apt -y install git jq gnome-software unzip vim curl openjdk-21-jre yaru-theme-icon yaru-theme-gtk yaru-theme-unity zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors cinnamon-desktop-environment
+sudo apt -y install git jq gnome-software openssh-server unzip vim curl openjdk-21-jre yaru-theme-icon yaru-theme-gtk yaru-theme-unity zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors gparted cinnamon-desktop-environment
+
+echo "${YELLOW} 📦 INSTALLING SENSORS MONITOR APPLET FOR PANEL...${NC}\n"
+
+mkdir -p "${HOME}/.local/share/cinnamon/applets"
+cd "${HOME}/.local/share/cinnamon/applets"
+wget -O sensors-monitor.zip "https://cinnamon-spices.linuxmint.com/files/applets/Sensors@claudiux.zip"
+unzip sensors-monitor.zip -d Sensors@claudiux
+rm sensors-monitor.zip
+cd ${HOME}
+
+echo "✅ Applet installed. You can now add 'Sensors Monitor' to your panel manually."
 
 ### SET DEFAULT SESSION TO CINNAMON ###
-echo "${YELLOW} SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
+echo "${YELLOW} ⚙️ SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
 
 # Works for most LightDM and GDM-based setups
 echo "cinnamon" > "${HOME}/.xsession"
@@ -37,7 +48,7 @@ EOL
 echo "${GREEN} Cinnamon session will be loaded by default on next login! ${NC}\n"
 
 ### DOWNLOAD & INSTALL QORTAL CORE ###
-echo "${YELLOW} DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
+echo "${YELLOW} ⬇️ DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
 
 cd "${HOME}"
 mkdir -p backups
@@ -93,7 +104,7 @@ rsync -raPz Machine-files/* "${HOME}"
 
 rm -rf download Machine-files
 ### CINNAMON THEMING - ALWAYS APPLIES EVEN IF CINNAMON ISN'T ACTIVE ###
-echo "${YELLOW} INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
+echo "${YELLOW} 📦 INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
 
 mkdir -p "${HOME}/.themes"
 
@@ -108,7 +119,7 @@ fi
 [ ! -d "${HOME}/.themes/Windows-10-Dark" ] && git clone https://github.com/B00merang-Project/Windows-10-Dark.git "${HOME}/.themes/Windows-10-Dark"
 
 ### APPLY THEMES (WILL WORK AFTER REBOOT TOO) ###
-echo "${YELLOW} APPLYING CINNAMON THEMES ${NC}\n"
+echo "${YELLOW} ⚙️ APPLYING CINNAMON THEMES ${NC}\n"
 
 gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark" || true
 gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
@@ -118,7 +129,7 @@ gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark" || true
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 
 ### CINNAMON PANEL + MENU CUSTOMIZATION ###
-echo "${YELLOW} CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
+echo "${YELLOW} ⚙️ CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
 
 cat > "$HOME/apply-cinnamon-settings.sh" <<'EOL'
 #!/bin/bash
@@ -142,7 +153,7 @@ EOL
 
 chmod +x "$HOME/apply-cinnamon-settings.sh"
 
-echo "${GREEN} Downloading additional ${NC}${YELLOW}CINNAMON${NC}${GREEN}settings${NC}\n"
+echo "${GREEN} ⬇️ Downloading additional ${NC}${YELLOW}CINNAMON${NC}${GREEN}settings${NC}\n"
 
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json
 mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
@@ -231,7 +242,7 @@ Categories=Qortal;
 EOL
 
 echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
-cd "${HOME}/Pictures/icons/icons_theme"
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icons-theme.sh
 chmod +x add-qortal-icons-theme.sh
 ./add-qortal-icons-theme.sh
 cd "${HOME}"
@@ -244,7 +255,7 @@ echo "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
 } > rebuilt-machine-cron
 
 crontab rebuilt-machine-cron
-rm -f rebuilt-machine-cron configure-terminal-and-more.sh
+rm -f rebuilt-machine-cron configure-terminal-and-more.sh add-qortal-icons-theme.sh cinnamon-settings.json
 
 echo "${YELLOW} Refreshing Cinnamon Panel/Menu to apply changes ${NC}"
 cinnamon --replace > /dev/null 2>&1 &

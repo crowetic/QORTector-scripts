@@ -30,6 +30,12 @@ initial_update() {
 }
 
 check_internet() {
+    echo "${CYAN}....................................................................${NC}\n"
+    echo "${CYAN}THIS SCRIPT IS MEANT TO RUN AUTOMATICALLY, PLEASE ALLOW IT TO COMPLETELY FINISH AND DO NOT CLOSE IT EARLY!${NC}\n"
+    echo "${CYAN}CLOSING IT EARLY WILL PREVENT IT FROM DOING ITS JOB, AND ENSURING QORTAL IS UPDATED, AND SYNCHRONIZED.${NC}\n"
+    echo "${CYAN}PLEASE BE PATIENT AND ALLOW SCRIPT TO RUN. THANK YOU! -crowetic${NC}\n"
+    echo "${CYAN}....................................................................${NC}\n"
+    sleep 5
     echo "${YELLOW}Checking internet connection${NC}\n"
     INTERNET_STATUS="UNKNOWN"
     TIMESTAMP=$(date +%s)
@@ -194,14 +200,14 @@ check_for_GUI() {
 }
 
 setup_raspi_cron() {
-    echo -e "${YELLOW}Setting up cron jobs for Raspberry Pi or headless machines...${NC}\n"
+    echo "${YELLOW}Setting up cron jobs for Raspberry Pi or headless machines...${NC}\n"
 
     mkdir -p "${HOME}/backups/cron-backups"
     crontab -l > "${HOME}/backups/cron-backups/crontab-backup-$(date +%Y%m%d%H%M%S)"
 
 
     
-	echo -e "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
+	echo "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
 
 	if find "${HOME}/.config/autostart" -maxdepth 1 -name "start-qortal*.desktop" | grep -q .; then
 	    echo -e "${RED}Autostart desktop entry found! Using GUI-safe auto-fix cron only.${NC}\n"
@@ -212,7 +218,7 @@ setup_raspi_cron() {
 	    return
 	fi
 
-    echo -e "${BLUE}No autostart entries found. Setting up full headless cron...${NC}\n"
+    echo "${BLUE}No autostart entries found. Setting up full headless cron...${NC}\n"
     curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
     crontab auto-fix-cron
     rm -f auto-fix-cron
@@ -281,11 +287,11 @@ no_local_height() {
         fi
     fi
 
-    echo "${GREEN}Starting Qortal Core and sleeping 2.5 min to let it start fully, PLEASE WAIT...${NC}\n"
+    echo "${GREEN}Starting Qortal Core and sleeping 20 min to let it start fully, PLEASE WAIT...${NC}\n"
     potentially_update_settings
     cd "${HOME}/qortal" || exit 1
     ./start.sh
-    sleep 166
+    sleep 1220
     cd || exit 1
     echo "${GREEN}Checking if Qortal started correctly...${NC}\n"
     local_height_check=$(curl -sS "http://localhost:12391/blocks/height")
