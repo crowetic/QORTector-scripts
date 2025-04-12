@@ -43,6 +43,9 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/sta
 chmod +x *.sh
 mv check-qortal-status.sh ~/qortal
 
+echo "${CYAN} RUNNING AUTO-FIX SCRIPT TO SET IT UP..."
+./auto-fix-qortal.sh
+
 echo "${YELLOW} FINISHING UP ${NC}\n"
 
 echo "${YELLOW} REBOOTING MACHINE IN 10 SECONDS${NC} - ${RED}IF YOU WOULD NOT LIKE TO REBOOT, PUSH${NC} ${GREEN} CNTRL+C${NC}${RED} WITHIN THE NEXT 10 SECONDS${NC}\n - ${YELLOW}IF YOU WOULD LIKE TO${NC} ${CYAN}START QORTAL AT BOOT${NC}${YELLOW} ADD THE FOLLOWING TO CRON${NC}'${GREEN} @reboot ./start-qortal.sh${NC}' -${YELLOW} YOU CAN ACCESS CRON EDITOR WITH${NC} '${GREEN}crontab -e${NC}\n'" 
