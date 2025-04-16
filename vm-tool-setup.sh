@@ -32,31 +32,24 @@ echo "VM NICs detected: ${NIC_LIST[*]}"
 echo "=== [5/5] Creating persistent systemd service to disable offloads ==="
 SERVICE_FILE="/etc/systemd/system/disable-vm-nic-offloads.service"
 
-DISABLE_CMDS=""
-for nic in "${NIC_LIST[@]}"; do
-    DISABLE_CMDS+="/usr/sbin/ethtool -K $nic tx off rx off tso off gso off gro off; "
-    DISABLE_CMDS+="/sbin/ip link set $nic txqueuelen 10000; "
-done
-
-# Escape for ExecStart
-DISABLE_CMDS_ESCAPED=$(printf '%q ' "$DISABLE_CMDS")
-
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
-[Unit]
-Description=Disable all VM NIC offloads at boot
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c "$DISABLE_CMDS_ESCAPED"
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
+{
+    echo "[Unit]"
+    echo "Description=Disable all VM NIC offloads at boot"
+    echo "After=network.target"
+    echo ""
+    echo "[Service]"
+    echo "Type=oneshot"
+    for nic in "${NIC_LIST[@]}"; do
+        echo "ExecStart=/usr/sbin/ethtool -K $nic tx off rx off tso off gso off gro off"
+        echo "ExecStart=/sbin/ip link set $nic txqueuelen 10000"
+    done
+    echo "RemainAfterExit=yes"
+    echo ""
+    echo "[Install]"
+    echo "WantedBy=multi-user.target"
+} | sudo tee "$SERVICE_FILE" > /dev/null
 
 echo "=== Enabling and starting NIC offload disable service ==="
-sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable --now disable-vm-nic-offloads.service
 
