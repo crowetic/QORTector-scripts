@@ -249,12 +249,32 @@ chmod +x add-qortal-icons-theme.sh
 cat > "${HOME}/.config/autostart/apply-qortal-icons.desktop" <<EOL
 [Desktop Entry]
 Type=Application
-Exec=bash -c 'sleep 5 && "${HOME}/add-qortal-icons-theme.sh" && rm -f "${HOME}/.config/autostart/apply-qortal-icons.desktop"'
+Exec=gnome-terminal -- ./apply-icon-theme-firstboot.sh
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
 Name=Apply Qortal Icons
 Comment=Applies Qortal icon theme and removes itself
+EOL
+
+cat > "$HOME/apply-icon-theme-firstboot.sh" <<'EOL'
+#!/bin/bash
+sleep 10
+echo "APPLYING QORTAL ICON THEME..."
+echo 
+echo "NOTE: THE ICONS IN SOME CASES (SUCH AS MENU BUTTON) MAY NOT WORK IMMEDIATELY, MAY REQUIRE A REBOOT TO DISPLAY PROPERLY..."
+sleep 10
+echo 
+echo "executing icon theme script..."
+./add-qortal-icons-theme.sh 
+echo "COMPLETE. You now have 'qortal-hub' 'qortal' 'qortal-ui' and 'qortal-menu-button' through 'qortal-menu-button-4' icons usable throughout system on main account."
+echo 
+echo "(again, menu button icon may require a restart to display properly."
+sleep 5
+echo "closing in 5 seconds
+sleep 4
+exit
+
 EOL
 
 #./add-qortal-icons-theme.sh
