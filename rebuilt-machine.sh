@@ -244,7 +244,20 @@ EOL
 echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icons-theme.sh
 chmod +x add-qortal-icons-theme.sh
-./add-qortal-icons-theme.sh
+
+# Create autostart task to run it once after login
+cat > "${HOME}/.config/autostart/apply-qortal-icons.desktop" <<EOL
+[Desktop Entry]
+Type=Application
+Exec=bash -c 'sleep 5 && "${HOME}/add-qortal-icons-theme.sh" && rm -f "${HOME}/.config/autostart/apply-qortal-icons.desktop"'
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Apply Qortal Icons
+Comment=Applies Qortal icon theme and removes itself
+EOL
+
+#./add-qortal-icons-theme.sh
 cd "${HOME}"
 
 ### CRONTAB SETUP ###
@@ -255,7 +268,7 @@ echo "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
 } > rebuilt-machine-cron
 
 crontab rebuilt-machine-cron
-rm -f rebuilt-machine-cron configure-terminal-and-more.sh add-qortal-icons-theme.sh cinnamon-settings.json
+rm -f rebuilt-machine-cron configure-terminal-and-more.sh cinnamon-settings.json
 
 echo "${YELLOW} Refreshing Cinnamon Panel/Menu to apply changes ${NC}"
 cinnamon --replace > /dev/null 2>&1 &
