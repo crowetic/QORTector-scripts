@@ -273,7 +273,7 @@ rm -f rebuilt-machine-cron configure-terminal-and-more.sh cinnamon-settings.json
 echo "${YELLOW} Refreshing Cinnamon Panel/Menu to apply changes ${NC}"
 cinnamon --replace > /dev/null 2>&1 &
 
-echo "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now...)${NC}\n"
+echo "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now... NOTE - YOU MUST REBOOT TO FINISH ALL SETUP. IF CINNAMON DESKTOP IS NOT SELECTED, SELECT IT PRIOR TO INPUTTING LOGIN PASSWORD UPON REBOOT.)${NC}\n"
 sleep 10
 echo "${YELLOW}20 seconds remaining...${NC}\n"
 sleep 9 
