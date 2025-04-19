@@ -271,8 +271,9 @@ echo "COMPLETE. You now have 'qortal-hub' 'qortal' 'qortal-ui' and 'qortal-menu-
 echo 
 echo "(again, menu button icon may require a restart to display properly."
 sleep 5
-echo "closing in 5 seconds"
+echo "removing startup script and closing in 5 seconds"
 sleep 4
+rm ".config/autostart/apply-qortal-icons.desktop"
 exit
 
 EOL
