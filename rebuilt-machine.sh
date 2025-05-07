@@ -149,6 +149,11 @@ mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
 # Copy your preconfigured menu JSON
 cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
 
+echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
+curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh
+chmod +x add-qortal-icon-theme.sh
+./add-qortal-icon-theme.sh
+
 EOL
 
 chmod +x "$HOME/apply-cinnamon-settings.sh"
@@ -166,6 +171,18 @@ chmod +x configure-terminal-and-more.sh
 cd "${HOME}"
 
 echo "continuing desktop configuration..."
+# Get Ubuntu major version, try lsb_release first, then fallback
+if command -v lsb_release >/dev/null 2>&1; then
+  UBUNTU_VER=$(lsb_release -rs | cut -d. -f1)
+else
+  UBUNTU_VER=$(grep -oP '^VERSION_ID="\K[0-9]+' /etc/os-release)
+fi
+
+# Determine if --no-sandbox is needed
+NEED_NO_SANDBOX=""
+if [ "$UBUNTU_VER" -ge 24 ]; then
+  NEED_NO_SANDBOX="--no-sandbox"
+fi
 
 mkdir -p "$HOME/.config/autostart"
 
@@ -223,7 +240,7 @@ cat > "${HOME}/.local/share/applications/qortal-ui.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal UI
 Comment=Launch Qortal User Interface
-Exec=/home/${username}/qortal/Qortal-UI
+Exec=/home/${username}/qortal/Qortal-UI ${SANDBOX_FLAG}
 Icon=qortal-ui
 Terminal=false
 Type=Application
@@ -234,7 +251,7 @@ cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec=/home/${username}/qortal/Qortal-Hub
+Exec=/home/${username}/qortal/Qortal-Hub ${SANDBOX_FLAG}
 Icon=qortal-hub
 Terminal=false
 Type=Application
