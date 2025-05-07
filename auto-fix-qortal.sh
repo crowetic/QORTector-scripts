@@ -14,6 +14,7 @@ NC='\033[0m' # No Color
 RASPI_32_DETECTED=false
 RASPI_64_DETECTED=false
 UPDATED_SETTINGS=false
+NEW_UBUNTU_VERSION=false
 
 # Function to update the script initially if needed
 initial_update() {
@@ -83,7 +84,16 @@ check_for_raspi() {
             check_memory
         fi
     else
-        echo "${YELLOW}Not a Raspberry Pi machine, continuing...${NC}\n"
+        echo "${YELLOW}Not a Raspberry Pi machine, checking for Ubuntu 24+...${NC}\n"
+        if command -v lsb_release >/dev/null 2>&1; then
+            UBUNTU_VER=$(lsb_release -rs | cut -d. -f1)
+        else
+            UBUNTU_VER=$(grep -oP '^VERSION_ID="\K[0-9]+' /etc/os-release)
+        fi
+        if [ "$UBUNTU_VER" -ge 24 ]; then
+            echo "${GREEN} NEWER Ubuntu Version Found, using crontab-based Qortal start ${NC}\n"
+            NEW_UBUNTU_VERSION=true
+        fi
         check_memory
     fi
 }
@@ -174,7 +184,7 @@ check_hash_update_qortal() {
 check_for_GUI() {
     if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
         echo "${CYAN}Machine has GUI, setting up auto-fix-visible for GUI-based machines...${NC}\n"
-        if [ "${RASPI_32_DETECTED}" = true ] || [ "${RASPI_64_DETECTED}" = true ]; then
+        if [ "${RASPI_32_DETECTED}" = true ] || [ "${RASPI_64_DETECTED}" = true ] || [ "${NEW_UBUNTU_VERSION}" = true ]; then
             echo "${YELLOW}Pi machine with GUI, skipping autostart GUI setup, setting cron jobs instead...${NC}\n"
             setup_raspi_cron
         else
@@ -205,17 +215,18 @@ setup_raspi_cron() {
     mkdir -p "${HOME}/backups/cron-backups"
     crontab -l > "${HOME}/backups/cron-backups/crontab-backup-$(date +%Y%m%d%H%M%S)"
 
-
-    
 	echo "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
 
 	if find "${HOME}/.config/autostart" -maxdepth 1 -name "start-qortal*.desktop" | grep -q .; then
-	    echo -e "${RED}Autostart desktop entry found! Using GUI-safe auto-fix cron only.${NC}\n"
-	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
-	    crontab auto-fix-GUI-cron
-	    rm -f auto-fix-GUI-cron
+	    echo -e "${RED}Autostart desktop entry found! Removing that and replacing with cron entry${NC}\n"
+        rm "${HOME}/.conf/autostart/start-qortal*.desktop"
+	    # curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
+	    # crontab auto-fix-GUI-cron
+	    # rm -f auto-fix-GUI-cron
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
+        crontab auto-fix-cron
+        rm -f auto-fix-cron
 	    check_height
-	    return
 	fi
 
     echo "${BLUE}No autostart entries found. Setting up full headless cron...${NC}\n"
