@@ -219,7 +219,7 @@ setup_raspi_cron() {
 
 	if find "${HOME}/.config/autostart" -maxdepth 1 -name "start-qortal*.desktop" | grep -q .; then
 	    echo -e "${RED}Autostart desktop entry found! Removing that and replacing with cron entry${NC}\n"
-        rm "${HOME}/.conf/autostart/start-qortal*.desktop"
+        rm -rf "${HOME}/.config/autostart/start-qortal*.desktop" "${HOME}/.config/autostart/auto-fix-qortal*.desktop"
 	    # curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
 	    # crontab auto-fix-GUI-cron
 	    # rm -f auto-fix-GUI-cron
