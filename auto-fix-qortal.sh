@@ -31,39 +31,58 @@ initial_update() {
 }
 
 check_internet() {
-    echo "${CYAN}....................................................................${NC}\n"
-    echo "${CYAN}THIS SCRIPT IS MEANT TO RUN AUTOMATICALLY, PLEASE ALLOW IT TO COMPLETELY FINISH AND DO NOT CLOSE IT EARLY!${NC}\n"
-    echo "${CYAN}CLOSING IT EARLY WILL PREVENT IT FROM DOING ITS JOB, AND ENSURING QORTAL IS UPDATED, AND SYNCHRONIZED.${NC}\n"
-    echo "${CYAN}PLEASE BE PATIENT AND ALLOW SCRIPT TO RUN. THANK YOU! -crowetic${NC}\n"
-    echo "${CYAN}....................................................................${NC}\n"
+    echo -e "${CYAN}....................................................................${NC}"
+    echo -e "${CYAN}THIS SCRIPT IS MEANT TO RUN AUTOMATICALLY, PLEASE ALLOW IT TO COMPLETELY FINISH AND DO NOT CLOSE IT EARLY!${NC}"
+    echo -e "${CYAN}CLOSING IT EARLY WILL PREVENT IT FROM DOING ITS JOB, AND ENSURING QORTAL IS UPDATED, AND SYNCHRONIZED.${NC}"
+    echo -e "${CYAN}PLEASE BE PATIENT AND ALLOW SCRIPT TO RUN. THANK YOU! -crowetic${NC}"
+    echo -e "${CYAN}....................................................................${NC}"
     sleep 5
-    echo "${YELLOW}Checking internet connection${NC}\n"
+    echo -e "${YELLOW}Checking internet connection...${NC}"
     INTERNET_STATUS="UNKNOWN"
     TIMESTAMP=$(date +%s)
 
-    ping -c 1 -W 0.7 8.8.4.4 > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        # Internet is UP
-        if [ "$INTERNET_STATUS" != "UP" ]; then
-            echo "${BLUE}Internet connection is UP, continuing${NC}\n   $(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
-            INTERNET_STATUS="UP"
-            rm -rf "${HOME}/Desktop/check-qortal-status.sh"
-            cd || exit 1
-            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh "${HOME}/qortal" && chmod +x "${HOME}/qortal/check-qortal-status.sh"
-            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh && chmod +x start-qortal.sh
-            curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh && chmod +x refresh-qortal.sh
-            check_for_raspi
-        fi
+    # Function to test curl access
+    test_connectivity() {
+        local URL=$1
+        curl -s --head --max-time 5 "$URL" | grep -q "200 OK"
+    }
+
+    # Try ping first (requires CAP_NET_RAW or setuid on ping)
+    if ping -c 1 -W 0.7 8.8.4.4 > /dev/null 2>&1; then
+        INTERNET_STATUS="UP"
+        echo -e "${GREEN}Ping successful to 8.8.4.4${NC}"
     else
-        # Internet is DOWN
-        if [ "$INTERNET_STATUS" = "UP" ]; then
-            echo "${RED}Internet Connection is DOWN, please fix connection and restart device.${NC}\n$(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
+        echo -e "${YELLOW}Ping failed, falling back to Qortal domain tests...${NC}"
+
+        if test_connectivity "https://qortal.org"; then
+            INTERNET_STATUS="UP"
+            echo -e "${GREEN}Internet access confirmed via qortal.org${NC}"
+        elif test_connectivity "https://api.qortal.org"; then
+            INTERNET_STATUS="UP"
+            echo -e "${GREEN}Internet access confirmed via api.qortal.org${NC}"
+        elif test_connectivity "https://ext-node.qortal.link"; then
+            INTERNET_STATUS="UP"
+            echo -e "${GREEN}Internet access confirmed via ext-node.qortal.link${NC}"
+        else
             INTERNET_STATUS="DOWN"
-            sleep 30
-            exit 1
         fi
     fi
+
+    if [ "$INTERNET_STATUS" = "UP" ]; then
+        echo -e "${BLUE}Internet connection is UP, continuing...${NC}\n   $(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
+        rm -rf "${HOME}/Desktop/check-qortal-status.sh"
+        cd || exit 1
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh "${HOME}/qortal" && chmod +x "${HOME}/qortal/check-qortal-status.sh"
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh && chmod +x start-qortal.sh
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh && chmod +x refresh-qortal.sh
+        check_for_raspi
+    else
+        echo -e "${RED}Internet Connection is DOWN, please fix connection and restart device.${NC}\n$(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
+        sleep 30
+        exit 1
+    fi
 }
+
 
 check_for_raspi() {
     if command -v raspi-config >/dev/null 2>&1; then
@@ -184,7 +203,7 @@ check_hash_update_qortal() {
 check_for_GUI() {
     if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
         echo "${CYAN}Machine has GUI, setting up auto-fix-visible for GUI-based machines...${NC}\n"
-        if [ "${RASPI_32_DETECTED}" = true ] || [ "${RASPI_64_DETECTED}" = true ] || [ "${NEW_UBUNTU_VERSION}" = true ]; then
+        if [ "${RASPI_32_DETECTED}" = true ] || [ "${RASPI_64_DETECTED}" = true ]; then
             echo "${YELLOW}Pi machine with GUI, skipping autostart GUI setup, setting cron jobs instead...${NC}\n"
             setup_raspi_cron
         else
@@ -219,13 +238,13 @@ setup_raspi_cron() {
 
 	if find "${HOME}/.config/autostart" -maxdepth 1 -name "start-qortal*.desktop" | grep -q .; then
 	    echo -e "${RED}Autostart desktop entry found! Removing that and replacing with cron entry${NC}\n"
-        rm -rf "${HOME}/.config/autostart/start-qortal*.desktop" "${HOME}/.config/autostart/auto-fix-qortal*.desktop"
-	    # curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
-	    # crontab auto-fix-GUI-cron
-	    # rm -f auto-fix-GUI-cron
-        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
-        crontab auto-fix-cron
-        rm -f auto-fix-cron
+        # rm -rf "${HOME}/.config/autostart/start-qortal*.desktop" "${HOME}/.config/autostart/auto-fix-qortal*.desktop"
+	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
+	    crontab auto-fix-GUI-cron
+	    rm -f auto-fix-GUI-cron
+        # curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
+        # crontab auto-fix-cron
+        # rm -f auto-fix-cron
 	    check_height
 	fi
 
