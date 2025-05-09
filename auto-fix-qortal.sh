@@ -31,13 +31,13 @@ initial_update() {
 }
 
 check_internet() {
-    echo -e "${CYAN}....................................................................${NC}"
-    echo -e "${CYAN}THIS SCRIPT IS MEANT TO RUN AUTOMATICALLY, PLEASE ALLOW IT TO COMPLETELY FINISH AND DO NOT CLOSE IT EARLY!${NC}"
-    echo -e "${CYAN}CLOSING IT EARLY WILL PREVENT IT FROM DOING ITS JOB, AND ENSURING QORTAL IS UPDATED, AND SYNCHRONIZED.${NC}"
-    echo -e "${CYAN}PLEASE BE PATIENT AND ALLOW SCRIPT TO RUN. THANK YOU! -crowetic${NC}"
-    echo -e "${CYAN}....................................................................${NC}"
+    echo  "${CYAN}....................................................................${NC}"
+    echo "${CYAN}THIS SCRIPT IS MEANT TO RUN AUTOMATICALLY, PLEASE ALLOW IT TO COMPLETELY FINISH AND DO NOT CLOSE IT EARLY!${NC}"
+    echo "${CYAN}CLOSING IT EARLY WILL PREVENT IT FROM DOING ITS JOB, AND ENSURING QORTAL IS UPDATED, AND SYNCHRONIZED.${NC}"
+    echo "${CYAN}PLEASE BE PATIENT AND ALLOW SCRIPT TO RUN. THANK YOU! -crowetic${NC}"
+    echo "${CYAN}....................................................................${NC}"
     sleep 5
-    echo -e "${YELLOW}Checking internet connection...${NC}"
+    echo "${YELLOW}Checking internet connection...${NC}"
     INTERNET_STATUS="UNKNOWN"
     TIMESTAMP=$(date +%s)
 
@@ -50,19 +50,19 @@ check_internet() {
     # Try ping first (requires CAP_NET_RAW or setuid on ping)
     if ping -c 1 -W 0.7 8.8.4.4 > /dev/null 2>&1; then
         INTERNET_STATUS="UP"
-        echo -e "${GREEN}Ping successful to 8.8.4.4${NC}"
+        echo "${GREEN}Ping successful to 8.8.4.4${NC}"
     else
-        echo -e "${YELLOW}Ping failed, falling back to Qortal domain tests...${NC}"
+        echo "${YELLOW}Ping failed, falling back to Qortal domain tests...${NC}"
 
         if test_connectivity "https://qortal.org"; then
             INTERNET_STATUS="UP"
-            echo -e "${GREEN}Internet access confirmed via qortal.org${NC}"
+            echo "${GREEN}Internet access confirmed via qortal.org${NC}"
         elif test_connectivity "https://api.qortal.org"; then
             INTERNET_STATUS="UP"
-            echo -e "${GREEN}Internet access confirmed via api.qortal.org${NC}"
+            echo "${GREEN}Internet access confirmed via api.qortal.org${NC}"
         elif test_connectivity "https://ext-node.qortal.link"; then
             INTERNET_STATUS="UP"
-            echo -e "${GREEN}Internet access confirmed via ext-node.qortal.link${NC}"
+            echo "${GREEN}Internet access confirmed via ext-node.qortal.link${NC}"
         else
             INTERNET_STATUS="DOWN"
         fi
@@ -481,4 +481,3 @@ update_script() {
 }
 
 initial_update
-
