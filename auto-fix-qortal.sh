@@ -31,7 +31,7 @@ initial_update() {
 }
 
 check_internet() {
-    echo  "${CYAN}....................................................................${NC}"
+    echo "${CYAN}....................................................................${NC}"
     echo "${CYAN}THIS SCRIPT IS MEANT TO RUN AUTOMATICALLY, PLEASE ALLOW IT TO COMPLETELY FINISH AND DO NOT CLOSE IT EARLY!${NC}"
     echo "${CYAN}CLOSING IT EARLY WILL PREVENT IT FROM DOING ITS JOB, AND ENSURING QORTAL IS UPDATED, AND SYNCHRONIZED.${NC}"
     echo "${CYAN}PLEASE BE PATIENT AND ALLOW SCRIPT TO RUN. THANK YOU! -crowetic${NC}"
@@ -69,7 +69,7 @@ check_internet() {
     fi
 
     if [ "$INTERNET_STATUS" = "UP" ]; then
-        echo -e "${BLUE}Internet connection is UP, continuing...${NC}\n   $(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
+        echo "${BLUE}Internet connection is UP, continuing...${NC}\n   $(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
         rm -rf "${HOME}/Desktop/check-qortal-status.sh"
         cd || exit 1
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh && mv check-qortal-status.sh "${HOME}/qortal" && chmod +x "${HOME}/qortal/check-qortal-status.sh"
@@ -77,7 +77,7 @@ check_internet() {
         curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh && chmod +x refresh-qortal.sh
         check_for_raspi
     else
-        echo -e "${RED}Internet Connection is DOWN, please fix connection and restart device.${NC}\n$(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
+        echo "${RED}Internet Connection is DOWN, please fix connection and restart device.${NC}\n$(date +%Y-%m-%dT%H:%M:%S%Z) $(( $(date +%s) - $TIMESTAMP ))"
         sleep 30
         exit 1
     fi
@@ -237,7 +237,7 @@ setup_raspi_cron() {
 	echo "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
 
 	if find "${HOME}/.config/autostart" -maxdepth 1 -name "start-qortal*.desktop" | grep -q .; then
-	    echo -e "${RED}Autostart desktop entry found! Removing that and replacing with cron entry${NC}\n"
+	    echo "${RED}Autostart desktop entry found! Removing that and replacing with cron entry${NC}\n"
         # rm -rf "${HOME}/.config/autostart/start-qortal*.desktop" "${HOME}/.config/autostart/auto-fix-qortal*.desktop"
 	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
 	    crontab auto-fix-GUI-cron
