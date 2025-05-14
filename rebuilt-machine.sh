@@ -240,7 +240,7 @@ cat > "${HOME}/.local/share/applications/qortal-ui.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal UI
 Comment=Launch Qortal User Interface
-Exec=/home/${username}/qortal/Qortal-UI ${SANDBOX_FLAG}
+Exec=/home/${username}/qortal/Qortal-UI ${NEED_NO_SANDBOX}
 Icon=qortal-ui
 Terminal=false
 Type=Application
@@ -251,7 +251,7 @@ cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec=/home/${username}/qortal/Qortal-Hub ${SANDBOX_FLAG}
+Exec=/home/${username}/qortal/Qortal-Hub ${NEED_NO_SANDBOX}
 Icon=qortal-hub
 Terminal=false
 Type=Application
