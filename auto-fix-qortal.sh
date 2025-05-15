@@ -395,9 +395,11 @@ potentially_update_settings() {
     is_valid_json=false
     if command -v jq &>/dev/null; then
         echo "${YELLOW}Using jq to validate JSON...${NC}"
-        if jq empty "${SETTINGS_FILE}" 2>/dev/null; then
-            is_valid_json=true
-            echo "${GREEN}settings.json is valid JSON.${NC}"
+        if [ -s "${SETTINGS_FILE}" ]; then
+            if jq empty "${SETTINGS_FILE}" 2>/dev/null; then
+                is_valid_json=true
+                echo "${GREEN}settings.json is valid JSON.${NC}"
+            fi
         fi
     else
         echo "${YELLOW}jq not found, doing basic manual check...${NC}"
@@ -419,7 +421,7 @@ potentially_update_settings() {
             echo "${GREEN}Backup restored successfully and is valid.${NC}"
         else
             echo "${RED}Backup also invalid. Downloading default settings.json...${NC}"
-            curl -L -O "${SETTINGS_FILE}" "https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/settings.json"
+            curl -L -O "https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/settings.json"
 
             # Final validation
             if command -v jq &>/dev/null && jq empty "${SETTINGS_FILE}" 2>/dev/null; then
@@ -473,7 +475,7 @@ update_script() {
     echo "${YELLOW}Checking for any settings changes required...${NC}"
     sleep 2
     potentially_update_settings
-    rm -rf ${HOME}/qortal.jar ${HOME}/run.pid ${HOME}/run.log ${HOME}/remote.md5 ${HOME}/qortal/local.md5
+    rm -rf "${HOME}/qortal.jar" "${HOME}/run.pid" "${HOME}/run.log" "${HOME}/remote.md5" "${HOME}/qortal/local.md5"
     mkdir -p ${HOME}/backups && mv ${HOME}/qortal/backup-settings* ${HOME}/backups
     echo "${YELLOW}Auto-fix script run complete.${NC}\n"
     sleep 5
