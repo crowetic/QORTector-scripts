@@ -12,6 +12,7 @@ WHITE='\033[0;37m'
 NC='\033[0m'
 
 username=$(whoami)
+BACKUP_EXECUTED=false
 
 echo "${YELLOW} 🛠 UPDATING 🛠 UBUNTU AND INSTALLING REQUIRED SOFTWARE 📦 PACKAGES 📦 ${NC}\n"
 
@@ -56,6 +57,7 @@ mkdir -p backups
 if [ -d qortal ]; then
   echo "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
   mv qortal "backups/qortal-$(date +%s)"
+  BACKUP_EXECUTED=true
 fi
 
 curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
@@ -73,19 +75,30 @@ cd "${HOME}"
 cd qortal
 
 if [ "$(uname -m)" = "aarch64" ]; then
-    echo "${GREEN} ARM 64-bit detected. Downloading ARM64 Qortal Hub and UI ${NC}"
-    curl -L -O https://github.com/Qortal/Qortal-Hub/releases/download/v0.5.3/Qortal-Hub-arm64_0.5.3.AppImage
-    curl -L -O https://github.com/Qortal/qortal-ui/releases/download/v4.6.1/Qortal-Setup-arm64.AppImage
+    echo "${GREEN} ARM 64-bit detected. Downloading ARM64 Qortal Hub ${NC}\n"
+    echo "${RED} NOTE - Qortal-UI is DEPRECATED and no longer supported, will not be downloading Qortal-UI ${NC}"
+    curl -L -O https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64/AppImage
+    
     mv Qortal-Hub-arm64* Qortal-Hub
-    mv Qortal-Setup-arm64* Qortal-UI
 else
+    echo "${GREEN} Downloading Qortal Hub ${NC}\n"
+    echo "${RED} NOTE - Qortal-UI is DEPRECATED and no longer supported, will not be downloading Qortal-UI ${NC}"
     curl -L -O https://github.com/Qortal/Qortal-Hub/releases/download/v0.5.3/Qortal-Hub_0.5.3.AppImage
-    curl -L -O https://github.com/Qortal/qortal-ui/releases/latest/download/Qortal-Setup-amd64.AppImage
+
     mv Qortal-Hub* Qortal-Hub
-    mv Qortal-Setup* Qortal-UI
 fi
 
-chmod +x Qortal-UI Qortal-Hub
+chmod +x Qortal-Hub
+
+# AFTER installing Qortal Core and downloading files: RESTORE BACKUP FOLDER IF BACKUP WAS DONE
+if [ "$BACKUP_EXECUTED" = true ]; then
+  echo "${GREEN} BACKUP DETECTED! Restoring backed-up qortal folder content... ${NC}"
+  LATEST_BACKUP=$(ls -td "${HOME}"/backups/qortal-* | head -n 1)
+  rsync -raPz "${LATEST_BACKUP}/qortal-backup" "${HOME}/qortal/qortal-backup"
+  rsync -raPz "${LATEST_BACKUP}/lists" "${HOME}/qortal/lists"
+  echo "${GREEN} ✅ Backup minting accounts, trade states, and follow/block lists restored from ${LATEST_BACKUP} ${NC}"
+fi
+
 
 ### DOWNLOAD EXTRA FILES ###
 cd "${HOME}"
@@ -229,7 +242,7 @@ cat > "${HOME}/.local/share/desktop-directories/qortal.directory" <<EOL
 [Desktop Entry]
 Name=Qortal
 Comment=Qortal Applications
-Icon=qortal-logo
+Icon=qortal-menu-button-4
 Type=Directory
 EOL
 
@@ -258,47 +271,16 @@ Type=Application
 Categories=Qortal;
 EOL
 
+cd "${HOME}"
+
 echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh
 chmod +x add-qortal-icon-theme.sh
 
-# # Create autostart task to run it once after login
-# cat > "${HOME}/.config/autostart/apply-qortal-icons.desktop" <<EOL
-# [Desktop Entry]
-# Type=Application
-# Exec=gnome-terminal -- ./apply-icon-theme-firstboot.sh
-# Hidden=false
-# NoDisplay=false
-# X-GNOME-Autostart-enabled=true
-# Name=Apply Qortal Icons
-# Comment=Applies Qortal icon theme and removes itself
-# EOL
-
-# cat > "$HOME/apply-icon-theme-firstboot.sh" <<'EOL'
-# #!/bin/bash
-# sleep 10
-# echo "APPLYING QORTAL ICON THEME..."
-# echo 
-# echo "NOTE: THE ICONS IN SOME CASES (SUCH AS MENU BUTTON) MAY NOT WORK IMMEDIATELY, MAY REQUIRE A REBOOT TO DISPLAY PROPERLY..."
-# sleep 10
-# echo 
-# echo "executing icon theme script..."
-# ./add-qortal-icon-theme.sh 
-# echo "COMPLETE. You now have 'qortal-hub' 'qortal' 'qortal-ui' and 'qortal-menu-button' through 'qortal-menu-button-4' icons usable throughout system on main account."
-# echo 
-# echo "(again, menu button icon may require a restart to display properly."
-# sleep 5
-# echo "removing startup script and closing in 5 seconds"
-# sleep 4
-# rm ".config/autostart/apply-qortal-icons.desktop"
-# exit
-
-# EOL
-
-# chmod +x apply-icon-theme-first-boot.sh
-
 ./add-qortal-icon-theme.sh
-cd "${HOME}"
+
+echo "${YELLOW} 🔄 Forcing Cinnamon Menu Refresh...${NC}"
+cinnamon --replace > /dev/null 2>&1 &
 
 ### CRONTAB SETUP ###
 echo "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
