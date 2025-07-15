@@ -24,90 +24,39 @@ render_gradient_string() {
     echo -e "\e[0m"
 }
 
-# rainbowize_ascii() {
-#     local text="$1"
-#     local freq=0.15
-#     local i=0
-#     local output=""
-#     local pi=3.14159265
-
-#     while IFS= read -r line; do
-#         for (( j=0; j<${#line}; j++ )); do
-#             char="${line:$j:1}"
-#             if [[ "$char" == " " ]]; then
-#                 output+="$char"
-#                 continue
-#             fi
-#             r=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 0) + 1)) }')
-#             g=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 2*pi/3) + 1)) }')
-#             b=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 4*pi/3) + 1)) }')
-#             output+="#${r}${g}${b}${char}"
-#             ((i++))
-#         done
-#         output+=$'\n'
-#     done <<< "$text"
-
-#     echo "$output"
-# }
-
-print_ascii_with_rainbow() {
-    local ascii="$1"
+rainbowize_ascii() {
+    local text="$1"
     local freq=0.15
+    local i=0
+    local output=""
     local pi=3.14159265
-    local index=0
 
     while IFS= read -r line; do
-        for (( i=0; i<${#line}; i++ )); do
-            char="${line:$i:1}"
-
+        for (( j=0; j<${#line}; j++ )); do
+            char="${line:$j:1}"
             if [[ "$char" == " " ]]; then
-                printf " "
+                output+="$char"
                 continue
             fi
-
-            r=$(awk -v i=$index -v f=$freq -v pi=$pi 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
-            g=$(awk -v i=$index -v f=$freq -v pi=$pi 'BEGIN { printf("%d", 127 * (sin(f*i + 2*pi/3) + 1)) }')
-            b=$(awk -v i=$index -v f=$freq -v pi=$pi 'BEGIN { printf("%d", 127 * (sin(f*i + 4*pi/3) + 1)) }')
-
-            printf "\e[38;2;%d;%d;%dm%s\e[0m" "$r" "$g" "$b" "$char"
-
-            ((index++))
+            r=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 0) + 1)) }')
+            g=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 2*pi/3) + 1)) }')
+            b=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 4*pi/3) + 1)) }')
+            output+="#${r}${g}${b}${char}"
+            ((i++))
         done
-        echo
-    done <<< "$ascii"
+        output+=$'\n'
+    done <<< "$text"
+
+    echo "$output"
 }
 
 ascii_block='
-
-  ________                 __         .__     ____ ___      .__                                 .__                   
-  \_____  \   ____________/  |______  |  |   |    |   \____ |__|__  __ ___________  __________  |  |                  
-   /  / \  \ /  _ \_  __ \   __\__  \ |  |   |    |   /    \|  \  \/ // __ \_  __ \/  ___|__  \ |  |                  
-  /   \_/.  (  <_> )  | \/|  |  / __ \|  |__ |    |  /   |  \  |\   /\  ___/|  | \/\___ \ / __ \|  |__                
-  \_____\ \_/\____/|__|   |__| (____  /____/ |______/|___|  /__| \_/  \___  >__|  /____  >____  /____/                
-         \__>                       \/                    \/              \/           \/     \/                      
-  .____    .__                      .___                __         .__  .__      _________            .__        __   
-  |    |   |__| ____  __ _____  ___ |   | ____   ______/  |______  |  | |  |    /   _____/ ___________|__|______/  |_ 
-  |    |   |  |/    \|  |  \  \/  / |   |/    \ /  ___|   __\__  \ |  | |  |    \_____  \_/ ___\_  __ \  \____ \   __\
-  |    |___|  |   |  \  |  />    <  |   |   |  \\___ \ |  |  / __ \|  |_|  |__  /        \  \___|  | \/  |  |_> >  |  
-  |_______ \__|___|  /____//__/\_ \ |___|___|  /____  >|__| (____  /____/____/ /_______  /\___  >__|  |__|   __/|__|  
-          \/       \/            \/          \/     \/           \/                    \/     \/         |__|         
-  __________                                               __  .__                                                    
-  \______   \___.__. /\   ___________  ______  _  __ _____/  |_|__| ____                                              
-   |    |  _<   |  | \/ _/ ___\_  __ \/  _ \ \/ \/ // __ \   __\  |/ ___\                                             
-   |    |   \\___  | /\ \  \___|  | \(  <_> )     /\  ___/|  | |  \  \___                                             
-   |______  // ____| \/  \___  >__|   \____/ \/\_/  \___  >__| |__|\___  >                                            
-          \/ \/              \/                         \/             \/                                             
-                                                                                                                      
-                                                                                                                      
-                                                                                                                    
-                                                                                                                      
-                                                                                                                      
-
+Qortal Universal Linux Install Script
+By: crowetic
 '
 
-# rainbowized=$(rainbowize_ascii "$ascii_block")
-# render_gradient_string "$rainbowized"
-print_ascii_with_rainbow "$ascii_block"
+rainbowized=$(rainbowize_ascii "$ascii_block")
+render_gradient_string "$rainbowized"
 
 BACKUP_EXECUTED=false
 QORTAL_CORE_GOOD=false
