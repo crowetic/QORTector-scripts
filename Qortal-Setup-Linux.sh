@@ -30,16 +30,16 @@ echo -e "${CYAN}🔧 Installing dependencies...${NC}"
 case "$DISTRO" in
     ubuntu|debian)
         sudo apt update
-        sudo apt install -y openjdk-17-jre curl unzip libfuse2 jq zlib1g-dev 
+        sudo apt install -y openjdk-17-jre curl unzip libfuse2 jq zlib1g-dev imagemagick
         ;;
     fedora)
-        sudo dnf install -y java-17-openjdk curl unzip fuse jq zlib-devel
+        sudo dnf install -y java-17-openjdk curl unzip fuse jq zlib-devel ImageMagick
         ;;
     arch)
-        sudo pacman -Sy --noconfirm jre17-openjdk curl unzip fuse2 jq zlib
+        sudo pacman -Sy --noconfirm jre17-openjdk curl unzip fuse2 jq zlib imagemagick
         ;;
     alpine)
-        sudo apk add --no-cache openjdk17 curl unzip fuse jq zlib-dev
+        sudo apk add --no-cache openjdk17 curl unzip fuse jq zlib-dev imagemagick
         ;;
     *)
         echo -e "${RED}⚠️ Unsupported distro: ${DISTRO}. Please install openjdk-17, curl, unzip, jq, zlib1g-dev and fuse manually.${NC}"
