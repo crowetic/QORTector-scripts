@@ -194,10 +194,10 @@ echo -e "\n${GREEN}🎉 Qortal setup complete! You can now start Qortal Core and
 echo -e "\n${YELLOW}🛠️  Would you like to install Qortal Automation scripts by crowetic?${NC}"
 echo -e "${CYAN}This will:\n - Ensure Qortal is always running\n - Stay within 1500 blocks of the network\n - Auto-update Core + potentially settings\n - Recover from common issues\n - Configure autostart or cron${NC}"
 echo -e "${YELLOW}Install automation now? (y/N) — auto-skip in 20 seconds...${NC}"
-read -t 20 -r -p "➡️  Your choice (y/N): " INSTALL_AUTOFIX
+INSTALL_AUTOMATION=true  # default fallback
 
-# Check for timeout or input
-if [ $? -eq 0 ]; then
+echo -n "➡️  Your choice (y/N): "
+if read -t 20 -r INSTALL_AUTOFIX; then
     if [[ "$INSTALL_AUTOFIX" =~ ^[Yy]$ ]]; then
         INSTALL_AUTOMATION=true
     else
