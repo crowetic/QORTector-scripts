@@ -92,37 +92,37 @@ chmod +x Qortal-Hub
 
 # AFTER installing Qortal Core and downloading files: RESTORE BACKUP FOLDER IF BACKUP WAS DONE
 if [ "$BACKUP_EXECUTED" = true ]; then
-  echo "${GREEN} BACKUP DETECTED! Restoring backed-up qortal folder content... ${NC}"
+  echo -e "\n ${GREEN} BACKUP DETECTED! Restoring backed-up qortal folder content... ${NC}"
   LATEST_BACKUP=$(ls -td "${HOME}"/backups/qortal-* | head -n 1)
   rsync -raPz "${LATEST_BACKUP}/qortal-backup" "${HOME}/qortal/qortal-backup"
   rsync -raPz "${LATEST_BACKUP}/lists" "${HOME}/qortal/lists"
-  if [ -d ${LATEST_BACKUP}/data ]; then
-    echo "...moving data folder from backup..."
-    mv ${LATEST_BACKUP}/data ${HOME}/qortal/data
+  if [ -d "${LATEST_BACKUP}/data" ]; then
+    echo -e "\n...moving data folder from backup..."
+    mv "${LATEST_BACKUP}/data" "${HOME}/qortal/data"
   fi 
-  echo "${GREEN} ✅ Backup minting accounts, trade states, follow/block lists, and data (if in default location) restored from ${LATEST_BACKUP} ${NC}"
-  echo "${YELLOW} Checking for 'dataPath' setting in ${LATEST_BACKUP}/settings.json... ${NC}"
+  echo -e "\n ${GREEN} ✅ Backup minting accounts, trade states, follow/block lists, and data (if in default location) restored from ${LATEST_BACKUP} ${NC}"
+  echo -e "\n ${YELLOW} Checking for 'dataPath' setting in ${LATEST_BACKUP}/settings.json... ${NC}"
   if command -v jq >/dev/null 2>&1; then
     if jq -e 'has("dataPath")' "${LATEST_BACKUP}/settings.json" >/dev/null 2>&1; then
-        echo "✅ dataPath found in backup settings."
-        DATA_PATH=$(jq -r '.dataPath' "${LATEST_BACKUP}/settings.json")
-        echo "📁 dataPath: $DATA_PATH"
-        echo "🔁 Putting dataPath into new settings.json..."
-        
-        # Apply to the new settings safely
-        jq --arg path "$DATA_PATH" '.dataPath = $path' \
-            "${HOME}/qortal/settings.json" > "${HOME}/qortal/settings.tmp" && \
-            mv "${HOME}/qortal/settings.tmp" "${HOME}/qortal/settings.json"
+      echo -e "\n ✅ dataPath found in backup settings."
+      DATA_PATH=$(jq -r '.dataPath' "${LATEST_BACKUP}/settings.json")
+      echo -e "\n 📁 dataPath: $DATA_PATH"
+      echo -e "\n 🔁 Putting dataPath into new settings.json..."
+      
+      # Apply to the new settings safely
+      jq --arg path "$DATA_PATH" '.dataPath = $path' \
+          "${HOME}/qortal/settings.json" > "${HOME}/qortal/settings.tmp" && \
+          mv "${HOME}/qortal/settings.tmp" "${HOME}/qortal/settings.json"
     else
-        echo "❌ dataPath not found in settings.json (data likely default, already restored). Proceeding..."
-        DATA_PATH=""
+      echo -e "\n ❌ dataPath not found in settings.json (data likely default, already restored). Proceeding..."
+      DATA_PATH=""
     fi
   else
     echo -e "${RED}⚠️ jq not installed. Cannot extract dataPath safely.${NC}"
     echo -e "${YELLOW}If you used a custom data path, you'll need to manually restore it into settings.json.${NC}"
     DATA_PATH=""
   fi
-  echo "\n${YELLOW} Data should have been restored, however, please verify this if it matters to you. QDN data can usually be re-obtained from Qortal, but if you are the only publisher of the data, may not be able to be, just FYI..."
+  echo -e "\n${YELLOW} Data should have been restored, however, please verify this if it matters to you. QDN data can usually be re-obtained from Qortal, but if you are the only publisher of the data, may not be able to be, just FYI..."
 fi
 
 
