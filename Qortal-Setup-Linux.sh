@@ -217,13 +217,13 @@ if [[ "$INSTALL_AUTOMATION" = true ]]; then
     sleep 5
     echo -e "\n push cntrl+c within 5 seconds or automation will continue..."
     sleep 1 
-    echo -e "4..."
+    echo -e "---4..."
     sleep 1 
     echo -e "...3..."
     sleep 1 
     echo -e "...2..."
     sleep 1 
-    echo -e "...1"
+    echo -e "...1..."
     sleep 1 
     echo -e "\n automation continuing!"
     echo -e "\n ${CYAN}📥 Downloading auto-fix-qortal.sh...${NC}"
