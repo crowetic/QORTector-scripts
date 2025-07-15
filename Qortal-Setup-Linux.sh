@@ -10,6 +10,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 BACKUP_EXECUTED=false
+QORTAL_CORE_GOOD=false
 
 echo -e "${CYAN}🚀 Qortal Core + Hub Setup Script (Universal Linux) 🚀${NC}\n"
 
@@ -63,6 +64,7 @@ if [ -d "$HOME/qortal" ]; then
     if [[ "$IS_SYNCING" == "false" || "$SYNC_PERCENT" == "100" ]]; then
         echo "✅ Qortal Core is fully synchronized. No Backup needed..."
         BACKUP_EXECUTED=false
+        QORTAL_CORE_GOOD=true
     else
         echo "⚠️ Qortal Core is not fully synced. Proceeding with update/start/etc."
     
@@ -80,10 +82,12 @@ if [ -d "$HOME/qortal" ]; then
     fi
 fi
 
-curl -LO https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
-unzip qortal.zip
-rm qortal.zip
-chmod +x "$HOME/qortal/"*.sh
+if [ QORTAL_CORE_GOOD=false ]; then
+    curl -LO https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
+    unzip qortal.zip
+    rm qortal.zip
+    chmod +x "$HOME/qortal/"*.sh
+fi
 
 # Download Architecture-specific Qortal Hub
 echo -e "\n ${CYAN}Checking for Desktop Environment..."
@@ -106,6 +110,10 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
 
     echo -e "\n ${CYAN}⬇️ Downloading Qortal Hub...${NC}"
     curl -LO "$HUB_URL"
+    if [ -f "${HOME}/qortal/Qortal-Hub" ]; then
+        echo -e "\n ${GREEN} Existing Hub config found, re-configuring..."
+        rm -rf Qortal-Hub
+    fi
     mv Qortal-Hub* Qortal-Hub
     chmod +x Qortal-Hub
 
