@@ -50,7 +50,13 @@ esac
 echo -e "${CYAN}⬇️ Downloading Qortal Core...${NC}"
 cd "$HOME"
 if [ -d "$HOME/qortal" ]; then
-    "${HOME}/qortal/stop.sh"
+    if pgrep -f "qortal.jar" > /dev/null && curl -s "http://localhost:12391/admin/status" | grep -q "uptime"; then
+        if [ -f "${HOME}/qortal/stop.sh" ]; then
+            "${HOME}/qortal/stop.sh"
+        else
+            curl -X POST "http://localhost:12391/admin/stop" -H  "X-API-KEY: $(cat ${HOME}/qortal/apikey.txt)"
+        fi
+    fi
     mkdir -p "$HOME/backups"
     echo -e "${YELLOW}⚠️ Existing 'qortal' folder found. Backing it up...${NC}"
     mv "$HOME/qortal" "$HOME/backups/qortal-$(date +%s)"
