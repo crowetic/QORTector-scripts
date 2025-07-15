@@ -9,6 +9,146 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+render_gradient_string() {
+    local input="$1"
+    local regex='#([0-9a-fA-F]{6})(.)'
+    while [[ $input =~ $regex ]]; do
+        color="${BASH_REMATCH[1]}"
+        char="${BASH_REMATCH[2]}"
+        r=$((16#${color:0:2}))
+        g=$((16#${color:2:2}))
+        b=$((16#${color:4:2}))
+        printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "$char"
+        input=${input#*"${char}"}
+    done
+    echo -e "\e[0m"
+}
+
+rainbowize_ascii() {
+    local text="$1"
+    local freq=0.15
+    local i=0
+    local output=""
+    local pi=3.14159265
+
+    while IFS= read -r line; do
+        for (( j=0; j<${#line}; j++ )); do
+            char="${line:$j:1}"
+            if [[ "$char" == " " ]]; then
+                output+="$char"
+                continue
+            fi
+            r=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 0) + 1)) }')
+            g=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 2*pi/3) + 1)) }')
+            b=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 4*pi/3) + 1)) }')
+            output+="#${r}${g}${b}${char}"
+            ((i++))
+        done
+        output+=$'\n'
+    done <<< "$text"
+
+    echo "$output"
+}
+
+
+ascii_block='
+
+                                                               WXXXNW                                    
+                                                            NK0kxddxk0XNW                                  
+                                                        WX0OxdddddddddxkOKNW                                
+                                                    MWNK0kxddddddddddddddddxO0XW                               
+                                               WXKOkxddddddddddddddddddddddxk0KNWNN                             
+                                            WNX0kxxdxxxxxxxxxxxxxxxxxxxxxxxxdddxkOKXWNN                           
+                                         MWXKOkxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxk0XNW                         
+                                       MWNX0OxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxkOKXW                        
+                                   WNKOkxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxk0XNW                      
+                                WNX0OxxdxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxkOKX                    
+                            MWNKOkxdxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxk0KN                  
+                          WX0OxxdxxxxxxxxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxxxxxxxxdddxkOKX                 
+                       WNK0kxdddxxxxxxxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxxxxxxxxddddxk0XN               
+                    WNX0OxddddddxxxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxxxxxdddddddkOKX             
+                 MWNKOkddddddddxxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxxxdddddddddxk0X           
+             WX0OxddddddddddxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxxxdddddddddddxOKN         
+         MWN0kxddddddddddddxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkkO0KKKK0OkkkkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxdddddddddddddxkKN         
+        WNXK0kxddddddddddxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkO0KXKOdoox0XK0OkkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxxddddddddddxO0KXNO        
+        NOkO0KK0OxdddddddxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkOO0KXKkl,.    .:oOKXK0OkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxdddddxkOKKK0Ox0W        
+        Nkdddxk0KXK0kxxdxxxxxxxxxxxkkkkkkkkkkkkkkkkkOOKXKOd:..           .,lx0KK0OOkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxO0KKKOkdddd0        
+        NkddddddxkOKXKKOkxxxxxxxxkkkkkkkkkkkkkkkkO0KXKkl,.                   .:dOKXK0Okkkkkkkkkkkkkkkxxxxxxxxxk0KXK0Oxddddddd0        
+        NkdddddddddxxO0KXK0OkxxxkkkkkkkkkkkkkOO0XKOd:'.                         .,lx0XK0OkkkkkkkkkkkkxxxxxkOKXXK0kxdddddddddd0        
+        Xkddddddddddxxxxk0KXXK0kkkkkkkkkkkO0KKKko;.                                 .:dOKXKOkkkkkkkkkkkO0KXXKOkxxxddddddddddd0        
+        Xkdddddddddxxxxxxxxk0KXXX0OkkkkO0KK0dc'.                                       .,lkKXK0OkkkO0KXXX0Okxxxxxxxxddddddddd0        
+        NkdddddddddxxxxxxxxxxxkO0XXXKKXKko;.                                              ..:dOKKKXXXK0Okxxxxxxxxxxxddddddddd0        
+        NkddddddddxxxxxxxxxxxxkkkkO0NNd'.                     .;cllll:..                     .;OWX0Okkkkxxxxxxxxxxxddddddddd0W        
+        NkdddddddxxxxxxxxxxxxkkkkkkOXK;                   ..:oxkkxxxxkkdl;.                   .dN0kkkkkkkxxxxxxxxxxxdddddddd0W        
+        NkdddddddxxxxxxxxxxxkkkkkkkOX0,                .,cdkkkxxxxxxxxxxkkxo:..               .dNKkkkkkkkxxxxxxxxxxxxddddddd0W        
+        NkdddddddxxxxxxxxxxxkkkkkkkOXK;             .:ldkkxxxxxxkkkkkkxxxxxxkkdl,.            .dNKkkkkkkkxxxxxxxxxxxxddddddd0W        
+        NkdddddddxxxxxxxxxxxkkkkkkkOXK;            ,OXOxxxxxkkkkkkkkkkkkkkxxxxk0Kd.           .dNKkkkkkkkkxxxxxxxxxxxxdddddd0W        
+        NkdddddddxxxxxxxxxxxkkkkkkkOXK;           .d0OOOOOkkkkOOOOOOOOOkkkkkOOOOOO;           .dNKkkkkkkkkxxxxxxxxxxxxdddddd0W        
+        NkdddddddxxxxxxxxxxkkkkkkkkOXK;           .dOddxO00000OO00000OO00000Okxdxk:           .dNKkkkkkkkkxxxxxxxxxxxxdddddd0W        
+        NkdddddddxxxxxxxxxxkkkkkkkkOXK;           .dOdxxxkkO0KKKKKKKKKKKK0Okxxxdxk:           .dNKkkkkkkkkxxxxxxxxxxxddddddd0W        
+        NkddddddxxxxxxxxxxxkkkkkkkkOXK;           .dOdxxxkkkOO0KXNNNNXK0OOkkkxxdxk:           .dNKkkkkkkkkxxxxxxxxxxxddddddd0W        
+        NkddddddxxxxxxxxxxxkkkkkkkkOXK;           .dOdxxxkkkOOO00XNXK00OOOkkkxxdxk:           .dNKkkkkkkkkxxxxxxxxxxxddddddd0W        
+        NkddddddxxxxxxxxxxxkkkkkkkkOXK;           .dOddxxxkkkOOO0KXK0OOOOkkkxxxdxk:           .dNKkkkkkkkkkxxxxxxxxxxddddddd0W        
+        NkddddddxxxxxxxxxxxkkkkkkkkOXK;           .dOddxxxxkkkOOOKXK0OOkkkkxxxddxk:           .dNKkkkkkkkkxxxxxxxxxxxxdddddd0W        
+        NkdddddddxxxxxxxxxxxkkkkkkkOXK;            :kkdddxxxkkkkk0K0Okkkkkxxxddxkd;           .dNKkkkkkkkkxxxxxxxxxxxxdddddd0W        
+        NkdddddddxxxxxxxxxxxkkkkkkkOXK;             .ldkkxxxxxkkk0K0Okkxxxxxxkkdc.            .dNKkkkkkkkxxxxxxxxxxxxddddddd0W        
+        NkdddddddxxxxxxxxxxxkkkkkkkOX0;               .,coxkkxxxxOK0kxxxxkkxo:.               .dNKkkkkkkkxxxxxxxxxxxxddddddd0W        
+        NkdddddddxxxxxxxxxxxxkkkkkkOXK;                  ..:lxkkxOK0kxkkdc;.                  .dNKkkkkkkkxxxxxxxxxxxdddddddd0W        
+        NkddddddddxxxxxxxxxxxxkkkkkOXXl.                     .,cokOOxl:.                      .dNKkkkkkkxxxxxxxxxxxddddddddd0W        
+        Nkddddddddxxxxxxxxxxxxxkkkkk0KKOo:.                      ....                         .dN0kkkkkxxxxxxxxxxxxddddddddd0W        
+        NkdddddddddxxxxxxxxxxxxxkkkkkkO0KK0xc'.                                               .dN0kkkkxxxxxxxxxxxxdddddddddd0W        
+        Nkddddddddddxxxxxxxxxxxxkkkkkkkkkk0KXKOo;.                                            .dN0kkkxxxxxxxxxxxxddddddddddd0W        
+        NkdddddddddddxxxxxxxxxxxxkkkkkkkkkkkkO0KX0xc'.                          .,,.          .dN0kkxxxxxxxxxxxxxddddddddddd0W        
+        NkdddddddddddxxxxxxxxxxxxxkkkkkkkkkkkkkkO0KXKko;.                   ..:d0Nk.          .dN0kxxxxxxxxxxxxxdddddddddddd0W        
+        NkddddddddddddxxxxxxxxxxxxxxkkkkkkkkkkkkkkOOO0KK0dc'.            .,lk0XKKNk.          .dN0kxxxxxxxxxxxxddddddddddddd0W        
+        NkdddddddddddddxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkOO0KXKkl;.      .:dOKX0OOk0Nk.          .dN0xxxxxxxxxxxxdddddddddddddd0W        
+        NkdddddddddddddddxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkOO0KK0dc;:lk0XK0Okkkkk0Nk.          .dN0xxxxxxxxxxxddddddddddddddd0W        
+        WX0kxdddddddddddddxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkO0KNNNXKOOkkkkkkkk0Nk.          .dN0xxxxxxxxxxdddddddddddddxO0N        
+           WX0OxdddddddddddxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkOXNN0kkkkkkkkkkk0Nk.          .dN0xxxxxxxxxxddddddddddkOKNW         
+              WNK0kxddddddddxxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkKNX0kkkkkkkkkkk0Nk.          .dN0xxxxxxddddddddddxk0XNW           
+                   X0OxddddddddxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkKNX0kkkkkkkkkkk0Nk.          .dN0xxxxxxddddddxkOKNW             
+                         kxddddxxxxxxxxxxxxxxxxxxxxkkkkkkkkkkkkkkKNX0kkkkkkkkkkkONk.          .dN0xdxxxddddxO0XNW              
+                            OxxdddxxxxxxxxxxxxxxxxxxxxxxxxxkkkkkkKNX0kkkkkkkxxxxONk.          .dN0xdxddxkOKNW               
+                               xxxdddxxxxxxxxxxxxxxxxxxxxxxxxxxxkKNX0xxxxxxxxxxxONk.          .dN0dxxO0XNW                  
+                                   dxxddxxxxxxxxxxxxxxxxxxxxxxxxkKNX0xxxxxxxxxxxONk.          .dNK0KNW                    
+                                       dxxdxxxxxxxxxxxxxxxxxxxxxkKNX0xxxxxxxxxxxONk.         .;OWWW                   
+                                          OxxxxxxxxxxxxxxxxxxxxxxKNX0xxxxxxxxxxxONk.      .:d0NW                       
+                                            KOkxxxxxxxxxxxxxxxxxxKNXOxxxxxxxxxxxONk.  .,lkKW                         
+                                              NX0OxxdddddxxxxxxxxKNXOxxxxxxdxxddONk;;oONW                         
+                                                   kxdddddddxdxKNXOxdddddddddx0NNXW0O                            
+                                                      NX0kxddddddxKNXOdddddddxOKXW                            
+                                                        WXKOxdddxKNXOdddxk0KNW                                
+                                                            MWNK0kxKNXOxO0X
+________                 __         .__                                           
+\_____  \   ____________/  |______  |  |                                          
+ /  / \  \ /  _ \_  __ \   __\__  \ |  |                                          
+/   \_/.  (  <_> )  | \/|  |  / __ \|  |__                                        
+\_____\ \_/\____/|__|   |__| (____  /____/                                        
+ ____ _\__>    .__                \/               .__                            
+|    |   \____ |__|__  __ ___________  __________  |  |                           
+|    |   /    \|  \  \/ // __ \_  __ \/  ___|__  \ |  |                           
+|    |  /   |  \  |\   /\  ___/|  | \/\___ \ / __ \|  |__                         
+|______/|___|  /__| \_/  \___  >__|  /____  >____  /____/                         
+.____    .__ \/              \/           \/     \/                               
+|    |   |__| ____  __ _____  ___                                                 
+|    |   |  |/    \|  |  \  \/  /                                                 
+|    |___|  |   |  \  |  />    <                                                  
+|_______ \__|___|  /____//__/\_ \                                                 
+        \/       \/            \/                                                 
+.___                __         .__  .__      _________            .__        __   
+|   | ____   ______/  |______  |  | |  |    /   _____/ ___________|__|______/  |_ 
+|   |/    \ /  ___|   __\__  \ |  | |  |    \_____  \_/ ___\_  __ \  \____ \   __\
+|   |   |  \\___ \ |  |  / __ \|  |_|  |__  /        \  \___|  | \/  |  |_> >  |  
+|___|___|  /____  >|__| (____  /____/____/ /_______  /\___  >__|  |__|   __/|__|  
+        \/     \/           \/                    \/    \/        |__||__|       
+
+             🛠️  Universal Linux Setup — By: crowetic 🛠️
+'
+
+rainbowized=$(rainbowize_ascii "$ascii_block")
+render_gradient_string "$rainbowized"
+
+
 BACKUP_EXECUTED=false
 QORTAL_CORE_GOOD=false
 
@@ -150,14 +290,14 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     echo -e "${GREEN}✅ Qortal Core + Hub downloaded and ready!${NC}"
 
     # Optional: Install Desktop Launchers if desktop detected
-    if command -v xdg-desktop-menu >/dev/null 2>&1; then
+    if co and -v xdg-desktop-menu >/dev/null 2>&1; then
         echo -e "${CYAN}🖥️  Setting up desktop launchers...${NC}"
         mkdir -p "$HOME/.local/share/applications"
 
         cat > "$HOME/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
-Comment=Launch Qortal Hub
+Co ent=Launch Qortal Hub
 Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
 Icon=qortal-hub
 Terminal=false
@@ -174,7 +314,7 @@ EOL
             cat > "${HOME}/Desktop/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
-Comment=Launch Qortal Hub
+Co ent=Launch Qortal Hub
 Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
 Icon=qortal-hub
 Terminal=false
@@ -205,7 +345,7 @@ if [ "$BACKUP_EXECUTED" = true ]; then
     fi 
     echo -e "\n ${GREEN} ✅ Backup minting accounts, trade states, follow/block lists, and data (if in default location) restored from ${LATEST_BACKUP} ${NC}"
     echo -e "\n ${YELLOW} Checking for 'dataPath' setting in ${LATEST_BACKUP}/settings.json... ${NC}"
-    if command -v jq >/dev/null 2>&1; then
+    if co and -v jq >/dev/null 2>&1; then
         if jq -e 'has("dataPath")' "${LATEST_BACKUP}/settings.json" >/dev/null 2>&1; then
             echo -e "\n ✅ dataPath found in backup settings."
             DATA_PATH=$(jq -r '.dataPath' "${LATEST_BACKUP}/settings.json")
@@ -230,7 +370,7 @@ fi
 
 echo -e "\n${GREEN}🎉 Qortal setup complete! You can now start Qortal Core and Qortal Hub.${NC}"
 echo -e "\n${YELLOW}🛠️  Would you like to install Qortal Automation scripts by crowetic?${NC}"
-echo -e "${CYAN}This will:\n - Ensure Qortal is always running\n - Stay within 1500 blocks of the network\n - Auto-update Core + potentially settings\n - Recover from common issues\n - Configure autostart or cron${NC}"
+echo -e "${CYAN}This will:\n - Ensure Qortal is always running\n - Stay within 1500 blocks of the network\n - Auto-update Core + potentially settings\n - Recover from co on issues\n - Configure autostart or cron${NC}"
 echo -e "${YELLOW}Install automation now? (y/N) — auto-skip in 20 seconds...${NC}"
 INSTALL_AUTOMATION=true  # default fallback
 
