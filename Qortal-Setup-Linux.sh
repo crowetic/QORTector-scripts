@@ -214,7 +214,7 @@ Categories=Utility;
 EOL
 
         echo -e "\n ${GREEN}✅ Desktop launcher created at ~/.local/share/applications/qortal-hub.desktop${NC}"
-        if [ -d "${HOME}/Desktop" ]
+        if [ -d "${HOME}/Desktop" ]; then
             cp "$HOME/.local/share/applications/qortal-hub.desktop" "${HOME}/Desktop/"
         fi
     else
