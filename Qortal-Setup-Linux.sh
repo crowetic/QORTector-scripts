@@ -214,6 +214,9 @@ Categories=Utility;
 EOL
 
         echo -e "\n ${GREEN}✅ Desktop launcher created at ~/.local/share/applications/qortal-hub.desktop${NC}"
+        if [ -d "${HOME}/Desktop" ]
+            cp "$HOME/.local/share/applications/qortal-hub.desktop" "${HOME}/Desktop/"
+        fi
     else
         echo -e "\n ${YELLOW}ℹ️ No desktop environment detected or missing xdg tools. Skipping applications menu launcher setup.${NC}"        
         echo -e "\n ${CYAN} Checking for Desktop folder..."
