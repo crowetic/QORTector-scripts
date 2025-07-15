@@ -143,7 +143,7 @@ check_qortal() {
     
         echo "${CYAN} NODE DOES NOT SEEM TO BE RUNNING? CHECKING IF NODE IS BOOTSTRAPPING...${NC}\n"
         
-        if tail -n 10 "${HOME}/qortal/qortal.log" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
+        if tail -n 20 "${HOME}/qortal/qortal.log" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
             echo "${RED}Node seems to be bootstrapping, updating script and exiting...${NC}\n"
             update_script
         fi
@@ -201,7 +201,7 @@ check_hash_update_qortal() {
 }
 
 check_for_GUI() {
-    if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
+    if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP" ]; then
         echo "${CYAN}Machine has GUI, setting up auto-fix-visible for GUI-based machines...${NC}\n"
         if [ "${RASPI_32_DETECTED}" = true ] || [ "${RASPI_64_DETECTED}" = true ]; then
             echo "${YELLOW}Pi machine with GUI, skipping autostart GUI setup, setting cron jobs instead...${NC}\n"
@@ -237,15 +237,15 @@ setup_raspi_cron() {
 	echo "${YELLOW}Checking if autostart desktop shortcut exists to avoid double-launch...${NC}\n"
 
 	if find "${HOME}/.config/autostart" -maxdepth 1 -name "start-qortal*.desktop" | grep -q .; then
-	    echo "${RED}Autostart desktop entry found! Removing that and replacing with cron entry${NC}\n"
+        echo "${RED}Autostart desktop entry found! Adding automatic run every 3 days for auto-fix script in cron...${NC}\n"
         # rm -rf "${HOME}/.config/autostart/start-qortal*.desktop" "${HOME}/.config/autostart/auto-fix-qortal*.desktop"
-	    curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
-	    crontab auto-fix-GUI-cron
-	    rm -f auto-fix-GUI-cron
+        curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-GUI-cron
+        crontab auto-fix-GUI-cron
+        rm -f auto-fix-GUI-cron
         # curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/auto-fix-cron 
         # crontab auto-fix-cron
         # rm -f auto-fix-cron
-	    check_height
+        check_height
 	fi
 
     echo "${BLUE}No autostart entries found. Setting up full headless cron...${NC}\n"
@@ -268,8 +268,14 @@ check_height() {
                 checked_height=$(curl -s "http://localhost:12391/blocks/height")
                 sleep 2
                 if [ "$checked_height" = "$previous_local_height" ]; then
-                    echo "${RED}Block height still unchanged... forcing bootstrap...${NC}\n"
-                    force_bootstrap
+                    echo "${RED}Block height still unchanged... final sanity check in 10 seconds..${NC}\n"
+                    sleep 10
+                    new_check_again=$(curl -sS "http://localhost:12391/blocks/height")
+                    echo "new height = $new_check_again | previously checked height = $previous_local_height"
+                    if [ "$new_check_again" = "$previous_local_height" ]; then
+                        echo "${RED}Block height still unchanged... forcing bootstrap...${NC}\n"
+                        force_bootstrap
+                    fi
                 fi
             fi
         fi
@@ -288,7 +294,7 @@ no_local_height() {
     echo "${WHITE}Checking if node is bootstrapping or not...${NC}\n"
 
     if [ -f "${HOME}/qortal/qortal.log" ]; then
-        if tail -n 10 "${HOME}/qortal/qortal.log" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
+        if tail -n 30 "${HOME}/qortal/qortal.log" | grep -Ei 'bootstrap|bootstrapping' > /dev/null; then
             echo "${RED}Node seems to be bootstrapping, updating script and exiting...${NC}\n"
             update_script
         fi
@@ -369,7 +375,7 @@ force_bootstrap() {
     cd "${HOME}/qortal" || exit 1
     killall -9 java
     sleep 3
-    rm -rf db log.t* qortal.log run.log run.pid
+    rm -rf db log.t* qortal.log run.log run.pid *.gz
     sleep 5
     ./start.sh
     cd || exit 1
@@ -389,9 +395,9 @@ potentially_update_settings() {
     mkdir -p "${BACKUP_FOLDER}"
 
     # Step 1: Backup settings.json
-    cp "${SETTINGS_FILE}" "${BACKUP_FILE}"
+    cp "${SETTINGS_FILE}" "${BACKUP_FOLDER}/${BACKUP_FILE}"
 
-    ### Step 2: Validate with jq or fallback ###
+    # Step 2: Validate with jq
     is_valid_json=false
     if command -v jq &>/dev/null; then
         echo "${YELLOW}Using jq to validate JSON...${NC}"
@@ -402,48 +408,38 @@ potentially_update_settings() {
             fi
         fi
     else
-        echo "${YELLOW}jq not found, doing basic manual check...${NC}"
-        if grep -q '^{.*}$' "${SETTINGS_FILE}"; then
-            is_valid_json=true
-            echo "${GREEN}Basic structure appears valid (manual fallback).${NC}"
-        fi
+        echo "${RED}jq not found. Skipping JSON validation.${NC}"
     fi
 
-    ### Step 3: If invalid, try to fix ###
+    # Step 3: If invalid, try to fix
     if [ "${is_valid_json}" != true ]; then
-        echo "${RED}settings.json is invalid. Attempting fix...${NC}"
+        echo "${RED}settings.json is invalid or validation skipped. Attempting fix...${NC}"
 
         echo "${YELLOW}Trying to restore from backup: ${BACKUP_FILE}${NC}"
-        cp "${BACKUP_FILE}" "${SETTINGS_FILE}"
+        cp "${BACKUP_FOLDER}/${BACKUP_FILE}" "${SETTINGS_FILE}"
 
-        # Re-validate after restoring backup
         if command -v jq &>/dev/null && jq empty "${SETTINGS_FILE}" 2>/dev/null; then
             echo "${GREEN}Backup restored successfully and is valid.${NC}"
         else
             echo "${RED}Backup also invalid. Downloading default settings.json...${NC}"
-            curl -L -O "https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/settings.json"
+            curl -L -o "${SETTINGS_FILE}" "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/settings.json"
 
-            # Final validation
             if command -v jq &>/dev/null && jq empty "${SETTINGS_FILE}" 2>/dev/null; then
                 echo "${GREEN}Default settings.json downloaded and is valid.${NC}"
             else
                 echo "${RED}Failed to recover a valid settings.json. Manual intervention required.${NC}"
-                cd || exit 1
                 return 1
             fi
         fi
     fi
 
-    ### Step 4: Rotate backups (keep 2 newest) ###
-    
+    # Step 4: Rotate backups (keep 2 newest)
     echo "${YELLOW}Rotating old backups (keeping only 2)...${NC}"
     cd "${BACKUP_FOLDER}" || exit 1
-
     backup_count=$(ls -1 backup-settings-*.json 2>/dev/null | wc -l)
-
-    if [ "$backup_count" -gt 2 ]; then
-        # List oldest first, delete all but the 2 most recent
-        for old_backup in $(ls -1tr backup-settings-*.json | head -n -$((backup_count - 2))); do
+    to_delete=$((backup_count - 2))
+    if [ "$to_delete" -gt 0 ]; then
+        for old_backup in $(ls -1tr backup-settings-*.json | head -n "$to_delete"); do
             echo "Deleting old backup: $old_backup"
             rm -f "$old_backup"
         done
@@ -451,10 +447,7 @@ potentially_update_settings() {
         echo "${BLUE}No old backups to delete.${NC}"
     fi
 
-    cd - >/dev/null || exit 1
-
     echo "${GREEN}Settings file is now valid. Proceeding...${NC}"
-    cd || exit 1
     return 0
 }
 
@@ -476,7 +469,7 @@ update_script() {
     sleep 2
     potentially_update_settings
     rm -rf "${HOME}/qortal.jar" "${HOME}/run.pid" "${HOME}/run.log" "${HOME}/remote.md5" "${HOME}/qortal/local.md5"
-    mkdir -p ${HOME}/backups && mv ${HOME}/qortal/backup-settings* ${HOME}/backups
+    rm -rf ${HOME}/backups/backup-settings*
     echo "${YELLOW}Auto-fix script run complete.${NC}\n"
     sleep 5
     exit
