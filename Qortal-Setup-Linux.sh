@@ -153,8 +153,14 @@ fi
 if [ "$BACKUP_EXECUTED" = true ]; then
     echo -e "\n ${GREEN} BACKUP DETECTED! Restoring backed-up qortal folder content... ${NC}"
     LATEST_BACKUP=$(ls -td "${HOME}"/backups/qortal-* | head -n 1)
-    rsync -raPz "${LATEST_BACKUP}/qortal-backup" "${HOME}/qortal/qortal-backup"
-    rsync -raPz "${LATEST_BACKUP}/lists" "${HOME}/qortal/lists"
+    if [ -d "${LATEST_BACKUP}/qortal-backup" ]; then
+        echo -e "\n Copying qortal-backup folder to new installation directory..."
+        rsync -raPz "${LATEST_BACKUP}/qortal-backup" "${HOME}/qortal/qortal-backup"
+    fi
+    if [ -d "${LATEST_BACKUP}/lists" ]; then
+        echo -e "\n Copying follow and block lists to new installation directory..."
+        rsync -raPz "${LATEST_BACKUP}/lists" "${HOME}/qortal/lists"
+    fi
     if [ -d "${LATEST_BACKUP}/data" ]; then
         echo -e "\n...moving data folder from backup..."
         mv "${LATEST_BACKUP}/data" "${HOME}/qortal/data"
