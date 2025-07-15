@@ -50,17 +50,34 @@ esac
 echo -e "${CYAN}⬇️ Downloading Qortal Core...${NC}"
 cd "$HOME"
 if [ -d "$HOME/qortal" ]; then
-    if pgrep -f "qortal.jar" > /dev/null && curl -s "http://localhost:12391/admin/status" | grep -q "uptime"; then
-        if [ -f "${HOME}/qortal/stop.sh" ]; then
-            "${HOME}/qortal/stop.sh"
-        else
-            curl -X POST "http://localhost:12391/admin/stop" -H  "X-API-KEY: $(cat ${HOME}/qortal/apikey.txt)"
-        fi
+    if pgrep -f "qortal.jar" > /dev/null && curl -s "http://localhost:12391/admin/status" | grep -q "height"; then
+        STATUS_JSON=$(curl -s http://localhost:12391/admin/status)
+
+        IS_SYNCING=$(echo "$STATUS_JSON" | jq -r '.isSynchronizing')
+        SYNC_PERCENT=$(echo "$STATUS_JSON" | jq -r '.syncPercent')
+
+        echo "🛰️  Syncing: $IS_SYNCING"
+        echo "📊 Sync Percent: $SYNC_PERCENT"
     fi
-    mkdir -p "$HOME/backups"
-    echo -e "${YELLOW}⚠️ Existing 'qortal' folder found. Backing it up...${NC}"
-    mv "$HOME/qortal" "$HOME/backups/qortal-$(date +%s)"
-    BACKUP_EXECUTED=true
+
+    if [[ "$IS_SYNCING" == "false" || "$SYNC_PERCENT" == "100" ]]; then
+        echo "✅ Qortal Core is fully synchronized. No Backup needed..."
+        BACKUP_EXECUTED=false
+    else
+        echo "⚠️ Qortal Core is not fully synced. Proceeding with update/start/etc."
+    
+        if pgrep -f "qortal.jar" > /dev/null && curl -s "http://localhost:12391/admin/status" | grep -q "height"; then
+            if [ -f "${HOME}/qortal/stop.sh" ]; then
+                "${HOME}/qortal/stop.sh"
+            else
+                curl -X POST "http://localhost:12391/admin/stop" -H  "X-API-KEY: $(cat ${HOME}/qortal/apikey.txt)"
+            fi
+        fi
+        mkdir -p "$HOME/backups"
+        echo -e "${YELLOW}⚠️ Existing 'qortal' folder found. Backing it up...${NC}"
+        mv "$HOME/qortal" "$HOME/backups/qortal-$(date +%s)"
+        BACKUP_EXECUTED=true
+    fi
 fi
 
 curl -LO https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
