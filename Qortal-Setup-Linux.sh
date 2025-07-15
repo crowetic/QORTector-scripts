@@ -121,7 +121,7 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
 Name=Qortal Hub
 Comment=Launch Qortal Hub
 Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
-Icon=utilities-terminal
+Icon=qortal-hub
 Terminal=false
 Type=Application
 Categories=Utility;
@@ -138,7 +138,7 @@ EOL
 Name=Qortal Hub
 Comment=Launch Qortal Hub
 Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
-Icon=utilities-terminal
+Icon=qortal-hub
 Terminal=false
 Type=Application
 Categories=Utility;
