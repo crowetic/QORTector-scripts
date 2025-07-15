@@ -74,11 +74,11 @@ ascii_block='
         NOkO0KK0OxdddddddxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkOO0KXKkl,.    .:oOKXK0OkkkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxdddddxkOKKK0Ox0W        
         Nkdddxk0KXK0kxxdxxxxxxxxxxxkkkkkkkkkkkkkkkkkOOKXKOd:..           .,lx0KK0OOkkkkkkkkkkkkkkkkkxxxxxxxxxxxxxxO0KKKOkdddd0        
         NkddddddxkOKXKKOkxxxxxxxxkkkkkkkkkkkkkkkkO0KXKkl,.                   .:dOKXK0Okkkkkkkkkkkkkkkxxxxxxxxxk0KXK0Oxddddddd0        
-        NkdddddddddxxO0KXK0OkxxxkkkkkkkkkkkkkOO0XKOd:'.                         .,lx0XK0OkkkkkkkkkkkkxxxxxkOKXXK0kxdddddddddd0        
-        Xkddddddddddxxxxk0KXXK0kkkkkkkkkkkO0KKKko;.                                 .:dOKXKOkkkkkkkkkkkO0KXXKOkxxxddddddddddd0        
-        Xkdddddddddxxxxxxxxk0KXXX0OkkkkO0KK0dc'.                                       .,lkKXK0OkkkO0KXXX0Okxxxxxxxxddddddddd0        
+        NkdddddddddxxO0KXK0OkxxxkkkkkkkkkkkkkOO0XKOd:,                         .,lx0XK0OkkkkkkkkkkkkxxxxxkOKXXK0kxdddddddddd0        
+        Xkddddddddddxxxxk0KXXK0kkkkkkkkkkkO0KKKko;,                                 .:dOKXKOkkkkkkkkkkkO0KXXKOkxxxddddddddddd0        
+        Xkdddddddddxxxxxxxxk0KXXX0OkkkkO0KK0dc,                                       .,lkKXK0OkkkO0KXXX0Okxxxxxxxxddddddddd0        
         NkdddddddddxxxxxxxxxxxkO0XXXKKXKko;.                                              ..:dOKKKXXXK0Okxxxxxxxxxxxddddddddd0        
-        NkddddddddxxxxxxxxxxxxkkkkO0NNd'.                     .;cllll:..                     .;OWX0Okkkkxxxxxxxxxxxddddddddd0W        
+        NkddddddddxxxxxxxxxxxxkkkkO0NNd,.                     .;cllll:..                     .;OWX0Okkkkxxxxxxxxxxxddddddddd0W        
         NkdddddddxxxxxxxxxxxxkkkkkkOXK;                   ..:oxkkxxxxkkdl;.                   .dN0kkkkkkkxxxxxxxxxxxdddddddd0W        
         NkdddddddxxxxxxxxxxxkkkkkkkOX0,                .,cdkkkxxxxxxxxxxkkxo:..               .dNKkkkkkkkxxxxxxxxxxxxddddddd0W        
         NkdddddddxxxxxxxxxxxkkkkkkkOXK;             .:ldkkxxxxxxkkkkkkxxxxxxkkdl,.            .dNKkkkkkkkxxxxxxxxxxxxddddddd0W        
@@ -96,11 +96,11 @@ ascii_block='
         NkdddddddxxxxxxxxxxxxkkkkkkOXK;                  ..:lxkkxOK0kxkkdc;.                  .dNKkkkkkkkxxxxxxxxxxxdddddddd0W        
         NkddddddddxxxxxxxxxxxxkkkkkOXXl.                     .,cokOOxl:.                      .dNKkkkkkkxxxxxxxxxxxddddddddd0W        
         Nkddddddddxxxxxxxxxxxxxkkkkk0KKOo:.                      ....                         .dN0kkkkkxxxxxxxxxxxxddddddddd0W        
-        NkdddddddddxxxxxxxxxxxxxkkkkkkO0KK0xc'.                                               .dN0kkkkxxxxxxxxxxxxdddddddddd0W        
+        NkdddddddddxxxxxxxxxxxxxkkkkkkO0KK0xc,.                                               .dN0kkkkxxxxxxxxxxxxdddddddddd0W        
         Nkddddddddddxxxxxxxxxxxxkkkkkkkkkk0KXKOo;.                                            .dN0kkkxxxxxxxxxxxxddddddddddd0W        
-        NkdddddddddddxxxxxxxxxxxxkkkkkkkkkkkkO0KX0xc'.                          .,,.          .dN0kkxxxxxxxxxxxxxddddddddddd0W        
+        NkdddddddddddxxxxxxxxxxxxkkkkkkkkkkkkO0KX0xc,.                          .,,.          .dN0kkxxxxxxxxxxxxxddddddddddd0W        
         NkdddddddddddxxxxxxxxxxxxxkkkkkkkkkkkkkkO0KXKko;.                   ..:d0Nk.          .dN0kxxxxxxxxxxxxxdddddddddddd0W        
-        NkddddddddddddxxxxxxxxxxxxxxkkkkkkkkkkkkkkOOO0KK0dc'.            .,lk0XKKNk.          .dN0kxxxxxxxxxxxxddddddddddddd0W        
+        NkddddddddddddxxxxxxxxxxxxxxkkkkkkkkkkkkkkOOO0KK0dc,.            .,lk0XKKNk.          .dN0kxxxxxxxxxxxxddddddddddddd0W        
         NkdddddddddddddxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkOO0KXKkl;.      .:dOKX0OOk0Nk.          .dN0xxxxxxxxxxxxdddddddddddddd0W        
         NkdddddddddddddddxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkOO0KK0dc;:lk0XK0Okkkkk0Nk.          .dN0xxxxxxxxxxxddddddddddddddd0W        
         WX0kxdddddddddddddxxxxxxxxxxxxxxxkkkkkkkkkkkkkkkkkkkkkO0KNNNXKOOkkkkkkkk0Nk.          .dN0xxxxxxxxxxdddddddddddddxO0N        
