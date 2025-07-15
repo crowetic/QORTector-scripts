@@ -198,14 +198,14 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     echo -e "${GREEN}✅ Qortal Core + Hub downloaded and ready!${NC}"
 
     # Optional: Install Desktop Launchers if desktop detected
-    if co and -v xdg-desktop-menu >/dev/null 2>&1; then
+    if command -v xdg-desktop-menu >/dev/null 2>&1; then
         echo -e "${CYAN}🖥️  Setting up desktop launchers...${NC}"
         mkdir -p "$HOME/.local/share/applications"
 
         cat > "$HOME/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
-Co ent=Launch Qortal Hub
+Comment=Launch Qortal Hub
 Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
 Icon=qortal-hub
 Terminal=false
@@ -222,7 +222,7 @@ EOL
             cat > "${HOME}/Desktop/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
-Co ent=Launch Qortal Hub
+Comment=Launch Qortal Hub
 Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
 Icon=qortal-hub
 Terminal=false
@@ -253,7 +253,7 @@ if [ "$BACKUP_EXECUTED" = true ]; then
     fi 
     echo -e "\n ${GREEN} ✅ Backup minting accounts, trade states, follow/block lists, and data (if in default location) restored from ${LATEST_BACKUP} ${NC}"
     echo -e "\n ${YELLOW} Checking for 'dataPath' setting in ${LATEST_BACKUP}/settings.json... ${NC}"
-    if co and -v jq >/dev/null 2>&1; then
+    if command -v jq >/dev/null 2>&1; then
         if jq -e 'has("dataPath")' "${LATEST_BACKUP}/settings.json" >/dev/null 2>&1; then
             echo -e "\n ✅ dataPath found in backup settings."
             DATA_PATH=$(jq -r '.dataPath' "${LATEST_BACKUP}/settings.json")
@@ -278,7 +278,7 @@ fi
 
 echo -e "\n${GREEN}🎉 Qortal setup complete! You can now start Qortal Core and Qortal Hub.${NC}"
 echo -e "\n${YELLOW}🛠️  Would you like to install Qortal Automation scripts by crowetic?${NC}"
-echo -e "${CYAN}This will:\n - Ensure Qortal is always running\n - Stay within 1500 blocks of the network\n - Auto-update Core + potentially settings\n - Recover from co on issues\n - Configure autostart or cron${NC}"
+echo -e "${CYAN}This will:\n - Ensure Qortal is always running\n - Stay within 1500 blocks of the network\n - Auto-update Core + potentially settings\n - Recover from common issues\n - Configure autostart or cron${NC}"
 echo -e "${YELLOW}Install automation now? (y/N) — auto-skip in 20 seconds...${NC}"
 INSTALL_AUTOMATION=true  # default fallback
 
