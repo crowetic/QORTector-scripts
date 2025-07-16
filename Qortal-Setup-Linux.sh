@@ -45,9 +45,14 @@ echo -e "$text_006"; sleep 0.5
 echo -e "$text_007"; sleep 0.5
 echo -e "$text_008"; sleep 0.5
 echo -e "$text_009"; sleep 0.5
+echo
 echo -e "$text_010"; sleep 0.5
+echo
 echo -e "$text_011"; sleep 0.5
+echo
 echo -e "$text_012"; sleep 1
+echo
+echo
 echo -e "$text_013"
 
 
