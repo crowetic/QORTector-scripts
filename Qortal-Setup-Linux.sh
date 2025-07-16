@@ -9,38 +9,6 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-print_rainbow_text() {
-    local text="$1"
-    local freq=0.1
-    local pi=3.14159265
-    local i=0
-
-    # Read character-by-character including newlines
-    while IFS= read -r -n1 char || [ -n "$char" ]; do
-        if [[ "$char" == $'\n' ]]; then
-            echo
-            continue
-        fi
-
-        # Skip formatting control characters
-        if [[ "$char" =~ [[:cntrl:]] ]]; then
-            printf "%s" "$char"
-            continue
-        fi
-
-        # Generate sinewave-based RGB colors, range-clamped (95–200)
-        r=$(printf "%.0f" "$(echo "s($freq * $i + 0) * 52.5 + 127.5" | bc -l)")
-        g=$(printf "%.0f" "$(echo "s($freq * $i + 2 * $pi / 3) * 52.5 + 127.5" | bc -l)")
-        b=$(printf "%.0f" "$(echo "s($freq * $i + 4 * $pi / 3) * 52.5 + 127.5" | bc -l)")
-
-        printf "\033[38;2;%d;%d;%dm%s\033[0m" "$r" "$g" "$b" "$char"
-        ((i++))
-    done <<< "$text"
-
-    echo    # Final newline
-}
-
-
 intro_block='
 ---------------------------------------- 
 -Qortal Universal Linux Install Script -
@@ -89,23 +57,23 @@ text_013='
 Script will now begin...
 '
 
-echo
-print_rainbow_text "$intro_block"
-echo; sleep 1
 
-print_rainbow_text "$text_001"; sleep 1
-print_rainbow_text "$text_002"; sleep 0.25
-print_rainbow_text "$text_003"; sleep 0.25
-print_rainbow_text "$text_004"; sleep 0.25
-print_rainbow_text "$text_005"; sleep 0.25
-print_rainbow_text "$text_006"; sleep 0.25
-print_rainbow_text "$text_007"; sleep 0.25
-print_rainbow_text "$text_008"; sleep 0.25
-print_rainbow_text "$text_009"; sleep 0.25
-print_rainbow_text "$text_010"; sleep 0.25
-print_rainbow_text "$text_011"; sleep 0.5
-print_rainbow_text "$text_012"; sleep 1
-print_rainbow_text "$text_013"
+echo -e "$intro_block"
+sleep 1
+
+echo -e "$text_001"; sleep 1
+echo -e "$text_002"; sleep 0.25
+echo -e "$text_003"; sleep 0.25
+echo -e "$text_004"; sleep 0.25
+echo -e "$text_005"; sleep 0.25
+echo -e "$text_006"; sleep 0.25
+echo -e "$text_007"; sleep 0.25
+echo -e "$text_008"; sleep 0.25
+echo -e "$text_009"; sleep 0.25
+echo -e "$text_010"; sleep 0.25
+echo -e "$text_011"; sleep 0.5
+echo -e "$text_012"; sleep 1
+echo -e "$text_013"
 echo
 
 
