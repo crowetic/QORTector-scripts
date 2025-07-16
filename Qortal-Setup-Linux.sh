@@ -31,17 +31,40 @@ rainbowize_text() {
     local output=""
     local pi=3.14159265
 
-    while IFS= read -r line; do
+    # Clamp function to limit brightness
+    clamp() {
+        local val="$1"
+        local min="$2"
+        local max="$3"
+        if (( val < min )); then echo "$min"
+        elif (( val > max )); then echo "$max"
+        else echo "$val"
+        fi
+    }
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
         for (( j=0; j<${#line}; j++ )); do
             char="${line:$j:1}"
             if [[ "$char" == " " ]]; then
                 output+="$char"
                 continue
             fi
-            r=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 0) + 1)) }')
-            g=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 2*pi/3) + 1)) }')
-            b=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 4*pi/3) + 1)) }')
-            output+="#${r}${g}${b}${char}"
+
+            r=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
+            g=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 2*3.1415/3) + 1)) }')
+            b=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 4*3.1415/3) + 1)) }')
+
+            # Clamp each component
+            r=$(clamp "$r" 50 230)
+            g=$(clamp "$g" 50 230)
+            b=$(clamp "$b" 50 230)
+
+            # Convert to hex
+            rh=$(printf "%02x" "$r")
+            gh=$(printf "%02x" "$g")
+            bh=$(printf "%02x" "$b")
+
+            output+="#${rh}${gh}${bh}${char}"
             ((i++))
         done
         output+=$'\n'
@@ -49,6 +72,33 @@ rainbowize_text() {
 
     echo "$output"
 }
+
+
+# rainbowize_text() {
+#     local text="$1"
+#     local freq=0.15
+#     local i=0
+#     local output=""
+#     local pi=3.14159265
+
+#     while IFS= read -r line; do
+#         for (( j=0; j<${#line}; j++ )); do
+#             char="${line:$j:1}"
+#             if [[ "$char" == " " ]]; then
+#                 output+="$char"
+#                 continue
+#             fi
+#             r=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 0) + 1)) }')
+#             g=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 2*pi/3) + 1)) }')
+#             b=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 4*pi/3) + 1)) }')
+#             output+="#${r}${g}${b}${char}"
+#             ((i++))
+#         done
+#         output+=$'\n'
+#     done <<< "$text"
+
+#     echo "$output"
+# }
 
 intro_block='
 ---------------------------------------- 
