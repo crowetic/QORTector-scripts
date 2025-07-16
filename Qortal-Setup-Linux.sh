@@ -9,84 +9,33 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-render_gradient_string() {
-    local input="$1"
-    local regex='#([0-9a-fA-F]{6})(.)'
-
-    while [[ "$input" =~ $regex ]]; do
-        local hex="${BASH_REMATCH[1]}"
-        local char="${BASH_REMATCH[2]}"
-        local r=$((16#${hex:0:2}))
-        local g=$((16#${hex:2:2}))
-        local b=$((16#${hex:4:2}))
-
-        printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "$char"
-
-        input="${input#"#${hex}${char}"}"
-    done
-
-    echo -e "\e[0m"
-}
-
-
-
-rainbowize_text() {
+print_rainbow_text() {
     local text="$1"
     local freq=0.15
     local pi=3.14159265
     local i=0
-    local r g b char
 
     while IFS= read -r -n1 char || [ -n "$char" ]; do
         if [[ "$char" == $'\n' ]]; then
-            echo    # newline
+            echo
             continue
         fi
 
-        # ANSI-safe: skip formatting on control characters
+        # Keep control characters uncolored
         if [[ "$char" =~ [[:cntrl:]] ]]; then
+            printf "%s" "$char"
             continue
         fi
 
+        # Sine wave-based color cycling, clamped to avoid too dark/light
         r=$(printf "%.0f" "$(echo "s($freq*$i + 0) * 95 + 160" | bc -l)")
         g=$(printf "%.0f" "$(echo "s($freq*$i + 2*$pi/3) * 95 + 160" | bc -l)")
         b=$(printf "%.0f" "$(echo "s($freq*$i + 4*$pi/3) * 95 + 160" | bc -l)")
 
-        printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "$char"
+        printf "\e[38;2;%d;%d;%dm%s\e[0m" "$r" "$g" "$b" "$char"
         ((i++))
     done <<< "$text"
-
-    echo -e "\e[0m"
 }
-
-
-
-
-# rainbowize_text() {
-#     local text="$1"
-#     local freq=0.15
-#     local i=0
-#     local output=""
-#     local pi=3.14159265
-
-#     while IFS= read -r line; do
-#         for (( j=0; j<${#line}; j++ )); do
-#             char="${line:$j:1}"
-#             if [[ "$char" == " " ]]; then
-#                 output+="$char"
-#                 continue
-#             fi
-#             r=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 0) + 1)) }')
-#             g=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 2*pi/3) + 1)) }')
-#             b=$(awk -v i=$i -v f=$freq -v pi=$pi 'BEGIN { printf("%02x", 127 * (sin(f*i + 4*pi/3) + 1)) }')
-#             output+="#${r}${g}${b}${char}"
-#             ((i++))
-#         done
-#         output+=$'\n'
-#     done <<< "$text"
-
-#     echo "$output"
-# }
 
 intro_block='
 ---------------------------------------- 
@@ -109,7 +58,7 @@ text_004='
 - Correctly establish launchers for Qortal Hub
 '
 text_005='
-- Correctly create entires in desktop environment menus for Qortal Hub
+- Correctly create entries in desktop environment menus for Qortal Hub
 '
 text_006='
 - Ensure Qortal Hub has required no-sandbox flag if system requires it
@@ -136,64 +85,26 @@ text_013='
 Script will now begin...
 '
 
-introtext=$(rainbowize_text "$intro_block")
-rb_001=$(rainbowize_text "$text_001")
-rb_002=$(rainbowize_text "$text_002")
-rb_003=$(rainbowize_text "$text_003")
-rb_004=$(rainbowize_text "$text_004")
-rb_005=$(rainbowize_text "$text_005")
-rb_006=$(rainbowize_text "$text_006")
-rb_007=$(rainbowize_text "$text_007")
-rb_008=$(rainbowize_text "$text_008")
-rb_009=$(rainbowize_text "$text_009")
-rb_010=$(rainbowize_text "$text_010")
-rb_011=$(rainbowize_text "$text_011")
-rb_012=$(rainbowize_text "$text_012")
-rb_013=$(rainbowize_text "$text_013")
+echo
+print_rainbow_text "$intro_block"
+echo; sleep 1
 
-echo -e "\n"
-render_gradient_string "$introtext"
-echo -e "\n"
-sleep 1
-echo -e "\n"
-render_gradient_string "$rb_001"
-sleep 1
-echo -e "\n"
-render_gradient_string "$rb_002"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_003"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_004"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_005"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_006"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_007"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_008"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_009"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_010"
-sleep 0.25
-echo -e "\n"
-render_gradient_string "$rb_011"
-sleep 0.5
-echo -e "\n"
-render_gradient_string "$rb_012"
-sleep 1 
-echo -e "\n"
-render_gradient_string "$rb_013"
-echo -e "\n"
+print_rainbow_text "$text_001"; sleep 1
+print_rainbow_text "$text_002"; sleep 0.25
+print_rainbow_text "$text_003"; sleep 0.25
+print_rainbow_text "$text_004"; sleep 0.25
+print_rainbow_text "$text_005"; sleep 0.25
+print_rainbow_text "$text_006"; sleep 0.25
+print_rainbow_text "$text_007"; sleep 0.25
+print_rainbow_text "$text_008"; sleep 0.25
+print_rainbow_text "$text_009"; sleep 0.25
+print_rainbow_text "$text_010"; sleep 0.25
+print_rainbow_text "$text_011"; sleep 0.5
+print_rainbow_text "$text_012"; sleep 1
+print_rainbow_text "$text_013"
+echo
+
+
 
 BACKUP_EXECUTED=false
 QORTAL_CORE_GOOD=false
