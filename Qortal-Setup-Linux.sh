@@ -11,31 +11,35 @@ NC='\033[0m'
 
 print_rainbow_text() {
     local text="$1"
-    local freq=0.15
+    local freq=0.1
     local pi=3.14159265
     local i=0
 
+    # Read character-by-character including newlines
     while IFS= read -r -n1 char || [ -n "$char" ]; do
         if [[ "$char" == $'\n' ]]; then
             echo
             continue
         fi
 
-        # Keep control characters uncolored
+        # Skip formatting control characters
         if [[ "$char" =~ [[:cntrl:]] ]]; then
             printf "%s" "$char"
             continue
         fi
 
-        # Sine wave-based color cycling, clamped to avoid too dark/light
-        r=$(printf "%.0f" "$(echo "s($freq*$i + 0) * 95 + 160" | bc -l)")
-        g=$(printf "%.0f" "$(echo "s($freq*$i + 2*$pi/3) * 95 + 160" | bc -l)")
-        b=$(printf "%.0f" "$(echo "s($freq*$i + 4*$pi/3) * 95 + 160" | bc -l)")
+        # Generate sinewave-based RGB colors, range-clamped (95–200)
+        r=$(printf "%.0f" "$(echo "s($freq * $i + 0) * 52.5 + 127.5" | bc -l)")
+        g=$(printf "%.0f" "$(echo "s($freq * $i + 2 * $pi / 3) * 52.5 + 127.5" | bc -l)")
+        b=$(printf "%.0f" "$(echo "s($freq * $i + 4 * $pi / 3) * 52.5 + 127.5" | bc -l)")
 
-        printf "\e[38;2;%d;%d;%dm%s\e[0m" "$r" "$g" "$b" "$char"
+        printf "\033[38;2;%d;%d;%dm%s\033[0m" "$r" "$g" "$b" "$char"
         ((i++))
     done <<< "$text"
+
+    echo    # Final newline
 }
+
 
 intro_block='
 ---------------------------------------- 
