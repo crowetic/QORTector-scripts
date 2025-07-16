@@ -60,21 +60,20 @@ Script will now begin...
 
 echo -e "$intro_block"
 sleep 1
-
 echo -e "$text_001"; sleep 1
-echo -e "$text_002"; sleep 0.25
-echo -e "$text_003"; sleep 0.25
-echo -e "$text_004"; sleep 0.25
-echo -e "$text_005"; sleep 0.25
-echo -e "$text_006"; sleep 0.25
-echo -e "$text_007"; sleep 0.25
-echo -e "$text_008"; sleep 0.25
-echo -e "$text_009"; sleep 0.25
-echo -e "$text_010"; sleep 0.25
+echo -e "$text_002"; sleep 0.5
+echo -e "$text_003"; sleep 0.5
+echo -e "$text_004"; sleep 0.5
+echo -e "$text_005"; sleep 0.5
+echo -e "$text_006"; sleep 0.5
+echo -e "$text_007"; sleep 0.5
+echo -e "$text_008"; sleep 0.5
+echo -e "$text_009"; sleep 0.5
+echo -e "$text_010"; sleep 0.5
 echo -e "$text_011"; sleep 0.5
 echo -e "$text_012"; sleep 1
 echo -e "$text_013"
-echo
+
 
 
 
