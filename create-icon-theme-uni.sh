@@ -114,8 +114,14 @@ if [ -f "${ICON_CACHE_DIR}/index.theme" ]; then
 fi
 
 # Step 5: Set icon theme if DE supports it
-CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP,,}"
-echo "[*] Attempting to set theme on $CURRENT_DESKTOP..."
+CURRENT_DESKTOP=$(echo "${XDG_CURRENT_DESKTOP}" | tr '[:upper:]' '[:lower:]')
+
+# Normalize aliases
+case "$CURRENT_DESKTOP" in
+  x-cinnamon) CURRENT_DESKTOP="cinnamon" ;;
+  xfce*) CURRENT_DESKTOP="xfce" ;;
+  kde-plasma) CURRENT_DESKTOP="plasma" ;;
+esac
 
 if command -v gsettings >/dev/null; then
   case "$CURRENT_DESKTOP" in
@@ -125,10 +131,10 @@ if command -v gsettings >/dev/null; then
     gnome)
       gsettings set org.gnome.desktop.interface icon-theme "${ICON_THEME_NAME}"
       ;;
-    xfce|xfce4)
+    xfce)
       xfconf-query -c xsettings -p /Net/IconThemeName -s "${ICON_THEME_NAME}" 2>/dev/null
       ;;
-    kde|plasma)
+    kde | plasma)
       kwriteconfig5 --file kdeglobals --group Icons --key Theme "${ICON_THEME_NAME}"
       ;;
     *)
@@ -138,6 +144,7 @@ if command -v gsettings >/dev/null; then
 else
   echo "[!] gsettings not available. Please set icon theme manually if needed."
 fi
+
 
 echo "✅ Qortal icons installed into local theme: ${ICON_THEME_NAME}"
 echo "ℹ️  You can now use Icon=qortal-ui (etc.) in .desktop files."
