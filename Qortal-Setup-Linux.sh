@@ -12,7 +12,7 @@ NC='\033[0m'
 render_gradient_string() {
     local input="$1"
     local regex='^#([0-9a-fA-F]{6})(.)'
-    local rest
+    local chunk
 
     while [[ -n "$input" ]]; do
         if [[ "$input" =~ $regex ]]; then
@@ -22,7 +22,7 @@ render_gradient_string() {
             g=$((16#${color:2:2}))
             b=$((16#${color:4:2}))
             printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "$char"
-            input="${input:9}"  # strip exactly 7 (color) + 1 (char) = 8 chars, plus 1 for #
+            input="${input:9}"  # skip # + 6 chars + 1 char
         else
             printf "%s" "${input:0:1}"
             input="${input:1}"
@@ -31,8 +31,6 @@ render_gradient_string() {
 
     echo -e "\e[0m"
 }
-
-
 
 rainbowize_text() {
     local text="$1"
@@ -43,19 +41,18 @@ rainbowize_text() {
 
     clamp() {
         local val="$1" min="$2" max="$3"
-        if (( val < min )); then echo "$min"
-        elif (( val > max )); then echo "$max"
-        else echo "$val"
-        fi
+        (( val < min )) && echo "$min" && return
+        (( val > max )) && echo "$max" && return
+        echo "$val"
     }
 
-    while IFS= read -r line || [ -n "$line" ]; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
         for (( j=0; j<${#line}; j++ )); do
-            char="${line:$j:1}"
+            char="${line:j:1}"
 
-            r=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
-            g=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 2*3.1415/3) + 1)) }')
-            b=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 4*3.1415/3) + 1)) }')
+            r=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
+            g=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 2*3.1415/3) + 1)) }')
+            b=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 4*3.1415/3) + 1)) }')
 
             r=$(clamp "$r" 50 230)
             g=$(clamp "$g" 50 230)
@@ -69,10 +66,6 @@ rainbowize_text() {
 
     echo -ne "$output"
 }
-
-
-
-
 
 # rainbowize_text() {
 #     local text="$1"
