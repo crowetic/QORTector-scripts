@@ -12,17 +12,18 @@ NC='\033[0m'
 render_gradient_string() {
     local input="$1"
     local regex='#([0-9a-fA-F]{6})(.)'
-    while [[ $input =~ $regex ]]; do
+    while [[ "$input" =~ $regex ]]; do
         color="${BASH_REMATCH[1]}"
         char="${BASH_REMATCH[2]}"
         r=$((16#${color:0:2}))
         g=$((16#${color:2:2}))
         b=$((16#${color:4:2}))
         printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "$char"
-        input=${input#*"${char}"}
+        input="${input#"#${color}${char}"}"
     done
     echo -e "\e[0m"
 }
+
 
 rainbowize_text() {
     local text="$1"
@@ -31,7 +32,6 @@ rainbowize_text() {
     local output=""
     local pi=3.14159265
 
-    # Clamp function to limit brightness
     clamp() {
         local val="$1"
         local min="$2"
@@ -42,24 +42,17 @@ rainbowize_text() {
         fi
     }
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
+    while IFS= read -r line || [ -n "$line" ]; do
         for (( j=0; j<${#line}; j++ )); do
             char="${line:$j:1}"
-            if [[ "$char" == " " ]]; then
-                output+="$char"
-                continue
-            fi
-
             r=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
             g=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 2*3.1415/3) + 1)) }')
             b=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 4*3.1415/3) + 1)) }')
 
-            # Clamp each component
             r=$(clamp "$r" 50 230)
             g=$(clamp "$g" 50 230)
             b=$(clamp "$b" 50 230)
 
-            # Convert to hex
             rh=$(printf "%02x" "$r")
             gh=$(printf "%02x" "$g")
             bh=$(printf "%02x" "$b")
@@ -67,11 +60,13 @@ rainbowize_text() {
             output+="#${rh}${gh}${bh}${char}"
             ((i++))
         done
-        output+=$'\n'
+        output+=$'\n'  # Important!
     done <<< "$text"
 
-    echo "$output"
+    echo -ne "$output"
 }
+
+
 
 
 # rainbowize_text() {
