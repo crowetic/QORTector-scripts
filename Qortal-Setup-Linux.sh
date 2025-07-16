@@ -99,33 +99,63 @@ Script will now begin...
 '
 
 introtext=$(rainbowize_text "$intro_block")
+rb_001=$(rainbowize_text "$text_001")
+rb_002=$(rainbowize_text "$text_002")
+rb_003=$(rainbowize_text "$text_003")
+rb_004=$(rainbowize_text "$text_004")
+rb_005=$(rainbowize_text "$text_005")
+rb_006=$(rainbowize_text "$text_006")
+rb_007=$(rainbowize_text "$text_007")
+rb_008=$(rainbowize_text "$text_008")
+rb_009=$(rainbowize_text "$text_009")
+rb_010=$(rainbowize_text "$text_010")
+rb_011=$(rainbowize_text "$text_011")
+rb_012=$(rainbowize_text "$text_012")
+rb_013=$(rainbowize_text "$text_013")
+
+echo -e "\n"
 render_gradient_string "$introtext"
+echo -e "\n"
 sleep 1
-render_gradient_string "$text_001"
+echo -e "\n"
+render_gradient_string "$rb_001"
 sleep 1
-render_gradient_string "$text_002"
+echo -e "\n"
+render_gradient_string "$rb_002"
 sleep 0.25
-render_gradient_string "$text_003"
+echo -e "\n"
+render_gradient_string "$rb_003"
 sleep 0.25
-render_gradient_string "$text_004"
+echo -e "\n"
+render_gradient_string "$rb_004"
 sleep 0.25
-render_gradient_string "$text_005"
+echo -e "\n"
+render_gradient_string "$rb_005"
 sleep 0.25
-render_gradient_string "$text_006"
+echo -e "\n"
+render_gradient_string "$rb_006"
 sleep 0.25
-render_gradient_string "$text_007"
+echo -e "\n"
+render_gradient_string "$rb_007"
 sleep 0.25
-render_gradient_string "$text_008"
+echo -e "\n"
+render_gradient_string "$rb_008"
 sleep 0.25
-render_gradient_string "$text_009"
+echo -e "\n"
+render_gradient_string "$rb_009"
 sleep 0.25
-render_gradient_string "$text_010"
+echo -e "\n"
+render_gradient_string "$rb_010"
 sleep 0.25
-render_gradient_string "$text_011"
+echo -e "\n"
+render_gradient_string "$rb_011"
 sleep 0.5
-render_gradient_string "$text_012"
+echo -e "\n"
+render_gradient_string "$rb_012"
 sleep 1 
-render_gradient_string "$text_013"
+echo -e "\n"
+render_gradient_string "$rb_013"
+echo -e "\n"
 
 BACKUP_EXECUTED=false
 QORTAL_CORE_GOOD=false
