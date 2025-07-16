@@ -20,42 +20,18 @@ intro_block='
 text_001='
 This script will:
 '
-text_002='
-- Configure target machine as a fully functional Qortal Node
-'
-text_003='
-- Setup both Qortal Core (qortal) and Qortal Hub (Qortal-Hub) in "${HOME}/qortal"
-'
-text_004='
-- Correctly establish launchers for Qortal Hub
-'
-text_005='
-- Correctly create entries in desktop environment menus for Qortal Hub
-'
-text_006='
-- Ensure Qortal Hub has required no-sandbox flag if system requires it
-'
-text_007='
-- Ensure all configuration is optimal
-'
-text_008='
-- Offer to establish automatic Qortal Node checker script that ensures node is always synchronized/updated/ready to use.
-'
-text_009='
-... AND MUCH MORE! This all ensures that your machine is the most optimal Qortal node possible! 
-'
-text_010='
-Script written by: crowetic
-'
-text_011='
-Reach out with any questions or issues. This script is meant to work on any Desktop Linux distribution, but if any issues pop up, please let us know!
-'
-text_012='
-THANK YOU, AND WELCOME TO THE TRUE NEXT GENERATION OF THE INTERNET, QORTAL!
-'
-text_013='
-Script will now begin...
-'
+text_002='- Configure target machine as a fully functional Qortal Node'
+text_003='- Setup both Qortal Core (qortal) and Qortal Hub (Qortal-Hub) in "${HOME}/qortal"'
+text_004='- Correctly establish launchers for Qortal Hub'
+text_005='- Correctly create entries in desktop environment menus for Qortal Hub'
+text_006='- Ensure Qortal Hub has required no-sandbox flag if system requires it'
+text_007='- Ensure all configuration is optimal'
+text_008='- Offer to establish automatic Qortal Node checker script that ensures node is always synchronized/updated/ready to use.'
+text_009='... AND MUCH MORE! This all ensures that your machine is the most optimal Qortal node possible! '
+text_010='Script written by: crowetic'
+text_011='Reach out with any questions or issues. This script is meant to work on any Desktop Linux distribution, but if any issues pop up, please let us know!'
+text_012='THANK YOU, AND WELCOME TO THE TRUE NEXT GENERATION OF THE INTERNET, QORTAL!'
+text_013='Script will now begin... You will need to input system password once at the start. (NOTE - On most terminals you will not see anything while typing password. Just type and push ENTER.)'
 
 
 echo -e "$intro_block"
