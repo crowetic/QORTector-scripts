@@ -12,17 +12,17 @@ NC='\033[0m'
 render_gradient_string() {
     local input="$1"
     local regex='^#([0-9a-fA-F]{6})(.)'
-    local chunk
 
     while [[ -n "$input" ]]; do
         if [[ "$input" =~ $regex ]]; then
-            color="${BASH_REMATCH[1]}"
-            char="${BASH_REMATCH[2]}"
-            r=$((16#${color:0:2}))
-            g=$((16#${color:2:2}))
-            b=$((16#${color:4:2}))
+            local color="${BASH_REMATCH[1]}"
+            local char="${BASH_REMATCH[2]}"
+            local r=$((16#${color:0:2}))
+            local g=$((16#${color:2:2}))
+            local b=$((16#${color:4:2}))
+
             printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "$char"
-            input="${input:9}"  # skip # + 6 chars + 1 char
+            input="${input:9}"  # Skip "#rrggbbX" (7+1=8, +1 for safety)
         else
             printf "%s" "${input:0:1}"
             input="${input:1}"
@@ -31,6 +31,7 @@ render_gradient_string() {
 
     echo -e "\e[0m"
 }
+
 
 rainbowize_text() {
     local text="$1"
@@ -46,26 +47,29 @@ rainbowize_text() {
         echo "$val"
     }
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        for (( j=0; j<${#line}; j++ )); do
-            char="${line:j:1}"
+    while IFS= read -r -n1 char || [[ -n "$char" ]]; do
+        if [[ "$char" == $'\n' ]]; then
+            output+=$'\n'
+            continue
+        fi
 
-            r=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
-            g=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 2*3.1415/3) + 1)) }')
-            b=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 4*3.1415/3) + 1)) }')
+        r=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
+        g=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 2*3.1415/3) + 1)) }')
+        b=$(awk -v i=$i -v f=$freq 'BEGIN { printf("%d", 127 * (sin(f*i + 4*3.1415/3) + 1)) }')
 
-            r=$(clamp "$r" 50 230)
-            g=$(clamp "$g" 50 230)
-            b=$(clamp "$b" 50 230)
+        r=$(clamp "$r" 50 230)
+        g=$(clamp "$g" 50 230)
+        b=$(clamp "$b" 50 230)
 
-            output+="#$(printf '%02x%02x%02x' "$r" "$g" "$b")$char"
-            ((i++))
-        done
-        output+=$'\n'
+        hex=$(printf '%02x%02x%02x' "$r" "$g" "$b")
+        output+="#${hex}${char}"
+
+        ((i++))
     done <<< "$text"
 
-    echo -ne "$output"
+    echo -n "$output"
 }
+
 
 # rainbowize_text() {
 #     local text="$1"
