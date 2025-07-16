@@ -134,6 +134,7 @@ curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/aut
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh
 curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
+#todo update the download location below to multiple locations and QDN location
 curl -L -O https://cloud.qortal.org/s/machinefilesnew/download
 
 chmod +x *.sh

@@ -50,12 +50,11 @@ echo -e "$text_010"; sleep 0.5
 echo
 echo -e "$text_011"; sleep 0.5
 echo
-echo -e "$text_012"; sleep 1
+echo -e "${CYAN}$text_012${NC}"; sleep 1
 echo
 echo
 echo -e "$text_013"
-
-
+echo
 
 
 BACKUP_EXECUTED=false
@@ -72,7 +71,7 @@ else
     exit 1
 fi
 
-echo -e "${YELLOW}📋 Detected distro: ${DISTRO} ${VERSION}${NC}"
+echo -e "${YELLOW}📋 Detected distro:${NC} ${GREEN}${DISTRO}${NC} ${CYAN}${VERSION}${NC}"
 
 # Install Required Packages
 echo -e "${CYAN}🔧 Installing dependencies...${NC}"
@@ -105,22 +104,26 @@ if [ -d "$HOME/qortal" ]; then
         IS_SYNCING=$(echo "$STATUS_JSON" | jq -r '.isSynchronizing')
         SYNC_PERCENT=$(echo "$STATUS_JSON" | jq -r '.syncPercent')
 
-        echo "🛰️  Syncing: $IS_SYNCING"
-        echo "📊 Sync Percent: $SYNC_PERCENT"
+        echo "🛰️ ${YELLOW}Syncnronizing:${NC} ${CYAN}$IS_SYNCING${NC}"
+        echo "📊 ${YELLOW}Sync Percent:${NC} ${CYAN}$SYNC_PERCENT${NC}"
     fi
 
     if [[ "$IS_SYNCING" == "false" || "$SYNC_PERCENT" == "100" ]]; then
-        echo "✅ Qortal Core is fully synchronized. No Backup needed..."
+        echo "${GREEN}✅ Qortal Core is fully synchronized. No Backup needed...${NC}"
         BACKUP_EXECUTED=false
         QORTAL_CORE_GOOD=true
     else
-        echo "⚠️ Qortal Core is not fully synced. Proceeding with update/start/etc."
+        echo "${RED}⚠️ Qortal Core is not fully synced.${NC} ${CYAN}Proceeding...Will stop Qortal, backup existing data, and continue...${NC}"
     
         if pgrep -f "qortal.jar" > /dev/null && curl -s "http://localhost:12391/admin/status" | grep -q "height"; then
             if [ -f "${HOME}/qortal/stop.sh" ]; then
                 "${HOME}/qortal/stop.sh"
+                echo -e "${CYAN} Sleeping for 10 seconds to ensure that Qortal fully stopped...${NC}"
+                sleep 10
             else
                 curl -X POST "http://localhost:12391/admin/stop" -H  "X-API-KEY: $(cat ${HOME}/qortal/apikey.txt)"
+                echo -e "${CYAN} Sleeping for 20 seconds to allow Qortal to fully stop...${NC}"
+                sleep 20
             fi
         fi
         mkdir -p "$HOME/backups"

@@ -19,12 +19,37 @@ if [ ! -d "${ICON_SOURCE_DIR}" ]; then
   echo "🔽 Downloading Qortal icon set..."
   mkdir -p "${HOME}/iconTemp"
   trap 'rm -rf "${HOME}/iconTemp"' EXIT
-  cd "${HOME}/iconTemp"
-  curl -L -o icons.zip https://cloud.qortal.org/s/machinePicturesFolder/download
-  unzip icons.zip
-  mv Pictures/* "${HOME}/Pictures/"
-  cd
+  cd "${HOME}/iconTemp" || exit 1
+
+  #TODO - UPDATE THESE DOWNLOAD LOCATIONS WITH QDN LOCATIONS (MOST LIKELY PUBLISHED AS A WEBSITE TO ALLOW DIRECT WGET DOWNLOADS)
+
+  PRIMARY_URL="https://cloud.qortal.org/s/machinePicturesFolder/download" 
+  BACKUP_URL="https://cloud.crowetic.com/s/m9GZyy8k6n7NYJZ/download"  
+
+  echo "🌐 Trying primary source..."
+  if curl -fL -o Pictures.zip "$PRIMARY_URL"; then
+    echo "✅ Downloaded from primary."
+  else
+    echo "⚠️ Primary download failed. Trying backup source..."
+    if curl -fL -o Pictures.zip "$BACKUP_URL"; then
+      echo "✅ Downloaded from backup."
+    else
+      echo "❌ Both downloads failed. Aborting. ICON FILES FAILED TO DOWNLOAD, PLEASE RUN ./create-icon-theme-uni.sh LATER TO TRY AGAIN!"
+      exit 1
+    fi
+  fi
+
+  if unzip Pictures.zip; then
+    echo "📂 Extracted icon archive."
+    mv Pictures/* "${HOME}/Pictures/"
+  else
+    echo "❌ Failed to unzip icon archive. Aborting."
+    exit 1
+  fi
+
+  cd || exit 1
 fi
+
 
 # Define icon mappings
 declare -A ICON_MAP=(
