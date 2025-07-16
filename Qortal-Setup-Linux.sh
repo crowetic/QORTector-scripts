@@ -32,36 +32,33 @@ render_gradient_string() {
 
 rainbowize_text() {
     local text="$1"
-    local freq=0.2
-    local i=0
+    local freq=0.15
     local pi=3.14159265
-    local output=""
+    local i=0
+    local r g b char
 
-    clamp() {
-        local val="$1" min="$2" max="$3"
-        if (( val < min )); then echo "$min"; elif (( val > max )); then echo "$max"; else echo "$val"; fi
-    }
-
-    while IFS= read -r -n1 char || [[ -n "$char" ]]; do
+    while IFS= read -r -n1 char || [ -n "$char" ]; do
         if [[ "$char" == $'\n' ]]; then
-            output+=$'\n'
+            echo    # newline
             continue
         fi
 
-        r=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 0) + 1)) }')
-        g=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 2*3.1415/3) + 1)) }')
-        b=$(awk -v i="$i" -v f="$freq" 'BEGIN { printf("%d", 127 * (sin(f*i + 4*3.1415/3) + 1)) }')
+        # ANSI-safe: skip formatting on control characters
+        if [[ "$char" =~ [[:cntrl:]] ]]; then
+            continue
+        fi
 
-        r=$(clamp "$r" 60 200)
-        g=$(clamp "$g" 60 200)
-        b=$(clamp "$b" 60 200)
+        r=$(printf "%.0f" "$(echo "s($freq*$i + 0) * 95 + 160" | bc -l)")
+        g=$(printf "%.0f" "$(echo "s($freq*$i + 2*$pi/3) * 95 + 160" | bc -l)")
+        b=$(printf "%.0f" "$(echo "s($freq*$i + 4*$pi/3) * 95 + 160" | bc -l)")
 
-        output+="#$(printf "%02x%02x%02x" "$r" "$g" "$b")$char"
+        printf "\e[38;2;%d;%d;%dm%s" "$r" "$g" "$b" "$char"
         ((i++))
     done <<< "$text"
 
-    echo -n "$output"
+    echo -e "\e[0m"
 }
+
 
 
 
