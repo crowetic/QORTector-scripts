@@ -24,7 +24,7 @@ render_gradient_string() {
     echo -e "\e[0m"
 }
 
-rainbowize_ascii() {
+rainbowize_text() {
     local text="$1"
     local freq=0.15
     local i=0
@@ -50,13 +50,82 @@ rainbowize_ascii() {
     echo "$output"
 }
 
-ascii_block='
-Qortal Universal Linux Install Script
-By: crowetic
+intro_block='
+---------------------------------------- 
+-Qortal Universal Linux Install Script -
+----------------------------------------
+--------------------------------------------------------------------------------
+-(a fully featured setup script for Qortal and Qortal Hub on any Linux Desktop)- 
+--------------------------------------------------------------------------------
+'
+text_001='
+This script will:
+'
+text_002='
+- Configure target machine as a fully functional Qortal Node
+'
+text_003='
+- Setup both Qortal Core (qortal) and Qortal Hub (Qortal-Hub) in "${HOME}/qortal"
+'
+text_004='
+- Correctly establish launchers for Qortal Hub
+'
+text_005='
+- Correctly create entires in desktop environment menus for Qortal Hub
+'
+text_006='
+- Ensure Qortal Hub has required no-sandbox flag if system requires it
+'
+text_007='
+- Ensure all configuration is optimal
+'
+text_008='
+- Offer to establish automatic Qortal Node checker script that ensures node is always synchronized/updated/ready to use.
+'
+text_009='
+... AND MUCH MORE! This all ensures that your machine is the most optimal Qortal node possible! 
+'
+text_010='
+Script written by: crowetic
+'
+text_011='
+Reach out with any questions or issues. This script is meant to work on any Desktop Linux distribution, but if any issues pop up, please let us know!
+'
+text_012='
+THANK YOU, AND WELCOME TO THE TRUE NEXT GENERATION OF THE INTERNET, QORTAL!
+'
+text_013='
+Script will now begin...
 '
 
-rainbowized=$(rainbowize_ascii "$ascii_block")
-render_gradient_string "$rainbowized"
+introtext=$(rainbowize_text "$intro_block")
+render_gradient_string "$introtext"
+sleep 1
+render_gradient_string "$text_001"
+sleep 1
+render_gradient_string "$text_002"
+sleep 0.25
+render_gradient_string "$text_003"
+sleep 0.25
+render_gradient_string "$text_004"
+sleep 0.25
+render_gradient_string "$text_005"
+sleep 0.25
+render_gradient_string "$text_006"
+sleep 0.25
+render_gradient_string "$text_007"
+sleep 0.25
+render_gradient_string "$text_008"
+sleep 0.25
+render_gradient_string "$text_009"
+sleep 0.25
+render_gradient_string "$text_010"
+sleep 0.25
+render_gradient_string "$text_011"
+sleep 0.5
+render_gradient_string "$text_012"
+sleep 1 
+render_gradient_string "$text_013"
 
 BACKUP_EXECUTED=false
 QORTAL_CORE_GOOD=false
@@ -154,9 +223,9 @@ fi
 echo -e "\n ${CYAN}Checking for Desktop Environment..."
 if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP" ]; then
     echo -e "\n ${YELLOW} Setting up Qortal Icon Theme..."
-    curl -LO https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme.sh
-    chmod +x create-icon-theme.sh
-    ./create-icon-theme.sh
+    curl -LO https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh
+    chmod +x create-icon-theme-uni.sh
+    ./create-icon-theme-uni.sh
     echo -e "\n ${GREEN} DESKTOP ENVIRONMENT FOUND, INSTALLING QORTAL HUB..."
 
     ARCH=$(uname -m)
