@@ -94,6 +94,16 @@ case "$DISTRO" in
         ;;
 esac
 
+if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP" ] || [ -d "${HOME}/Desktop" ]; then
+    if [ ! -f /usr/share/desktop-directories/Qortal.directory ]; then
+    echo -e "${CYAN}📁 Installing system-wide Qortal.directory category...${NC}"
+    echo "[Desktop Entry]
+Name=Qortal
+Icon=qortal-logo
+Type=Directory" | sudo tee /usr/share/desktop-directories/Qortal.directory > /dev/null
+    fi
+fi
+
 # Download and Install Qortal Core
 echo -e "${CYAN}⬇️ Downloading Qortal Core...${NC}"
 cd "$HOME"
