@@ -200,44 +200,37 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
 
     echo -e "${GREEN}✅ Qortal Core + Hub downloaded and ready!${NC}"
 
-    # Optional: Install Desktop Launchers if desktop detected
+    echo -e "${CYAN}🧩 Creating Qortal menu category...${NC}"
+    mkdir -p "$HOME/.local/share/desktop-directories"
+    cat > "$HOME/.local/share/desktop-directories/Qortal.directory" <<EOL
+[Desktop Entry]
+Name=Qortal
+Comment=Qortal Applications
+Icon=qortal-logo
+Type=Directory
+EOL
+
+    echo -e "${CYAN}🖥️  Creating Qortal Hub launcher...${NC}"
+    mkdir -p "$HOME/.local/share/applications"
+    cat > "$HOME/.local/share/applications/qortal-hub.desktop" <<EOL
+[Desktop Entry]
+Name=Qortal Hub
+Comment=Launch Qortal Hub
+Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
+Icon=qortal-hub
+Terminal=false
+Type=Application
+Categories=Qortal;
+EOL
+
+    # Optional desktop copy
+    if [ -d "$HOME/Desktop" ]; then
+        cp "$HOME/.local/share/applications/qortal-hub.desktop" "$HOME/Desktop/"
+    fi
+
+    # Optional force refresh
     if command -v xdg-desktop-menu >/dev/null 2>&1; then
-        echo -e "${CYAN}🖥️  Setting up desktop launchers...${NC}"
-        mkdir -p "$HOME/.local/share/applications"
-
-        cat > "$HOME/.local/share/applications/qortal-hub.desktop" <<EOL
-[Desktop Entry]
-Name=Qortal Hub
-Comment=Launch Qortal Hub
-Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
-Icon=qortal-hub
-Terminal=false
-Type=Application
-Categories=Utility;
-EOL
-
-        echo -e "\n ${GREEN}✅ Desktop launcher created at ~/.local/share/applications/qortal-hub.desktop${NC}"
-        if [ -d "${HOME}/Desktop" ]; then
-            cp "$HOME/.local/share/applications/qortal-hub.desktop" "${HOME}/Desktop/"
-        fi
-    else
-        echo -e "\n ${YELLOW}ℹ️ No desktop environment detected or missing xdg tools. Skipping applications menu launcher setup.${NC}"        
-        echo -e "\n ${CYAN} Checking for Desktop folder..."
-        if [ -d "${HOME}/Desktop" ]; then
-            echo -e "Desktop folder found, creating desktop launcher..."
-            cat > "${HOME}/Desktop/qortal-hub.desktop" <<EOL
-[Desktop Entry]
-Name=Qortal Hub
-Comment=Launch Qortal Hub
-Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
-Icon=qortal-hub
-Terminal=false
-Type=Application
-Categories=Utility;
-EOL
-        else 
-            echo -e "${RED} Display found, but no Desktop folder found? Skipping Launcher creation..."
-        fi
+        xdg-desktop-menu forceupdate
     fi
 
 fi
