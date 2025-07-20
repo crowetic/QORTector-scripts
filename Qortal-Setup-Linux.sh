@@ -140,27 +140,16 @@ if [ -d "$HOME/qortal" ]; then
         echo -e "${YELLOW}⚠️ Existing 'qortal' folder found. Backing it up...${NC}"
         mv "$HOME/qortal" "$HOME/backups/qortal-$(date +%s)"
         BACKUP_EXECUTED=true
-        curl -LO https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
-        unzip qortal.zip
-        rm qortal.zip
-        chmod +x "$HOME/qortal/"*.sh
     fi
 fi
 
 if [ "$QORTAL_CORE_GOOD" == "false" ]; then
-    if [ -d "${HOME}/qortal" ]; then
-        echo "${YELLOW} INITIAL BACKUP DIDN'T DETECT FAILED QORTAL, SECONDARY BACKUP CHECK DID, BACKING UP QORTAL FOR LATER RESTORE...AND FORCE-KILLING JAVA...${NC}"
-        killall -9 java
-        mkdir -p "$HOME/backups"
-        echo -e "${YELLOW}⚠️ Existing 'qortal' folder found. Backing it up...${NC}"
-        mv "$HOME/qortal" "$HOME/backups/qortal-$(date +%s)"
-        BACKUP_EXECUTED=true
-    fi
-
+    echo "${GREEN}Downloading Qortal Core...${NC}"
     curl -LO https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
     unzip qortal.zip
     rm qortal.zip
     chmod +x "$HOME/qortal/"*.sh
+    chmod +x "$HOME/qortal/qort"
 fi
 
 # Download Architecture-specific Qortal Hub
