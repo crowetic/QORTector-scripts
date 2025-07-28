@@ -61,38 +61,114 @@ BACKUP_EXECUTED=false
 QORTAL_CORE_GOOD=false
 
 
-# Detect Distro
+# --- Distro + Package Manager detection (robust) ---
 if [ -f /etc/os-release ]; then
     . /etc/os-release
-    DISTRO=$ID
-    VERSION=$VERSION_ID
+    DISTRO_ID="${ID,,}"
+    DISTRO_VER="$VERSION_ID"
+    DISTRO_LIKE="${ID_LIKE,,}"
 else
     echo -e "${RED}❌ Cannot detect Linux distribution. Please install dependencies manually.${NC}"
     exit 1
 fi
 
-echo -e "${YELLOW}📋 Detected distro:${NC} ${GREEN}${DISTRO}${NC} ${CYAN}${VERSION}${NC}"
+# Allow override for testing: export QSL_FORCE_FAMILY=debian|rhel|arch|suse|alpine
+FAMILY=""
+if [ -n "${QSL_FORCE_FAMILY:-}" ]; then
+    FAMILY="$QSL_FORCE_FAMILY"
+else
+    if [[ "$DISTRO_ID" == "ubuntu" || "$DISTRO_ID" == "debian" || "$DISTRO_ID" == "linuxmint" || "$DISTRO_ID" == "raspbian" || "$DISTRO_LIKE" == *"debian"* || "$DISTRO_LIKE" == *"ubuntu"* ]]; then
+        FAMILY="debian"
+    elif [[ "$DISTRO_ID" == "fedora" || "$DISTRO_ID" == "rhel" || "$DISTRO_ID" == "centos" || "$DISTRO_ID" == "rocky" || "$DISTRO_ID" == "almalinux" || "$DISTRO_LIKE" == *"rhel"* || "$DISTRO_LIKE" == *"fedora"* ]]; then
+        FAMILY="rhel"
+    elif [[ "$DISTRO_ID" == "arch" || "$DISTRO_ID" == "manjaro" || "$DISTRO_LIKE" == *"arch"* ]]; then
+        FAMILY="arch"
+    elif [[ "$DISTRO_ID" == "opensuse-tumbleweed" || "$DISTRO_ID" == "opensuse-leap" || "$DISTRO_ID" == "sles" || "$DISTRO_LIKE" == *"suse"* ]]; then
+        FAMILY="suse"
+    elif [[ "$DISTRO_ID" == "alpine" ]]; then
+        FAMILY="alpine"
+    fi
+fi
 
-# Install Required Packages
+# sudo wrapper (don’t use sudo if already root)
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+echo -e "${YELLOW}📋 Detected distro:${NC} ${GREEN}${DISTRO_ID}${NC} ${CYAN}${DISTRO_VER}${NC}  (family=${FAMILY:-unknown})"
+
 echo -e "${CYAN}🔧 Installing dependencies...${NC}"
-case "$DISTRO" in
-    ubuntu|debian)
-        sudo apt update
-        sudo apt install -y openjdk-17-jre curl unzip libfuse2 jq zlib1g-dev imagemagick
+
+set +e  # we'll handle fallbacks manually in this block
+
+case "$FAMILY" in
+    debian)
+        $SUDO apt-get update -y
+        # Try JRE 17 (headless acceptable), and libfuse2 for AppImage (Hub)
+        $SUDO apt-get install -y curl unzip jq imagemagick zlib1g-dev || true
+        $SUDO apt-get install -y openjdk-17-jre || $SUDO apt-get install -y openjdk-17-jre-headless || true
+        $SUDO apt-get install -y libfuse2 || true
         ;;
-    fedora)
-        sudo dnf install -y java-17-openjdk curl unzip fuse jq zlib-devel ImageMagick
+    rhel)
+        # dnf or yum
+        PM="dnf"; command -v dnf >/dev/null 2>&1 || PM="yum"
+        $SUDO $PM -y install curl unzip jq ImageMagick zlib-devel || true
+        $SUDO $PM -y install java-17-openjdk || true
+        # FUSE2 is typically 'fuse' (FUSE3 is 'fuse3'); AppImage needs FUSE2
+        $SUDO $PM -y install fuse || true
         ;;
     arch)
-        sudo pacman -Sy --noconfirm jre17-openjdk curl unzip fuse2 jq zlib imagemagick
+        $SUDO pacman -Sy --noconfirm --needed curl unzip jq zlib imagemagick || true
+        $SUDO pacman -Sy --noconfirm --needed jre17-openjdk || true
+        # AppImage needs FUSE2 on Arch
+        $SUDO pacman -Sy --noconfirm --needed fuse2 || true
+        ;;
+    suse)
+        $SUDO zypper -n refresh
+        $SUDO zypper -n install curl unzip jq ImageMagick zlib-devel || true
+        $SUDO zypper -n install java-17-openjdk || true
+        # FUSE2 compat (package names vary by SUSE version); try both
+        $SUDO zypper -n install fuse || true
+        $SUDO zypper -n install fuse2 || true
         ;;
     alpine)
-        sudo apk add --no-cache openjdk17 curl unzip fuse jq zlib-dev imagemagick
+        $SUDO apk update
+        # Alpine package names differ slightly; prefer openjdk17-jre
+        $SUDO apk add --no-cache curl unzip jq imagemagick zlib-dev || true
+        $SUDO apk add --no-cache openjdk17-jre || $SUDO apk add --no-cache openjdk17 || true
+        # Alpine uses fuse (may need fuse-openrc on non-systemd)
+        $SUDO apk add --no-cache fuse || true
         ;;
     *)
-        echo -e "${RED}⚠️ Unsupported distro: ${DISTRO}. Please install openjdk-17, curl, unzip, jq, zlib1g-dev and fuse manually.${NC}"
+        echo -e "${RED}⚠️ Unsupported or unknown distro family (ID=${DISTRO_ID}, LIKE=${DISTRO_LIKE}).${NC}"
+        echo -e "${YELLOW}Please install manually: Java 17 JRE, curl, unzip, jq, zlib dev headers, ImageMagick, and FUSE2 (for AppImage).${NC}"
         ;;
 esac
+
+set -e
+
+# Post-checks: warn if critical bits missing
+MISSING=()
+command -v java >/dev/null 2>&1 || MISSING+=("java-17")
+command -v curl >/dev/null 2>&1 || MISSING+=("curl")
+command -v unzip >/dev/null 2>&1 || MISSING+=("unzip")
+command -v jq >/dev/null 2>&1 || MISSING+=("jq")
+command -v convert >/dev/null 2>&1 || MISSING+=("ImageMagick")
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+    echo -e "${RED}❌ Missing required tools: ${MISSING[*]}${NC}"
+    echo -e "${YELLOW}Install them with your package manager, then re-run the script.${NC}"
+    exit 1
+fi
+
+# FUSE/AppImage fallback note: If libfuse2 isn't available, Hub can still run with extraction.
+if ! ldconfig -p 2>/dev/null | grep -q 'libfuse.so.2'; then
+    echo -e "${YELLOW}⚠️ libfuse2 not found. AppImages may fail to mount. We'll fall back to extraction mode when launching the Hub.${NC}"
+    export APPIMAGE_EXTRACT_AND_RUN=1
+fi
+
 
 if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP" ] || [ -d "${HOME}/Desktop" ]; then
     if [ ! -f /usr/share/desktop-directories/Qortal.directory ]; then
@@ -107,50 +183,69 @@ fi
 # Download and Install Qortal Core
 echo -e "${CYAN}⬇️ Downloading Qortal Core...${NC}"
 cd "$HOME"
-if [ -d "$HOME/qortal" ]; then
-    if pgrep -f "qortal.jar" > /dev/null && curl -s "http://localhost:12391/admin/status" | grep -q "height"; then
-        STATUS_JSON=$(curl -s http://localhost:12391/admin/status)
 
+QORTAL_DIR="$HOME/qortal"
+BACKUP_DIR="$HOME/backups/qortal-$(date +%s)"
+
+function stop_qortal_core() {
+    echo -e "${CYAN}Stopping Qortal Core...${NC}"
+    if [ -f "$QORTAL_DIR/stop.sh" ]; then
+        bash "$QORTAL_DIR/stop.sh"
+    elif [ -f "$QORTAL_DIR/apikey.txt" ]; then
+        curl -sf -X POST "http://localhost:12391/admin/stop" \
+            -H "X-API-KEY: $(cat "$QORTAL_DIR/apikey.txt")"
+    fi
+    echo -e "${CYAN}Sleeping 15s to ensure shutdown...${NC}"
+    sleep 15
+}
+
+function backup_qortal_dir() {
+    mkdir -p "$HOME/backups"
+    echo -e "${YELLOW}⚠️ Backing up existing Qortal directory to $BACKUP_DIR...${NC}"
+    mv "$QORTAL_DIR" "$BACKUP_DIR"
+    BACKUP_EXECUTED=true
+}
+
+QORTAL_RUNNING=false
+QORTAL_SYNCED=false
+BACKUP_EXECUTED=false
+
+if [ -d "$QORTAL_DIR" ]; then
+    if pgrep -f "qortal.jar" > /dev/null && curl -sf "http://localhost:12391/admin/status" | grep -q "height"; then
+        STATUS_JSON=$(curl -s "http://localhost:12391/admin/status")
         IS_SYNCING=$(echo "$STATUS_JSON" | jq -r '.isSynchronizing')
         SYNC_PERCENT=$(echo "$STATUS_JSON" | jq -r '.syncPercent')
 
-        echo "🛰️ ${YELLOW}Syncnronizing:${NC} ${CYAN}$IS_SYNCING${NC}"
+        echo "🛰️ ${YELLOW}Syncing:${NC} ${CYAN}$IS_SYNCING${NC}"
         echo "📊 ${YELLOW}Sync Percent:${NC} ${CYAN}$SYNC_PERCENT${NC}"
-    fi
 
-    if [[ "$IS_SYNCING" == "false" || "$SYNC_PERCENT" == "100" ]]; then
-        echo "${GREEN}✅ Qortal Core is fully synchronized. No Backup needed...${NC}"
-        BACKUP_EXECUTED=false
-        QORTAL_CORE_GOOD=true
-    else
-        echo "${RED}⚠️ Qortal Core is not fully synced.${NC} ${CYAN}Proceeding...Will stop Qortal, backup existing data, and continue...${NC}"
-    
-        if pgrep -f "qortal.jar" > /dev/null && curl -s "http://localhost:12391/admin/status" | grep -q "height"; then
-            if [ -f "${HOME}/qortal/stop.sh" ]; then
-                "${HOME}/qortal/stop.sh"
-                echo -e "${CYAN} Sleeping for 10 seconds to ensure that Qortal fully stopped...${NC}"
-                sleep 10
-            else
-                curl -X POST "http://localhost:12391/admin/stop" -H  "X-API-KEY: $(cat ${HOME}/qortal/apikey.txt)"
-                echo -e "${CYAN} Sleeping for 20 seconds to allow Qortal to fully stop...${NC}"
-                sleep 20
-            fi
+        if [[ "$IS_SYNCING" == "false" && "$SYNC_PERCENT" == "100" ]]; then
+            QORTAL_SYNCED=true
+            QORTAL_RUNNING=true
+            echo -e "${GREEN}✅ Qortal is fully synced. No backup needed.${NC}"
+        else
+            echo -e "${RED}⚠️ Qortal is running but not fully synced.${NC}"
+            stop_qortal_core
+            backup_qortal_dir
         fi
-        mkdir -p "$HOME/backups"
-        echo -e "${YELLOW}⚠️ Existing 'qortal' folder found. Backing it up...${NC}"
-        mv "$HOME/qortal" "$HOME/backups/qortal-$(date +%s)"
-        BACKUP_EXECUTED=true
+    else
+        echo -e "${YELLOW}Qortal Core is not running or not accessible.${NC}"
+        backup_qortal_dir
     fi
 fi
 
-if [ "$QORTAL_CORE_GOOD" == "false" ]; then
-    echo "${GREEN}Downloading Qortal Core...${NC}"
+# If we backed up or there was no qortal dir, download fresh
+if [ "$QORTAL_SYNCED" != "true" ]; then
+    echo -e "${CYAN}⬇️ Downloading fresh Qortal Core...${NC}"
     curl -LO https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
-    unzip qortal.zip
+    unzip -q qortal.zip
     rm qortal.zip
     chmod +x "$HOME/qortal/"*.sh
-    chmod +x "$HOME/qortal/qort"
+    QORTAL_CORE_GOOD=false
+else
+    QORTAL_CORE_GOOD=true
 fi
+
 
 # Download Architecture-specific Qortal Hub
 echo -e "\n ${CYAN}Checking for Desktop Environment..."
@@ -195,6 +290,7 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
         SANDBOX_FLAG=""
         kill -15 ${HUB_PID}
         killall -15 "Qortal Hub"
+        wait $HUB_PID 2>/dev/null || true
     fi
 
     echo -e "${GREEN}✅ Qortal Core + Hub downloaded and ready!${NC}"
@@ -205,7 +301,7 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
 [Desktop Entry]
 Name=Qortal
 Comment=Qortal Applications
-Icon=qortal-logo
+Icon=qortal-menu-button-3
 Type=Directory
 EOL
 
@@ -221,6 +317,23 @@ Terminal=false
 Type=Application
 Categories=Qortal;
 EOL
+    echo -e "${CYAN} Creating Qortal Core Desktop Launcher..."
+    curl -LO https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
+    chmod +x start-qortal-core.sh
+    if [ -f "${HOME}/start-qortal-core.sh" ]; then
+        cat > "$HOME/.local/share/applications/qortal-core.desktop" <<EOL
+[Desktop Entry]
+Name=Qortal Core
+Comment=Launch Qortal Hub
+Exec=$HOME/start-qortal-core.sh
+Icon=qortal
+Terminal=false
+Type=Application
+Categories=Qortal;
+EOL
+    else 
+        echo -e "${RED}Qortal Start Script failed to download, not creating Qortal Core launcher, start qortal with '${HOME}/qortal/start.sh' script from terminal ${NC}"
+    fi
 
     # Optional desktop copy
     if [ -d "$HOME/Desktop" ]; then
