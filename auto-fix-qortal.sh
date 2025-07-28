@@ -337,8 +337,8 @@ no_local_height() {
         echo "${GREEN}Node is good, re-checking height and continuing...${NC}\n"
         check_height
     else 
-        echo "${RED}Starting Qortal Core FAILED. Please consider restarting the computer and waiting 30 minutes.${NC}\n"
-        update_script
+        echo "${RED}Starting Qortal Core FAILED. Forcing bootstrap to resolve any remaining issues...${NC}\n"
+        force_bootstrap
     fi
 }
 
@@ -379,6 +379,7 @@ force_bootstrap() {
     sleep 5
     ./start.sh
     cd || exit 1
+    echo "${GREEN} Qortal Core started, and should be bootstrapping, please wait... ${NC} \n"
     update_script
 }
     
@@ -448,6 +449,7 @@ potentially_update_settings() {
     fi
 
     echo "${GREEN}Settings file is now valid. Proceeding...${NC}"
+    cd || exit 1
     return 0
 }
 
