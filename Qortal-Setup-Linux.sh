@@ -175,7 +175,7 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     echo -e "${CYAN}📁 Installing system-wide Qortal.directory category...${NC}"
     echo "[Desktop Entry]
 Name=Qortal
-Icon=qortal-logo
+Icon=qortal-menu-button-3
 Type=Directory" | sudo tee /usr/share/desktop-directories/Qortal.directory > /dev/null
     fi
 fi
@@ -261,7 +261,7 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     cd "$HOME/qortal"
     if [ "$ARCH" = "aarch64" ]; then
         echo -e "ARM64 NEEDED. Making required modifications to url..."
-        HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64/AppImage"
+        HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64.AppImage"
     else
         HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub.AppImage"
     fi
@@ -324,7 +324,7 @@ EOL
         cat > "$HOME/.local/share/applications/qortal-core.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Core
-Comment=Launch Qortal Hub
+Comment=Launch Qortal Core
 Exec=$HOME/start-qortal-core.sh
 Icon=qortal
 Terminal=false
@@ -352,15 +352,19 @@ if [ "$BACKUP_EXECUTED" = true ]; then
     LATEST_BACKUP=$(ls -td "${HOME}"/backups/qortal-* | head -n 1)
     if [ -d "${LATEST_BACKUP}/qortal-backup" ]; then
         echo -e "\n Copying qortal-backup folder to new installation directory..."
-        rsync -raPz "${LATEST_BACKUP}/qortal-backup" "${HOME}/qortal/qortal-backup"
+        rsync -raPz "${LATEST_BACKUP}/qortal-backup/" "${HOME}/qortal/qortal-backup/"
     fi
     if [ -d "${LATEST_BACKUP}/lists" ]; then
         echo -e "\n Copying follow and block lists to new installation directory..."
-        rsync -raPz "${LATEST_BACKUP}/lists" "${HOME}/qortal/lists"
+        rsync -raPz "${LATEST_BACKUP}/lists/" "${HOME}/qortal/lists/"
     fi
     if [ -d "${LATEST_BACKUP}/data" ]; then
-        echo -e "\n...moving data folder from backup..."
-        mv "${LATEST_BACKUP}/data" "${HOME}/qortal/data"
+        echo -e "\n ${GREEN}...moving data folder from backup...${NC}"
+        mv "${LATEST_BACKUP}/data" "${HOME}/qortal/"
+    fi 
+    if [ -d "${LATEST_BACKUP}/apikey.txt" ]; then
+        echo -e "\n...copying apikey.txt to new installation dir..."
+        rsync -raPz "${LATEST_BACKUP}/apikey.txt" "${HOME}/qortal/apikey.txt"
     fi 
     echo -e "\n ${GREEN} ✅ Backup minting accounts, trade states, follow/block lists, and data (if in default location) restored from ${LATEST_BACKUP} ${NC}"
     echo -e "\n ${YELLOW} Checking for 'dataPath' setting in ${LATEST_BACKUP}/settings.json... ${NC}"
