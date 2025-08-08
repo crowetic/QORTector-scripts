@@ -310,9 +310,10 @@ no_local_height() {
                 mv "${HOME}/qortal/log4j2.properties" "${HOME}/qortal/backup/logs"
                 curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/log4j2.properties
                 mv log4j2.properties "${HOME}/qortal"
-                echo -e "${RED}Stopping Qortal to apply new logging method...${NC}\n"
+                echo -e "${RED}STOPPING Qortal to apply new logging method...and sleeping 30 seconds to allow full stop...${NC}\n"
                 cd "${HOME}/qortal" || exit 1
                 ./stop.sh 
+                sleep 30
                 cd || exit 1
                 break
             fi
@@ -323,11 +324,11 @@ no_local_height() {
         fi
     fi
 
-    echo "${GREEN}Starting Qortal Core and sleeping 20 min to let it start fully, PLEASE WAIT...${NC}\n"
+    echo "${GREEN}STARTING Qortal Core and sleeping 35 min to let it start fully (even on older/slower machines), PLEASE WAIT...${NC}\n"
     potentially_update_settings
     cd "${HOME}/qortal" || exit 1
     ./start.sh
-    sleep 1220
+    sleep 2100
     cd || exit 1
     echo "${GREEN}Checking if Qortal started correctly...${NC}\n"
     local_height_check=$(curl -sS "http://localhost:12391/blocks/height")
