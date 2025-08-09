@@ -85,7 +85,8 @@ check_internet() {
 
 
 check_for_raspi() {
-    if command -v raspi-config >/dev/null 2>&1; then
+    ARCH=$(uname -m) 
+    if command -v raspi-config >/dev/null 2>&1 || [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
         echo "${YELLOW}Raspberry Pi machine detected, checking for 32bit or 64bit...${NC}\n"
         
         if [ "$(uname -m | grep 'armv7l')" != "" ]; then
