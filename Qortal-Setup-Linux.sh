@@ -21,7 +21,7 @@ text_001='
 This script will:
 '
 text_002='- Configure target machine as a fully functional Qortal Node'
-text_003='- Setup both Qortal Core (qortal) and Qortal Hub (Qortal-Hub) in "${HOME}/qortal"'
+text_003="- Setup both Qortal Core (qortal) and Qortal Hub (Qortal-Hub) in '${HOME}/qortal'"
 text_004='- Correctly establish launchers for Qortal Hub'
 text_005='- Correctly create entries in desktop environment menus for Qortal Hub'
 text_006='- Ensure Qortal Hub has required no-sandbox flag if system requires it'
@@ -175,8 +175,9 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     echo -e "${CYAN}📁 Installing system-wide Qortal.directory category...${NC}"
     echo "[Desktop Entry]
 Name=Qortal
+Comment=Qortal Applications
 Icon=qortal-menu-button-3
-Type=Directory" | sudo tee /usr/share/desktop-directories/Qortal.directory > /dev/null
+Type=Directory" | $SUDO tee /usr/share/desktop-directories/Qortal.directory > /dev/null
     fi
 fi
 
@@ -219,7 +220,7 @@ if [ -d "$QORTAL_DIR" ]; then
         echo "🛰️ ${YELLOW}Syncing:${NC} ${CYAN}$IS_SYNCING${NC}"
         echo "📊 ${YELLOW}Sync Percent:${NC} ${CYAN}$SYNC_PERCENT${NC}"
 
-        if [[ "$IS_SYNCING" == "false" && "$SYNC_PERCENT" == "100" ]]; then
+        if [[ "$IS_SYNCING" == "false" && "$SYNC_PERCENT" -ge "100" ]]; then
             QORTAL_SYNCED=true
             QORTAL_RUNNING=true
             echo -e "${GREEN}✅ Qortal is fully synced. No backup needed.${NC}"
@@ -237,7 +238,7 @@ fi
 # If we backed up or there was no qortal dir, download fresh
 if [ "$QORTAL_SYNCED" != "true" ]; then
     echo -e "${CYAN}⬇️ Downloading fresh Qortal Core...${NC}"
-    curl -LO https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
+    curl -fSLo qortal.zip https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
     unzip -q qortal.zip
     rm qortal.zip
     chmod +x "$HOME/qortal/"*.sh
@@ -259,7 +260,8 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     ARCH=$(uname -m)
     echo -e "\n ${CYAN}🔍 Detected architecture: $ARCH${NC}"
     cd "$HOME/qortal"
-    if [ "$ARCH" = "aarch64" ]; then
+
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
         echo -e "ARM64 NEEDED. Making required modifications to url..."
         HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64.AppImage"
     else
@@ -267,13 +269,19 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     fi
 
     echo -e "\n ${CYAN}⬇️ Downloading Qortal Hub...${NC}"
-    curl -LO "$HUB_URL"
+    curl -fSLO "$HUB_URL"
+
     if [ -f "${HOME}/qortal/Qortal-Hub" ]; then
         echo -e "\n ${GREEN} Existing Hub config found, re-configuring..."
         rm -rf Qortal-Hub
     fi
-    mv Qortal-Hub* Qortal-Hub
-    chmod +x Qortal-Hub
+
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+        mv Qortal-Hub-arm64.AppImage Qortal-Hub
+        chmod +x Qortal-Hub
+    else
+        mv Qortal-Hub.AppImage Qortal-Hub
+    fi
 
     cd ${HOME}
 
@@ -288,9 +296,11 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     else
         echo -e "${GREEN}✅ Qortal Hub launched successfully without --no-sandbox. Killing running test instance...${NC}"
         SANDBOX_FLAG=""
-        kill -15 ${HUB_PID}
-        killall -15 "Qortal Hub"
-        wait $HUB_PID 2>/dev/null || true
+        if kill -15 "$HUB_PID" 2>/dev/null; then
+            wait "$HUB_PID" 2>/dev/null || true
+        else
+            killall -15 "Qortal Hub" 2>/dev/null || true
+        fi
     fi
 
     echo -e "${GREEN}✅ Qortal Core + Hub downloaded and ready!${NC}"
@@ -311,11 +321,11 @@ EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec=$HOME/qortal/Qortal-Hub$SANDBOX_FLAG
+Exec="$HOME/qortal/Qortal-Hub"$SANDBOX_FLAG
 Icon=qortal-hub
 Terminal=false
 Type=Application
-Categories=Qortal;
+Categories=Qortal;Other
 EOL
     echo -e "${CYAN} Creating Qortal Core Desktop Launcher..."
     curl -LO https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
@@ -325,11 +335,11 @@ EOL
 [Desktop Entry]
 Name=Qortal Core
 Comment=Launch Qortal Core
-Exec=$HOME/start-qortal-core.sh
+Exec="$HOME/start-qortal-core.sh"
 Icon=qortal
 Terminal=false
 Type=Application
-Categories=Qortal;
+Categories=Qortal;Other
 EOL
     else 
         echo -e "${RED}Qortal Start Script failed to download, not creating Qortal Core launcher, start qortal with '${HOME}/qortal/start.sh' script from terminal ${NC}"
@@ -362,7 +372,7 @@ if [ "$BACKUP_EXECUTED" = true ]; then
         echo -e "\n ${GREEN}...moving data folder from backup...${NC}"
         mv "${LATEST_BACKUP}/data" "${HOME}/qortal/"
     fi 
-    if [ -d "${LATEST_BACKUP}/apikey.txt" ]; then
+    if [ -f "${LATEST_BACKUP}/apikey.txt" ]; then
         echo -e "\n...copying apikey.txt to new installation dir..."
         rsync -raPz "${LATEST_BACKUP}/apikey.txt" "${HOME}/qortal/apikey.txt"
     fi 

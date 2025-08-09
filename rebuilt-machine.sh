@@ -265,11 +265,11 @@ echo "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
 
 mkdir -p "${HOME}/.local/share/desktop-directories"
 
-cat > "${HOME}/.local/share/desktop-directories/qortal.directory" <<EOL
+cat > "${HOME}/.local/share/desktop-directories/Qortal.directory" <<EOL
 [Desktop Entry]
 Name=Qortal
 Comment=Qortal Applications
-Icon=qortal-menu-button-4
+Icon=qortal-menu-button-3
 Type=Directory
 EOL
 

@@ -7,8 +7,8 @@ echo "==== 🔍 Smart SD Image Shrinker ===="
 
 # --- Cleanup handler (set early so it works on error/CTRL+C) ---
 cleanup() {
-    [[ -n "$LOOP_DEV" ]] && sudo losetup -d "$LOOP_DEV" 2>/dev/null || true
-    [[ -n "$MNT_DIR" && -d "$MNT_DIR" ]] && sudo umount "$MNT_DIR" 2>/dev/null || true
+  [[ -n "$MNT_DIR" && -d "$MNT_DIR" ]] && sudo umount "$MNT_DIR" 2>/dev/null || true
+  [[ -n "$LOOP_DEV" ]] && sudo losetup -d "$LOOP_DEV" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -65,7 +65,27 @@ echo "✅ Selected: $IMAGE"
 
 # --- Attach image ---
 echo "📌 Attaching..."
-LOOP_DEV=$(sudo losetup --find --show -Pf "$IMAGE")
+# Detach any existing loop devices linked to this image
+EXISTING_LOOP=$(losetup -j "$IMAGE" | awk -F: '{print $1}')
+if [ -n "$EXISTING_LOOP" ]; then
+    echo "⚠️ Image already attached at $EXISTING_LOOP, detaching..."
+    sudo losetup -d "$EXISTING_LOOP"
+fi
+
+# Try attaching with partitions
+if ! LOOP_DEV=$(sudo losetup --find --show -Pf "$IMAGE" 2>/dev/null); then
+    echo "❌ Failed to attach loop device. Trying without -P..."
+    if ! LOOP_DEV=$(sudo losetup --find --show "$IMAGE" 2>/dev/null); then
+        echo "❌ Could not attach image at all. Check that the file exists and is not in use."
+        exit 1
+    else
+        echo "ℹ️ Attached without partition scan. Will manually rescan..."
+        sudo partprobe "$LOOP_DEV"
+    fi
+fi
+
+echo "✅ Attached at: $LOOP_DEV"
+
 
 # --- Find largest partition ---
 PARTS=$(lsblk -nrpo NAME "$LOOP_DEV" | grep -E "$LOOP_DEV"p)
@@ -74,7 +94,7 @@ if [ -z "$ROOT_PART" ]; then
     echo "❌ Could not detect root partition."
     exit 1
 fi
-PART_NUM=$(basename "$ROOT_PART" | grep -o '[0-9]*$'])
+PART_NUM=$(basename "$ROOT_PART" | grep -o '[0-9]*$')
 echo "🔍 Rootfs: $ROOT_PART (Partition #$PART_NUM)"
 
 # --- Unmount if mounted ---
