@@ -1,11 +1,32 @@
 {
+    "maxThreadsPerMessageType": [
+        { "messageType": "ARBITRARY_DATA_FILE", "limit": 42 },
+        { "messageType": "GET_ARBITRARY_DATA_FILE", "limit": 42 },
+        { "messageType": "ARBITRARY_DATA", "limit": 42 },
+        { "messageType": "GET_ARBITRARY_DATA", "limit": 42 },
+        { "messageType": "ARBITRARY_DATA_FILE_LIST", "limit": 66 },
+        { "messageType": "GET_ARBITRARY_DATA_FILE_LIST", "limit": 66 },
+        { "messageType": "ARBITRARY_SIGNATURES", "limit": 66 },
+        { "messageType": "ARBITRARY_METADATA", "limit": 66 },
+        { "messageType": "GET_ARBITRARY_METADATA", "limit": 42 },
+        { "messageType": "GET_TRANSACTION", "limit": 66 },
+        { "messageType": "TRANSACTION_SIGNATURES", "limit": 66 },
+        { "messageType": "TRADE_PRESENCES", "limit": 66 }
+],
+    "handshakeThreadPriority": 9,
+    "dbCacheThreadPriority": 6,
+    "networkThreadPriority": 9,
+    "pruningThreadPriority": 6,
+    "synchronizerThreadPriority": 9,
+    "archivingPause": 2500,
     "apiDocumentationEnabled":true,
     "maxPeers": 108,
     "minOutboundPeers": 42,
-    "maxNetworkThreadPoolSize": 2600,
-    "repositoryConnectionPoolSize": 3220,
+    "maxNetworkThreadPoolSize": 1200,
+    "repositoryConnectionPoolSize": 2220,
     "apiWhitelistEnabled": false,
     "blockCacheSize": 1042,
-    "apiRestricted": false,
-    "autoRestartEnabled": true
+    "gapLimit": 1,
+    "allowConnectionsWithOlderPeerVersions": false,
+    "apiRestricted": false
 }
