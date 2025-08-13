@@ -220,7 +220,7 @@ if [ -d "$QORTAL_DIR" ]; then
         echo "🛰️ ${YELLOW}Syncing:${NC} ${CYAN}$IS_SYNCING${NC}"
         echo "📊 ${YELLOW}Sync Percent:${NC} ${CYAN}$SYNC_PERCENT${NC}"
 
-        if [[ "$IS_SYNCING" == "false" && "$SYNC_PERCENT" -ge "100" ]]; then
+        if [ "$IS_SYNCING" == "false" ] || [ "$SYNC_PERCENT" -ge "99" ]; then
             QORTAL_SYNCED=true
             QORTAL_RUNNING=true
             echo -e "${GREEN}✅ Qortal is fully synced. No backup needed.${NC}"
