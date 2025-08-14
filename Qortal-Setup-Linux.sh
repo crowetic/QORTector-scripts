@@ -296,11 +296,9 @@ if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP"
     else
         echo -e "${GREEN}✅ Qortal Hub launched successfully without --no-sandbox. Killing running test instance...${NC}"
         SANDBOX_FLAG=""
-        if kill -15 "$HUB_PID" 2>/dev/null; then
-            wait "$HUB_PID" 2>/dev/null || true
-        else
-            killall -15 "Qortal Hub" 2>/dev/null || true
-        fi
+        kill -15 ${HUB_PID}
+        killall -15 "Qortal Hub"
+        wait $HUB_PID 2>/dev/null || true
     fi
 
     echo -e "${GREEN}✅ Qortal Core + Hub downloaded and ready!${NC}"
