@@ -249,63 +249,37 @@ fi
 
 
 # Download Architecture-specific Qortal Hub
-echo -e "\n ${CYAN}Checking for Desktop Environment..."
-if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ -n "$XDG_CURRENT_DESKTOP" ]; then
-    echo -e "\n ${YELLOW} Setting up Qortal Icon Theme..."
-    curl -LO https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh
-    chmod +x create-icon-theme-uni.sh
-    ./create-icon-theme-uni.sh
-    echo -e "\n ${GREEN} DESKTOP ENVIRONMENT FOUND, INSTALLING QORTAL HUB..."
+# --- Hub + Icons Setup (robust even on headless/SSH) ---
+echo -e "\n${CYAN}🖼️  Preparing Qortal icons and Hub assets...${NC}"
 
-    ARCH=$(uname -m)
-    echo -e "\n ${CYAN}🔍 Detected architecture: $ARCH${NC}"
-    cd "$HOME/qortal"
+# Always attempt icon theme install; it only writes files.
+curl -fsSL -o "${HOME}/create-icon-theme-uni.sh" \
+    https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh
+chmod +x "${HOME}/create-icon-theme-uni.sh"
+# If the script needs sudo internally, it should request it itself.
+# We still check for failure to warn.
+if ! "${HOME}/create-icon-theme-uni.sh"; then
+    echo -e "${YELLOW}⚠️ Icon theme helper returned non-zero. Falling back to basic icons only.${NC}"
+    # Basic fallback: ensure icon dirs exist (hicolor) and drop at least one icon name you reference.
+    mkdir -p "${HOME}/.local/share/icons/hicolor/512x512/apps"
+    mkdir -p "${HOME}/.local/share/icons/hicolor/256x256/apps"
+    # If you have known good PNGs hosted, you can fetch them here:
+    # curl -fsSL -o "${HOME}/.local/share/icons/hicolor/256x256/apps/qortal-hub.png" "<URL-to-icon>"
+    # (Left blank because you rely on the script; this fallback keeps dirs in place.)
+fi
 
-    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-        echo -e "ARM64 NEEDED. Making required modifications to url..."
-        HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64.AppImage"
-    else
-        HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub.AppImage"
-    fi
-
-    echo -e "\n ${CYAN}⬇️ Downloading Qortal Hub...${NC}"
-    curl -fSLO "$HUB_URL"
-
-    if [ -f "${HOME}/qortal/Qortal-Hub" ]; then
-        echo -e "\n ${GREEN} Existing Hub config found, re-configuring..."
-        rm -rf Qortal-Hub
-    fi
-
-    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-        mv Qortal-Hub-arm64.AppImage Qortal-Hub
-        chmod +x Qortal-Hub
-    else
-        mv Qortal-Hub.AppImage Qortal-Hub
-    fi
-
-    cd ${HOME}
-
-    echo -e "\n ${CYAN}🚀 Testing Qortal Hub launch to check if no-sandbox flag is required...${NC}"
-
-    "$HOME/qortal/Qortal-Hub" &
-    HUB_PID=$!
-    sleep 5
-    if ! ps -p "$HUB_PID" > /dev/null; then
-        echo -e "${YELLOW}⚠️ Qortal Hub failed without --no-sandbox. Updating launcher accordingly...${NC}"
-        SANDBOX_FLAG=" --no-sandbox"
-    else
-        echo -e "${GREEN}✅ Qortal Hub launched successfully without --no-sandbox. Killing running test instance...${NC}"
-        SANDBOX_FLAG=""
-        kill -15 ${HUB_PID}
-        killall -15 "Qortal Hub"
-        wait $HUB_PID 2>/dev/null || true
-    fi
-
-    echo -e "${GREEN}✅ Qortal Core + Hub downloaded and ready!${NC}"
-
-    echo -e "${CYAN}🧩 Creating Qortal menu category...${NC}"
-    mkdir -p "$HOME/.local/share/desktop-directories"
-    cat > "$HOME/.local/share/desktop-directories/Qortal.directory" <<EOL
+# Create desktop category in BOTH system-wide (if possible) and user scope.
+# System-wide (best-effort, don't fail script if it errors):
+if [ "$SUDO" != "" ]; then
+    echo "[Desktop Entry]
+Name=Qortal
+Comment=Qortal Applications
+Icon=qortal-menu-button-3
+Type=Directory" | $SUDO tee /usr/share/desktop-directories/Qortal.directory >/dev/null || true
+fi
+# User-local (always):
+mkdir -p "${HOME}/.local/share/desktop-directories"
+cat > "${HOME}/.local/share/desktop-directories/Qortal.directory" <<'EOL'
 [Desktop Entry]
 Name=Qortal
 Comment=Qortal Applications
@@ -313,47 +287,99 @@ Icon=qortal-menu-button-3
 Type=Directory
 EOL
 
-    echo -e "${CYAN}🖥️  Creating Qortal Hub launcher...${NC}"
-    mkdir -p "$HOME/.local/share/applications"
-    cat > "$HOME/.local/share/applications/qortal-hub.desktop" <<EOL
+# Download Hub deterministically (don’t depend on current GUI env)
+ARCH="$(uname -m)"
+echo -e "\n${CYAN}🔍 Detected architecture: ${ARCH}${NC}"
+cd "${HOME}/qortal"
+
+if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64.AppImage"
+    HUB_FILE="Qortal-Hub-arm64.AppImage"
+else
+    HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub.AppImage"
+    HUB_FILE="Qortal-Hub.AppImage"
+fi
+
+echo -e "\n${CYAN}⬇️ Downloading Qortal Hub AppImage...${NC}"
+curl -fSL -o "${HUB_FILE}.tmp" "${HUB_URL}"
+mv -f "${HUB_FILE}.tmp" "${HUB_FILE}"
+
+# Make executable on ALL arches
+chmod +x "${HUB_FILE}"
+# Normalize filename to "Qortal-Hub"
+rm -f "Qortal-Hub"
+mv -f "${HUB_FILE}" "Qortal-Hub"
+
+cd "${HOME}"
+
+# Decide if we should test-launch Hub: only when we really have a GUI
+HAS_GUI=false
+if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ] || [ -n "${XDG_CURRENT_DESKTOP:-}" ]; then
+    HAS_GUI=true
+fi
+
+SANDBOX_FLAG=""
+if $HAS_GUI; then
+    echo -e "\n${CYAN}🚀 Testing Qortal Hub launch (GUI detected)...${NC}"
+    "${HOME}/qortal/Qortal-Hub" &
+    HUB_PID=$!
+    sleep 7
+    if ! ps -p "$HUB_PID" >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ Hub didn’t stay up; will add --no-sandbox to launcher.${NC}"
+        SANDBOX_FLAG=" --no-sandbox"
+    else
+        echo -e "${GREEN}✅ Hub launched OK without --no-sandbox. Stopping test instance...${NC}"
+        kill -15 "$HUB_PID" 2>/dev/null || true
+        # Avoid killall with a spaced name; rely on PID only.
+        wait "$HUB_PID" 2>/dev/null || true
+    fi
+else
+    echo -e "${YELLOW}ℹ️ No GUI session detected. Skipping test launch; creating launchers anyway.${NC}"
+fi
+
+echo -e "${CYAN}🖥️  Creating Qortal Hub launcher...${NC}"
+mkdir -p "${HOME}/.local/share/applications"
+cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec="$HOME/qortal/Qortal-Hub"$SANDBOX_FLAG
+Exec=${HOME}/qortal/Qortal-Hub${SANDBOX_FLAG}
 Icon=qortal-hub
 Terminal=false
 Type=Application
-Categories=Qortal;Other
+Categories=Qortal;Network;Utility;
 EOL
-    echo -e "${CYAN} Creating Qortal Core Desktop Launcher..."
-    curl -LO https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
-    chmod +x start-qortal-core.sh
-    if [ -f "${HOME}/start-qortal-core.sh" ]; then
-        cat > "$HOME/.local/share/applications/qortal-core.desktop" <<EOL
+
+echo -e "${CYAN}🧩 Creating Qortal Core launcher...${NC}"
+curl -fsSL -o "${HOME}/start-qortal-core.sh" \
+    https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
+chmod +x "${HOME}/start-qortal-core.sh"
+cat > "${HOME}/.local/share/applications/qortal-core.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Core
 Comment=Launch Qortal Core
-Exec="$HOME/start-qortal-core.sh"
+Exec=${HOME}/start-qortal-core.sh
 Icon=qortal
 Terminal=false
 Type=Application
-Categories=Qortal;Other
+Categories=Qortal;Network;Utility;
 EOL
-    else 
-        echo -e "${RED}Qortal Start Script failed to download, not creating Qortal Core launcher, start qortal with '${HOME}/qortal/start.sh' script from terminal ${NC}"
-    fi
 
-    # Optional desktop copy
-    if [ -d "$HOME/Desktop" ]; then
-        cp "$HOME/.local/share/applications/qortal-hub.desktop" "$HOME/Desktop/"
-    fi
+# Optional Desktop copies
+[ -d "${HOME}/Desktop" ] && cp -f "${HOME}/.local/share/applications/qortal-hub.desktop" "${HOME}/Desktop/" || true
 
-    # Optional force refresh
-    if command -v xdg-desktop-menu >/dev/null 2>&1; then
-        xdg-desktop-menu forceupdate
-    fi
-
+# Refresh menus/icons where possible (best-effort)
+command -v xdg-desktop-menu >/dev/null 2>&1 && xdg-desktop-menu forceupdate || true
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "${HOME}/.local/share/applications" || true
+# GTK icon cache refresh (best-effort; harmless if not needed)
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    for d in "${HOME}/.local/share/icons/hicolor" "/usr/share/icons/hicolor"; do
+        [ -d "$d" ] && $SUDO gtk-update-icon-cache -f -t "$d" >/dev/null 2>&1 || true
+    done
 fi
+
+echo -e "${GREEN}✅ Qortal Hub + icons staged. If you were on SSH/headless, the launchers/icons will appear when you log into a desktop session.${NC}"
+
 
 if [ "$BACKUP_EXECUTED" = true ]; then
     echo -e "\n ${GREEN} BACKUP DETECTED! Restoring backed-up qortal folder content... ${NC}"
