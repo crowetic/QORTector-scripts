@@ -365,18 +365,85 @@ Type=Application
 Categories=Qortal;Network;Utility;
 EOL
 
-# Optional Desktop copies
-[ -d "${HOME}/Desktop" ] && cp -f "${HOME}/.local/share/applications/qortal-hub.desktop" "${HOME}/Desktop/" || true
+echo -e "${CYAN}🧭 Forcing launchers into the 'Qortal' menu...${NC}"
 
-# Refresh menus/icons where possible (best-effort)
+# 1) Ensure the Qortal.directory exists user-locally (system-wide is best-effort)
+mkdir -p "${HOME}/.local/share/desktop-directories"
+cat > "${HOME}/.local/share/desktop-directories/Qortal.directory" <<'EOL'
+[Desktop Entry]
+Name=Qortal
+Comment=Qortal Applications
+Icon=qortal-menu-button-3
+Type=Directory
+EOL
+
+# 2) Create a menu merge rule that maps Category=Qortal into a 'Qortal' submenu
+#    The generic freedesktop location is applications-merged; many DEs merge this.
+mkdir -p "${HOME}/.config/menus/applications-merged"
+cat > "${HOME}/.config/menus/applications-merged/Qortal.menu" <<'XML'
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+    "http://www.freedesktop.org/standards/menu-spec/1.0/menu.dtd">
+<Menu>
+    <Name>Applications</Name>
+    <!-- Qortal submenu -->
+    <Menu>
+        <Name>Qortal</Name>
+        <Directory>Qortal.directory</Directory>
+        <Include>
+            <Category>Qortal</Category>
+        </Include>
+    </Menu>
+</Menu>
+XML
+
+# Helpful per-DE merges (best-effort; harmless if not present)
+mkdir -p "${HOME}/.config/menus/cinnamon-applications-merged" 2>/dev/null || true
+cp -f "${HOME}/.config/menus/applications-merged/Qortal.menu" \
+    "${HOME}/.config/menus/cinnamon-applications-merged/Qortal.menu" 2>/dev/null || true
+mkdir -p "${HOME}/.config/menus/xfce-applications-merged" 2>/dev/null || true
+cp -f "${HOME}/.config/menus/applications-merged/Qortal.menu" \
+    "${HOME}/.config/menus/xfce-applications-merged/Qortal.menu" 2>/dev/null || true
+
+# 3) Ensure .desktop launchers include the custom category and do NOT include 'Network'
+fix_desktop_categories() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        # Remove any 'Network;' token; ensure 'Qortal;' and 'Utility;' present.
+        # a) normalize Categories line; b) drop Network; c) add Qortal;Utility; if missing
+        if grep -q '^Categories=' "$file"; then
+            sed -i 's/^\(Categories=.*\)$/\1/; s/Network;//g' "$file"
+        else
+            echo "Categories=Utility;" >> "$file"
+        fi
+        # Add Qortal;Utility; if not present
+        grep -q 'Categories=.*Qortal;' "$file" || sed -i 's/^Categories=\(.*\)$/Categories=\1Qortal;/' "$file"
+        grep -q 'Categories=.*Utility;' "$file" || sed -i 's/^Categories=\(.*\)$/Categories=\1Utility;/' "$file"
+    fi
+}
+
+fix_desktop_categories "${HOME}/.local/share/applications/qortal-hub.desktop"
+fix_desktop_categories "${HOME}/.local/share/applications/qortal-core.desktop"
+
+# 4) Refresh caches/menus
+command -v update-desktop-database >/dev/null 2>&1 && \
+    update-desktop-database "${HOME}/.local/share/applications" || true
+
 command -v xdg-desktop-menu >/dev/null 2>&1 && xdg-desktop-menu forceupdate || true
-command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "${HOME}/.local/share/applications" || true
-# GTK icon cache refresh (best-effort; harmless if not needed)
+
+# GTK icon cache update (best-effort)
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     for d in "${HOME}/.local/share/icons/hicolor" "/usr/share/icons/hicolor"; do
         [ -d "$d" ] && $SUDO gtk-update-icon-cache -f -t "$d" >/dev/null 2>&1 || true
     done
 fi
+
+echo -e "${GREEN}✅ Launchers should now appear under the 'Qortal' submenu.${NC}"
+echo -e "${YELLOW}ℹ️ If you still see them under 'Internet', log out/in or restart the panel/menu applet.${NC}"
+
+
+# Optional Desktop copies
+[ -d "${HOME}/Desktop" ] && cp -f "${HOME}/.local/share/applications/qortal-hub.desktop" "${HOME}/Desktop/" || true
+
 
 echo -e "${GREEN}✅ Qortal Hub + icons staged. If you were on SSH/headless, the launchers/icons will appear when you log into a desktop session.${NC}"
 
