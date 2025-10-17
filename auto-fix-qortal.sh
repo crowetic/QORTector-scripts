@@ -281,10 +281,9 @@ check_hash_update_qortal() {
 		rm -rf -- db log.t* qortal.log run.log run.pid qortal.jar 2>/dev/null || true
 		cp -f -- "${HOME}/qortal.jar" "${HOME}/qortal/qortal.jar" 2>/dev/null || true
 		rm -f -- "${HOME}/qortal.jar" "${HOME}/remote.md5" local.md5 2>/dev/null || true
-		potentially_update_settings
-		./start.sh 2>/dev/null || true
 		cd || exit 1
-		check_for_GUI
+		potentially_update_settings
+		force_bootstrap
 	fi
 }
 
@@ -374,7 +373,7 @@ check_height() {
 no_local_height() {
 	p "${WHITE}Checking for bootstrapping/log format...${NC}"
 	if [ -f "${HOME}/qortal/qortal.log" ]; then
-		if tail -n 30 "${HOME}/qortal/qortal.log" 2>/dev/null | grep -Ei 'bootstrap|bootstrapping' >/dev/null 2>&1; then
+		if tail -n 40 "${HOME}/qortal/qortal.log" 2>/dev/null | grep -Ei 'bootstrap|bootstrapping' >/dev/null 2>&1; then
 			p "${RED}Bootstrapping detected. Updating script and exiting this cycle...${NC}"
 			update_script
 			return 0
