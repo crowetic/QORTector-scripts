@@ -16,7 +16,7 @@
     "handshakeThreadPriority": 8,
     "dbCacheThreadPriority": 2,
     "networkThreadPriority": 7,
-    "pruningThreadPriority": 4,
+    "pruningThreadPriority": 8,
     "synchronizerThreadPriority": 9,
     "archivingPause": 2500,
     "apiDocumentationEnabled":true,
