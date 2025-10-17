@@ -1,10 +1,11 @@
-# crowetic's QORTector-scripts
+# QORTector-scripts
 
 ## All scripts related to Qortal and linux (some Mac compatible) by crowetic.
+Visit https://crowetic.com for more information on crowetic and CHD.
 
 # Primary Scripts / Functions
 
-### Qortal-Setup-Linux.sh 
+### 'Qortal-Setup-Linux.sh' 
 This script is built to automatically **INSTALL and CONFIGURE BOTH the QORTAL CORE AND QORTAL HUB on ANY linux machine**. The script is also available on 'install-linux.qortal.org' but the primary repo that it comes from is here. The clone version on the qortal repo (https://github.com/Qortal/QORTector-scripts) is the one that automatically updates the install-linux link above. 
 
 - Automatically detects the linux version running
@@ -17,6 +18,10 @@ This script is built to automatically **INSTALL and CONFIGURE BOTH the QORTAL CO
 
 This script is definitely the simplest way to install Qortal on any linux computer. 
 
+Run this script in the recommended fashion with the command below... 
+`bash <(curl -fsSL https://install-linux.qortal.org || wget -qO- https://install-linux.qortal.org)`
+
+
 ### 'rebuilt-machine.sh' 
 This script is built to run on Ubuntu and Ubuntu-based Linux distros (PoP-OS, ZorinOS, etc.) It configures and installs all software recommended by default by CHD (https://crowetic.com), and configures a customized version of the **cinnamon desktop environment**. This script is meant to be run on a NEW installation of Ubuntu or supported distros. 
 
@@ -27,8 +32,6 @@ This script is built to run on Ubuntu and Ubuntu-based Linux distros (PoP-OS, Zo
 - Qortal Core installation 
 - Full Qortal autoamtion 
 - Full Qortal integration 
-
-
 
 
 ### 'auto-fix-qortal.sh' 
