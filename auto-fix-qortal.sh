@@ -132,9 +132,13 @@ check_internet() {
 	INTERNET_STATUS="UNKNOWN"
 	TIMESTAMP="$(date +%s)"
 
-	test_connectivity() { # HEAD 200 check
+	test_connectivity() { # HEAD check for 2xx response codes
 		URL=$1
-		curl -s --head --max-time 8 "$URL" | grep -q "200 OK"
+		status="$(curl -s -o /dev/null -I --max-time 8 --write-out '%{http_code}' "$URL" 2>/dev/null)"
+		if [ -n "$status" ] 2>/dev/null && [ "$status" -ge 200 ] 2>/dev/null && [ "$status" -lt 300 ] 2>/dev/null; then
+			return 0
+		fi
+		return 1
 	}
 
 	if ping -c 1 -W 1 8.8.4.4 >/dev/null 2>&1; then
@@ -237,6 +241,7 @@ check_qortal() {
 		if tail -n 20 "${HOME}/qortal/qortal.log" 2>/dev/null | grep -Ei 'bootstrap|bootstrapping' >/dev/null 2>&1; then
 			p "${RED}Bootstrapping detected. Updating script and exiting current cycle...${NC}"
 			update_script
+			return 0
 		fi
 		p "${RED}Core not running; waiting 2 minutes in case it is starting slowly...${NC}"
 		sleep 120
@@ -436,7 +441,7 @@ remote_height_checks() {
 
 	# fall back to last known height or 0
 	case "$local_height" in
-		''|*[!0-9]*) local_height="${local_height:-0}" ;;
+		''|*[!0-9]*) local_height=0 ;;
 	esac
 	case "$height_api_qortal_org" in
 		''|*[!0-9]*) height_api_qortal_org=0 ;;
