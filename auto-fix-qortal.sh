@@ -628,9 +628,19 @@ potentially_update_settings() {
 			ln -sfn "$(basename "$FINAL_BKP")" "$LATEST_GOOD_LINK" 2>/dev/null || true
 			p "${GREEN}settings.json merged successfully (max-merge + forced priorities from remote).${NC}"
 		else
-			p "${RED}Merged settings became invalid. Keeping current settings.${NC}"
-			rm -f -- "$TMP_FILE" "$REMOTE_FILE" 2>/dev/null || true
-			return 1
+			p "${RED}Merged settings became invalid. Falling back to remote defaults.${NC}"
+			if is_valid_json_file "$REMOTE_FILE"; then
+				atomic_write "$REMOTE_FILE" "$SETTINGS_FILE"
+				DEFAULT_BKP="${BACKUP_DIR}/backup-settings-default-${TIMESTAMP}.json"
+				cp -f -- "$SETTINGS_FILE" "$DEFAULT_BKP" 2>/dev/null || true
+				ln -sfn "$(basename "$DEFAULT_BKP")" "$LATEST_GOOD_LINK" 2>/dev/null || true
+				p "${GREEN}settings.json restored from remote defaults.${NC}"
+			else
+				p "${RED}Remote defaults invalid as well. Keeping current settings.${NC}"
+				rm -f -- "$TMP_FILE" "$REMOTE_FILE" 2>/dev/null || true
+				return 1
+			fi
+			rm -f -- "$TMP_FILE" 2>/dev/null || true
 		fi
 	else
 		p "${YELLOW}jq unavailable; skipping merge. (Local file left unchanged.)${NC}"
