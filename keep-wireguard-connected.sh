@@ -1,37 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---- config ----
-WG_IFACE="va3"                          # wg interface name (wg0, va3, etc)
-WG_SERVICE="wg-quick@${WG_IFACE}.service"
+# ---- config (defaults; overridable via /etc/keep-wireguard-connected.conf) ----
+CONF_FILE="/etc/keep-wireguard-connected.conf"
 
-# The "good" external IP *when tunneled* (recommended)
-# Put the public IP you see when traffic egresses via your IPFire/WG exit.
-EXPECTED_EGRESS_IP="51.81.16.137"
+# Set defaults FIRST (so set -u won't explode if config omits a var)
+WG_IFACE_DEFAULT="va3"
+EXPECTED_EGRESS_IP_DEFAULT="51.81.16.137"
+VPN_PING_TARGET_DEFAULT="10.0.0.1"
 
-# If you can't rely on a single fixed egress IP, set EXPECTED_EGRESS_IP=""
-# and instead set a VPN-only reachable check target below.
-# EXPECTED_EGRESS_IP=""
+TOTAL_WAIT_SEC_DEFAULT=90
+SLEEP_STEP_SEC_DEFAULT=5
 
-# Optional: a known internal/VPN-only IP to ping (e.g. IPFire WG peer address)
-VPN_PING_TARGET="10.0.0.1"              # set "" to disable
-
-# External IP check endpoints (multiple for resilience)
-IP_ECHO_URLS=(
+# Default IP echo endpoints
+IP_ECHO_URLS_DEFAULT=(
   "https://canhazip.com"
   "https://api.ipify.org"
   "https://ifconfig.me/ip"
   "https://icanhazip.com"
 )
 
-# How long to wait after restart for WG to become "correct"
-TOTAL_WAIT_SEC=90
-SLEEP_STEP_SEC=5
+# Default reboot cmd
+REBOOT_CMD_DEFAULT=(/sbin/reboot -f)
 
-# Reboot behavior
-REBOOT_CMD=(/sbin/reboot -f)            # forceful reboot
-# Alternative escalation (comment in if you want)
-# REBOOT_CMD=(/bin/bash -lc 'echo b > /proc/sysrq-trigger')
+# Load config overrides (optional)
+if [[ -f "$CONF_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONF_FILE"
+fi
+
+# Apply defaults if variables were not set by config/env
+WG_IFACE="${WG_IFACE:-$WG_IFACE_DEFAULT}"
+WG_SERVICE="wg-quick@${WG_IFACE}.service"
+
+EXPECTED_EGRESS_IP="${EXPECTED_EGRESS_IP:-$EXPECTED_EGRESS_IP_DEFAULT}"
+VPN_PING_TARGET="${VPN_PING_TARGET:-$VPN_PING_TARGET_DEFAULT}"
+
+TOTAL_WAIT_SEC="${TOTAL_WAIT_SEC:-$TOTAL_WAIT_SEC_DEFAULT}"
+SLEEP_STEP_SEC="${SLEEP_STEP_SEC:-$SLEEP_STEP_SEC_DEFAULT}"
+
+# Allow config to override endpoints by defining IP_ECHO_URLS as an array
+# If not defined, use defaults.
+if ! declare -p IP_ECHO_URLS >/dev/null 2>&1; then
+  IP_ECHO_URLS=("${IP_ECHO_URLS_DEFAULT[@]}")
+fi
+
+# Allow config to override reboot command by defining REBOOT_CMD as an array
+if ! declare -p REBOOT_CMD >/dev/null 2>&1; then
+  REBOOT_CMD=("${REBOOT_CMD_DEFAULT[@]}")
+fi
+
 
 # ---- helpers ----
 log() { echo "[$(date -Is)] $*"; }
