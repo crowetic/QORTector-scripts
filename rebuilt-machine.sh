@@ -83,7 +83,7 @@ if [ "$(uname -m)" = "aarch64" ]; then
 else
     echo "${GREEN} Downloading Qortal Hub ${NC}\n"
     echo "${RED} NOTE - Qortal-UI is DEPRECATED and no longer supported, will not be downloading Qortal-UI ${NC}"
-    curl -L -O https://github.com/Qortal/Qortal-Hub/releases/download/v0.5.3/Qortal-Hub_0.5.3.AppImage
+    curl -L -O https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub.AppImage
 
     mv Qortal-Hub* Qortal-Hub
 fi
