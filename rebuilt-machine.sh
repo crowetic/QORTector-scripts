@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Regular Colors
 BLACK='\033[0;30m'
@@ -11,8 +11,64 @@ CYAN='\033[0;36m'
 WHITE='\033[0;37m'
 NC='\033[0m'
 
-username=$(whoami)
-BACKUP_EXECUTED=false
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+download_with_retry() {
+  local url="$1"
+  local output="$2"
+  local attempts="${3:-6}"
+  local try=1
+  local backoff=2
+  local tmp="${output}.part"
+
+  rm -f "$tmp"
+
+  if command -v wget >/dev/null 2>&1; then
+    while [ "$try" -le "$attempts" ]; do
+      echo "${CYAN} 🌐 Download attempt ${try}/${attempts} (wget): ${url} ${NC}"
+      if wget --tries=1 --timeout=30 --continue -O "$tmp" "$url" && [ -s "$tmp" ]; then
+        mv -f "$tmp" "$output"
+        return 0
+      fi
+      if [ "$try" -lt "$attempts" ]; then
+        echo "${YELLOW} ⚠️ wget attempt failed. Retrying in ${backoff}s... ${NC}"
+        sleep "$backoff"
+        if [ "$backoff" -lt 20 ]; then
+          backoff=$((backoff * 2))
+          [ "$backoff" -gt 20 ] && backoff=20
+        fi
+      fi
+      try=$((try + 1))
+    done
+
+    echo "${YELLOW} ⚠️ wget retries exhausted. Trying curl fallback... ${NC}"
+    if curl --fail --location --show-error --http1.1 --continue-at - --output "$tmp" "$url" && [ -s "$tmp" ]; then
+      mv -f "$tmp" "$output"
+      return 0
+    fi
+  else
+    while [ "$try" -le "$attempts" ]; do
+      echo "${CYAN} 🌐 Download attempt ${try}/${attempts} (curl): ${url} ${NC}"
+      if curl --fail --location --show-error --http1.1 --continue-at - --output "$tmp" "$url" && [ -s "$tmp" ]; then
+        mv -f "$tmp" "$output"
+        return 0
+      fi
+      if [ "$try" -lt "$attempts" ]; then
+        echo "${YELLOW} ⚠️ curl attempt failed. Retrying in ${backoff}s... ${NC}"
+        sleep "$backoff"
+        if [ "$backoff" -lt 20 ]; then
+          backoff=$((backoff * 2))
+          [ "$backoff" -gt 20 ] && backoff=20
+        fi
+      fi
+      try=$((try + 1))
+    done
+  fi
+
+  rm -f "$tmp"
+  echo "${RED} ❌ Failed to download: ${url} ${NC}"
+  return 1
+}
 
 echo "${YELLOW} 🛠 UPDATING 🛠 UBUNTU AND INSTALLING REQUIRED SOFTWARE 📦 PACKAGES 📦 ${NC}\n"
 
@@ -21,7 +77,8 @@ sudo pro config set apt_news=false
 
 sudo apt update
 sudo apt -y upgrade
-sudo apt -y install git jq gnome-software openssh-server unzip vim curl openjdk-21-jre yaru-theme-icon yaru-theme-gtk yaru-theme-unity zlib1g-dev vlc chromium-browser p7zip-full libfuse2 htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors gparted cinnamon-desktop-environment
+sudo apt -y install git jq gnome-software openssh-server unzip vim curl wget ca-certificates openjdk-21-jre yaru-theme-icon yaru-theme-gtk yaru-theme-unity zlib1g-dev vlc chromium-browser p7zip-full htop net-tools bpytop ffmpeg sysbench smartmontools ksnip xsensors fonts-symbola lm-sensors gparted cinnamon-desktop-environment
+sudo apt -y install libfuse2t64 || sudo apt -y install libfuse2 || true
 
 echo "${YELLOW} 📦 INSTALLING SENSORS MONITOR APPLET FOR PANEL...${NC}\n"
 
@@ -48,94 +105,27 @@ EOL
 
 echo "${GREEN} Cinnamon session will be loaded by default on next login! ${NC}\n"
 
-### DOWNLOAD & INSTALL QORTAL CORE ###
-echo "${YELLOW} ⬇️ DOWNLOADING QORTAL CORE AND QORT SCRIPT ${NC}\n"
-
-cd "${HOME}"
-
-if [ -d qortal ]; then
-  mkdir -p backups
-  echo "${PURPLE} qortal DIRECTORY FOUND, BACKING UP ORIGINAL TO '~/backups' AND RE-INSTALLING ${NC}\n"
-  mv qortal "backups/qortal-$(date +%s)"
-  BACKUP_EXECUTED=true
-fi
-
-curl -L -O https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
-unzip qortal*.zip
-rm qortal*.zip
-cd qortal
-rm -f settings.json
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/settings.json
-curl -L -O https://raw.githubusercontent.com/Qortal/qortal/master/tools/qort
-chmod +x *.sh qort
-
-cd "${HOME}"
-
-### INSTALL QORTAL UI & HUB ###
-cd qortal
-
-if [ "$(uname -m)" = "aarch64" ]; then
-    echo "${GREEN} ARM 64-bit detected. Downloading ARM64 Qortal Hub ${NC}\n"
-    echo "${RED} NOTE - Qortal-UI is DEPRECATED and no longer supported, will not be downloading Qortal-UI ${NC}"
-    curl -L -O https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64/AppImage
-    
-    mv Qortal-Hub-arm64* Qortal-Hub
+### RUN FULL QORTAL SETUP ###
+echo "${YELLOW} ⚙️ RUNNING FULL QORTAL SETUP VIA Qortal-Setup-Linux.sh ${NC}\n"
+if [ -f "${SCRIPT_DIR}/Qortal-Setup-Linux.sh" ]; then
+  chmod +x "${SCRIPT_DIR}/Qortal-Setup-Linux.sh"
+  bash "${SCRIPT_DIR}/Qortal-Setup-Linux.sh"
 else
-    echo "${GREEN} Downloading Qortal Hub ${NC}\n"
-    echo "${RED} NOTE - Qortal-UI is DEPRECATED and no longer supported, will not be downloading Qortal-UI ${NC}"
-    curl -L -O https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub.AppImage
-
-    mv Qortal-Hub* Qortal-Hub
-fi
-
-chmod +x Qortal-Hub
-
-# AFTER installing Qortal Core and downloading files: RESTORE BACKUP FOLDER IF BACKUP WAS DONE
-if [ "$BACKUP_EXECUTED" = true ]; then
-  echo -e "\n ${GREEN} BACKUP DETECTED! Restoring backed-up qortal folder content... ${NC}"
-  LATEST_BACKUP=$(ls -td "${HOME}"/backups/qortal-* | head -n 1)
-  rsync -raPz "${LATEST_BACKUP}/qortal-backup" "${HOME}/qortal/qortal-backup"
-  rsync -raPz "${LATEST_BACKUP}/lists" "${HOME}/qortal/lists"
-  if [ -d "${LATEST_BACKUP}/data" ]; then
-    echo -e "\n...moving data folder from backup..."
-    mv "${LATEST_BACKUP}/data" "${HOME}/qortal/data"
-  fi 
-  echo -e "\n ${GREEN} ✅ Backup minting accounts, trade states, follow/block lists, and data (if in default location) restored from ${LATEST_BACKUP} ${NC}"
-  echo -e "\n ${YELLOW} Checking for 'dataPath' setting in ${LATEST_BACKUP}/settings.json... ${NC}"
-  if command -v jq >/dev/null 2>&1; then
-    if jq -e 'has("dataPath")' "${LATEST_BACKUP}/settings.json" >/dev/null 2>&1; then
-      echo -e "\n ✅ dataPath found in backup settings."
-      DATA_PATH=$(jq -r '.dataPath' "${LATEST_BACKUP}/settings.json")
-      echo -e "\n 📁 dataPath: $DATA_PATH"
-      echo -e "\n 🔁 Putting dataPath into new settings.json..."
-      
-      # Apply to the new settings safely
-      jq --arg path "$DATA_PATH" '.dataPath = $path' \
-          "${HOME}/qortal/settings.json" > "${HOME}/qortal/settings.tmp" && \
-          mv "${HOME}/qortal/settings.tmp" "${HOME}/qortal/settings.json"
-    else
-      echo -e "\n ❌ dataPath not found in settings.json (data likely default, already restored). Proceeding..."
-      DATA_PATH=""
-    fi
-  else
-    echo -e "${RED}⚠️ jq not installed. Cannot extract dataPath safely.${NC}"
-    echo -e "${YELLOW}If you used a custom data path, you'll need to manually restore it into settings.json.${NC}"
-    DATA_PATH=""
-  fi
-  echo -e "\n${YELLOW} Data should have been restored, however, please verify this if it matters to you. QDN data can usually be re-obtained from Qortal, but if you are the only publisher of the data, may not be able to be, just FYI..."
+  echo "${RED}❌ Could not find ${SCRIPT_DIR}/Qortal-Setup-Linux.sh${NC}"
+  exit 1
 fi
 
 
 ### DOWNLOAD EXTRA FILES ###
 cd "${HOME}"
 
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh" "refresh-qortal.sh" 5
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh" "auto-fix-qortal.sh" 5
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh" "check-qortal-status.sh" 5
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh" "start-qortal.sh" 5
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh" "start-qortal-core.sh" 5
 #todo update the download location below to multiple locations and QDN location
-curl -L -O https://cloud.qortal.org/s/machinefilesnew/download
+download_with_retry "https://cloud.qortal.org/s/machinefilesnew/download" "download" 6
 
 chmod +x *.sh
 unzip download
@@ -174,7 +164,6 @@ echo "${YELLOW} ⚙️ CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND
 cat > "$HOME/apply-cinnamon-settings.sh" <<'EOL'
 #!/bin/bash
 sleep 5
-testing without settting these settings first. 
 gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10"
 gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark"
 gsettings set org.cinnamon.theme name "Windows-10"
@@ -183,14 +172,22 @@ gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
 
 echo "Downloading additional settings..."
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json
+if command -v wget >/dev/null 2>&1; then
+  wget -O cinnamon-settings.json "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json"
+else
+  curl -L -o cinnamon-settings.json "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json"
+fi
 mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
 
 # Copy your preconfigured menu JSON
 cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
 
 echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh
+if command -v wget >/dev/null 2>&1; then
+  wget -O add-qortal-icon-theme.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh"
+else
+  curl -L -o add-qortal-icon-theme.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh"
+fi
 chmod +x add-qortal-icon-theme.sh
 ./add-qortal-icon-theme.sh
 
@@ -200,36 +197,25 @@ chmod +x "$HOME/apply-cinnamon-settings.sh"
 
 echo "${GREEN} ⬇️ Downloading additional ${NC}${YELLOW}CINNAMON${NC}${GREEN}settings${NC}\n"
 
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json" "cinnamon-settings.json" 5
 mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
 cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
 
 echo "${YELLOW} Configuring terminal, default apps, and more...${NC}\n"
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/configure-terminal-and-more.sh
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/configure-terminal-and-more.sh" "configure-terminal-and-more.sh" 5
 chmod +x configure-terminal-and-more.sh
 ./configure-terminal-and-more.sh 
 cd "${HOME}"
 
 echo "continuing desktop configuration..."
-# Get Ubuntu major version, try lsb_release first, then fallback
-if command -v lsb_release >/dev/null 2>&1; then
-  UBUNTU_VER=$(lsb_release -rs | cut -d. -f1)
-else
-  UBUNTU_VER=$(grep -oP '^VERSION_ID="\K[0-9]+' /etc/os-release)
-fi
-
-# Determine if --no-sandbox is needed
-NEED_NO_SANDBOX=""
-if [ "$UBUNTU_VER" -ge 24 ]; then
-  NEED_NO_SANDBOX="--no-sandbox"
-fi
 
 mkdir -p "$HOME/.config/autostart"
+mkdir -p "$HOME/.local/share/applications"
 
 cat > "$HOME/.local/share/applications/apply-cinnamon-settings.desktop" <<EOL
 [Desktop Entry]
 Type=Application
-Exec=gnome-terminal -- ./apply-cinnamon-settings.sh
+Exec=gnome-terminal -- ${HOME}/apply-cinnamon-settings.sh
 Hidden=false
 NoDisplay=false
 Name=Apply Cinnamon Settings
@@ -239,7 +225,7 @@ EOL
 cat > "${HOME}/.config/autostart/auto-fix-qortal-GUI.desktop" <<EOL
 [Desktop Entry]
 Type=Application
-Exec=gnome-terminal -- ./auto-fix-qortal.sh
+Exec=gnome-terminal -- ${HOME}/auto-fix-qortal.sh
 X-GNOME-Autostart-enabled=true
 NoDisplay=false
 Hidden=false
@@ -251,7 +237,7 @@ EOL
 cat > "${HOME}/.config/autostart/start-qortal.desktop" <<EOL
 [Desktop Entry]
 Type=Application
-Exec=./start-qortal-core.sh
+Exec=${HOME}/start-qortal-core.sh
 X-GNOME-Autostart-enabled=true
 NoDisplay=false
 Hidden=false
@@ -260,48 +246,8 @@ Comment[en_US]=start qortal core 6 seconds after boot
 X-GNOME-Autostart-Delay=6
 EOL
 
-### ADD DESKTOP SHORTCUTS ###
-echo "${YELLOW} CREATING DESKTOP LAUNCHERS ${NC}\n"
-
-mkdir -p "${HOME}/.local/share/desktop-directories"
-
-cat > "${HOME}/.local/share/desktop-directories/Qortal.directory" <<EOL
-[Desktop Entry]
-Name=Qortal
-Comment=Qortal Applications
-Icon=qortal-menu-button-3
-Type=Directory
-EOL
-
-
-mkdir -p "${HOME}/.local/share/applications"
-
-cat > "${HOME}/.local/share/applications/qortal-ui.desktop" <<EOL
-[Desktop Entry]
-Name=Qortal UI
-Comment=Launch Qortal User Interface
-Exec=/home/${username}/qortal/Qortal-UI ${NEED_NO_SANDBOX}
-Icon=qortal-ui
-Terminal=false
-Type=Application
-Categories=Qortal;
-EOL
-
-cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
-[Desktop Entry]
-Name=Qortal Hub
-Comment=Launch Qortal Hub
-Exec=/home/${username}/qortal/Qortal-Hub ${NEED_NO_SANDBOX}
-Icon=qortal-hub
-Terminal=false
-Type=Application
-Categories=Qortal;
-EOL
-
-cd "${HOME}"
-
 echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
-curl -L -O https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh
+download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh" "add-qortal-icon-theme.sh" 5
 chmod +x add-qortal-icon-theme.sh
 
 ./add-qortal-icon-theme.sh

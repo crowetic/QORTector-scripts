@@ -9,6 +9,63 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+download_with_retry() {
+    local url="$1"
+    local output="$2"
+    local attempts="${3:-6}"
+    local try=1
+    local backoff=2
+    local tmp="${output}.part"
+
+    rm -f "${tmp}"
+
+    if command -v wget >/dev/null 2>&1; then
+        while [ "$try" -le "$attempts" ]; do
+            echo -e "${CYAN}🌐 Download attempt ${try}/${attempts} (wget): ${url}${NC}"
+            if wget --tries=1 --timeout=30 --continue --output-document "$tmp" "$url" && [ -s "$tmp" ]; then
+                mv -f "$tmp" "$output"
+                return 0
+            fi
+            if [ "$try" -lt "$attempts" ]; then
+                echo -e "${YELLOW}⚠️ wget attempt failed. Retrying in ${backoff}s...${NC}"
+                sleep "$backoff"
+                if [ "$backoff" -lt 20 ]; then
+                    backoff=$((backoff * 2))
+                    [ "$backoff" -gt 20 ] && backoff=20
+                fi
+            fi
+            try=$((try + 1))
+        done
+
+        echo -e "${YELLOW}⚠️ wget retries exhausted. Trying curl fallback...${NC}"
+        if curl --fail --location --show-error --http1.1 --continue-at - --output "$tmp" "$url" && [ -s "$tmp" ]; then
+            mv -f "$tmp" "$output"
+            return 0
+        fi
+    else
+        while [ "$try" -le "$attempts" ]; do
+            echo -e "${CYAN}🌐 Download attempt ${try}/${attempts} (curl): ${url}${NC}"
+            if curl --fail --location --show-error --http1.1 --continue-at - --output "$tmp" "$url" && [ -s "$tmp" ]; then
+                mv -f "$tmp" "$output"
+                return 0
+            fi
+            if [ "$try" -lt "$attempts" ]; then
+                echo -e "${YELLOW}⚠️ curl attempt failed. Retrying in ${backoff}s...${NC}"
+                sleep "$backoff"
+                if [ "$backoff" -lt 20 ]; then
+                    backoff=$((backoff * 2))
+                    [ "$backoff" -gt 20 ] && backoff=20
+                fi
+            fi
+            try=$((try + 1))
+        done
+    fi
+
+    rm -f "$tmp"
+    echo -e "${RED}❌ Failed to download: ${url}${NC}"
+    return 1
+}
+
 intro_block='
 ---------------------------------------- 
 -Qortal Universal Linux Install Script -
@@ -21,7 +78,7 @@ text_001='
 This script will:
 '
 text_002='- Configure target machine as a fully functional Qortal Node'
-text_003="- Setup both Qortal Core (qortal) and Qortal Hub (Qortal-Hub) in '${HOME}/qortal'"
+text_003="- Setup Qortal Core in '${HOME}/qortal' and Qortal Hub in '${HOME}/qortal-hub'"
 text_004='- Correctly establish launchers for Qortal Hub'
 text_005='- Correctly create entries in desktop environment menus for Qortal Hub'
 text_006='- Ensure Qortal Hub has required no-sandbox flag if system requires it'
@@ -106,44 +163,46 @@ set +e  # we'll handle fallbacks manually in this block
 case "$FAMILY" in
     debian)
         $SUDO apt-get update -y
-        # Try JRE 17 (headless acceptable), and libfuse2 for AppImage (Hub)
-        $SUDO apt-get install -y curl unzip jq imagemagick zlib1g-dev || true
-        $SUDO apt-get install -y openjdk-17-jre || $SUDO apt-get install -y openjdk-17-jre-headless || true
-        $SUDO apt-get install -y libfuse2 || true
+        # Prefer JRE 21 (fallback to 17), and FUSE2 for AppImage (Hub)
+        $SUDO apt-get install -y curl wget unzip jq imagemagick zlib1g-dev ca-certificates || true
+        $SUDO apt-get install -y openjdk-21-jre || $SUDO apt-get install -y openjdk-21-jre-headless || \
+            $SUDO apt-get install -y openjdk-17-jre || $SUDO apt-get install -y openjdk-17-jre-headless || true
+        $SUDO apt-get install -y libfuse2t64 || $SUDO apt-get install -y libfuse2 || true
         ;;
     rhel)
         # dnf or yum
         PM="dnf"; command -v dnf >/dev/null 2>&1 || PM="yum"
-        $SUDO $PM -y install curl unzip jq ImageMagick zlib-devel || true
-        $SUDO $PM -y install java-17-openjdk || true
+        $SUDO $PM -y install curl wget unzip jq ImageMagick zlib-devel ca-certificates || true
+        $SUDO $PM -y install java-21-openjdk || $SUDO $PM -y install java-17-openjdk || true
         # FUSE2 is typically 'fuse' (FUSE3 is 'fuse3'); AppImage needs FUSE2
         $SUDO $PM -y install fuse || true
         ;;
     arch)
-        $SUDO pacman -Sy --noconfirm --needed curl unzip jq zlib imagemagick || true
-        $SUDO pacman -Sy --noconfirm --needed jre17-openjdk || true
+        $SUDO pacman -Sy --noconfirm --needed curl wget unzip jq zlib imagemagick ca-certificates || true
+        $SUDO pacman -Sy --noconfirm --needed jre21-openjdk || $SUDO pacman -Sy --noconfirm --needed jre17-openjdk || true
         # AppImage needs FUSE2 on Arch
         $SUDO pacman -Sy --noconfirm --needed fuse2 || true
         ;;
     suse)
         $SUDO zypper -n refresh
-        $SUDO zypper -n install curl unzip jq ImageMagick zlib-devel || true
-        $SUDO zypper -n install java-17-openjdk || true
+        $SUDO zypper -n install curl wget unzip jq ImageMagick zlib-devel ca-certificates || true
+        $SUDO zypper -n install java-21-openjdk || $SUDO zypper -n install java-17-openjdk || true
         # FUSE2 compat (package names vary by SUSE version); try both
         $SUDO zypper -n install fuse || true
         $SUDO zypper -n install fuse2 || true
         ;;
     alpine)
         $SUDO apk update
-        # Alpine package names differ slightly; prefer openjdk17-jre
-        $SUDO apk add --no-cache curl unzip jq imagemagick zlib-dev || true
-        $SUDO apk add --no-cache openjdk17-jre || $SUDO apk add --no-cache openjdk17 || true
+        # Alpine package names differ slightly; prefer openjdk21-jre
+        $SUDO apk add --no-cache curl wget unzip jq imagemagick zlib-dev ca-certificates || true
+        $SUDO apk add --no-cache openjdk21-jre || $SUDO apk add --no-cache openjdk21 || \
+            $SUDO apk add --no-cache openjdk17-jre || $SUDO apk add --no-cache openjdk17 || true
         # Alpine uses fuse (may need fuse-openrc on non-systemd)
         $SUDO apk add --no-cache fuse || true
         ;;
     *)
         echo -e "${RED}⚠️ Unsupported or unknown distro family (ID=${DISTRO_ID}, LIKE=${DISTRO_LIKE}).${NC}"
-        echo -e "${YELLOW}Please install manually: Java 17 JRE, curl, unzip, jq, zlib dev headers, ImageMagick, and FUSE2 (for AppImage).${NC}"
+        echo -e "${YELLOW}Please install manually: Java 21 JRE (or newer), curl/wget, unzip, jq, zlib dev headers, ImageMagick, and FUSE2 (for AppImage).${NC}"
         ;;
 esac
 
@@ -151,7 +210,7 @@ set -e
 
 # Post-checks: warn if critical bits missing
 MISSING=()
-command -v java >/dev/null 2>&1 || MISSING+=("java-17")
+command -v java >/dev/null 2>&1 || MISSING+=("java-runtime")
 command -v curl >/dev/null 2>&1 || MISSING+=("curl")
 command -v unzip >/dev/null 2>&1 || MISSING+=("unzip")
 command -v jq >/dev/null 2>&1 || MISSING+=("jq")
@@ -187,6 +246,7 @@ cd "$HOME"
 
 QORTAL_DIR="$HOME/qortal"
 BACKUP_DIR="$HOME/backups/qortal-$(date +%s)"
+QORTAL_HUB_DIR="$HOME/qortal-hub"
 
 function stop_qortal_core() {
     echo -e "${CYAN}Stopping Qortal Core...${NC}"
@@ -238,7 +298,7 @@ fi
 # If we backed up or there was no qortal dir, download fresh
 if [ "$QORTAL_SYNCED" != "true" ]; then
     echo -e "${CYAN}⬇️ Downloading fresh Qortal Core...${NC}"
-    curl -fSLo qortal.zip https://github.com/Qortal/qortal/releases/latest/download/qortal.zip
+    download_with_retry "https://github.com/Qortal/qortal/releases/latest/download/qortal.zip" "qortal.zip" 8
     unzip -q qortal.zip
     rm qortal.zip
     chmod +x "$HOME/qortal/"*.sh
@@ -253,8 +313,10 @@ fi
 echo -e "\n${CYAN}🖼️  Preparing Qortal icons and Hub assets...${NC}"
 
 # Always attempt icon theme install; it only writes files.
-curl -fsSL -o "${HOME}/create-icon-theme-uni.sh" \
-    https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh
+download_with_retry \
+    "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh" \
+    "${HOME}/create-icon-theme-uni.sh" \
+    5
 chmod +x "${HOME}/create-icon-theme-uni.sh"
 # If the script needs sudo internally, it should request it itself.
 # We still check for failure to warn.
@@ -290,7 +352,12 @@ EOL
 # Download Hub deterministically (don’t depend on current GUI env)
 ARCH="$(uname -m)"
 echo -e "\n${CYAN}🔍 Detected architecture: ${ARCH}${NC}"
-cd "${HOME}/qortal"
+if [ -d "${QORTAL_HUB_DIR}" ]; then
+    echo "Qortal Hub directory already exists. Reusing it."
+else
+    mkdir -p "${QORTAL_HUB_DIR}"
+fi
+cd "${QORTAL_HUB_DIR}"
 
 if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
     HUB_URL="https://github.com/Qortal/Qortal-Hub/releases/latest/download/Qortal-Hub-arm64.AppImage"
@@ -301,8 +368,7 @@ else
 fi
 
 echo -e "\n${CYAN}⬇️ Downloading Qortal Hub AppImage...${NC}"
-curl -fSL -o "${HUB_FILE}.tmp" "${HUB_URL}"
-mv -f "${HUB_FILE}.tmp" "${HUB_FILE}"
+download_with_retry "${HUB_URL}" "${HUB_FILE}" 8
 
 # Make executable on ALL arches
 chmod +x "${HUB_FILE}"
@@ -321,7 +387,7 @@ fi
 SANDBOX_FLAG=""
 if $HAS_GUI; then
     echo -e "\n${CYAN}🚀 Testing Qortal Hub launch (GUI detected)...${NC}"
-    "${HOME}/qortal/Qortal-Hub" &
+    "${QORTAL_HUB_DIR}/Qortal-Hub" &
     HUB_PID=$!
     sleep 7
     if ! ps -p "$HUB_PID" >/dev/null 2>&1; then
@@ -343,7 +409,7 @@ cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec=${HOME}/qortal/Qortal-Hub${SANDBOX_FLAG}
+Exec=${QORTAL_HUB_DIR}/Qortal-Hub${SANDBOX_FLAG}
 Icon=qortal-hub
 Terminal=false
 Type=Application
@@ -351,8 +417,10 @@ Categories=Qortal;Network;Utility;
 EOL
 
 echo -e "${CYAN}🧩 Creating Qortal Core launcher...${NC}"
-curl -fsSL -o "${HOME}/start-qortal-core.sh" \
-    https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh
+download_with_retry \
+    "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh" \
+    "${HOME}/start-qortal-core.sh" \
+    5
 chmod +x "${HOME}/start-qortal-core.sh"
 cat > "${HOME}/.local/share/applications/qortal-core.desktop" <<EOL
 [Desktop Entry]
@@ -529,7 +597,7 @@ if [[ "$INSTALL_AUTOMATION" = true ]]; then
     sleep 1 
     echo -e "\n automation continuing!"
     echo -e "\n ${CYAN}📥 Downloading auto-fix-qortal.sh...${NC}"
-    curl -L -o "$HOME/auto-fix-qortal.sh" https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh
+    download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh" "$HOME/auto-fix-qortal.sh" 5
     chmod +x "$HOME/auto-fix-qortal.sh"
     echo -e "\n ${GREEN}✅ Automation script downloaded.✅ ${NC}"
     echo -e "\n ${CYAN}🚀 Running auto-fix-qortal.sh...${NC}"
@@ -538,4 +606,3 @@ else
     echo -e "${YELLOW}Skipping automation setup. You can install it later by running:${NC}"
     echo -e "\n ${GREEN}curl -L -o ~/auto-fix-qortal.sh https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh && chmod +x ~/auto-fix-qortal.sh && cd && ./auto-fix-qortal.sh${NC}"
 fi
-
