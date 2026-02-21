@@ -28,6 +28,16 @@ DEFAULT_SETTINGS_MIRROR="${AUTO_FIX_SETTINGS_MIRROR_URL:-https://gitea.qortal.li
 PATCH_SETTINGS_URL="${AUTO_FIX_PATCH_URL:-https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/settings-patch.json}"
 PATCH_SETTINGS_MIRROR="${AUTO_FIX_PATCH_MIRROR_URL:-https://gitea.qortal.link/crowetic/QORTector-scripts/raw/branch/main/settings-patch.json}"
 
+# Temporary 6.0.0 core override (remove once upstream release artifact is corrected)
+SPECIAL_VERSION="6.0.0"
+SPECIAL_BUILD_VERSION="qortal-6.0.0-5fc87a0"
+SPECIAL_JAR_URL="https://cloud.qortal.org/s/MAe2pLQajX7Bw78/download/qortal.jar"
+
+LATEST_REMOTE_TAG=""
+LATEST_REMOTE_NUM=""
+LATEST_LOCAL_BUILD=""
+LATEST_LOCAL_NUM=""
+
 
 # ================= Helpers (POSIX-safe) =================
 p() { # printf wrapper
@@ -247,11 +257,27 @@ check_qortal() {
 		sleep 120
 	fi
 
-	LOCAL_VERSION="$(curl -s --max-time 5 localhost:12391/admin/info | grep -o '"buildVersion":"qortal-[^"]*' | sed 's/.*qortal-\([0-9.]*\).*/\1/' | tr -d '.')"
-	REMOTE_VERSION="$(curl -s --max-time 10 "https://api.github.com/repos/qortal/qortal/releases/latest" | grep -o '"tag_name": "v[^"]*' | sed 's/.*v\([0-9.]*\).*/\1/' | tr -d '.')"
+	local_info="$(curl -s --max-time 5 localhost:12391/admin/info || true)"
+	LATEST_LOCAL_BUILD="$(printf "%s" "$local_info" | grep -o '"buildVersion":"[^"]*' | sed 's/.*"buildVersion":"\([^"]*\).*/\1/')"
+	LATEST_LOCAL_NUM="$(printf "%s" "$LATEST_LOCAL_BUILD" | sed 's/^qortal-\([0-9.]*\).*$/\1/' | tr -d '.')"
 
-	if [ -n "$LOCAL_VERSION" ] && [ -n "$REMOTE_VERSION" ]; then
-		if [ "$LOCAL_VERSION" -ge "$REMOTE_VERSION" ] 2>/dev/null; then
+	remote_release="$(curl -s --max-time 10 "https://api.github.com/repos/qortal/qortal/releases/latest" || true)"
+	LATEST_REMOTE_TAG="$(printf "%s" "$remote_release" | grep -o '"tag_name":[[:space:]]*"v[^"]*' | sed 's/.*"v\([0-9.]*\).*/\1/')"
+	LATEST_REMOTE_NUM="$(printf "%s" "$LATEST_REMOTE_TAG" | tr -d '.')"
+
+	if [ "$LATEST_REMOTE_TAG" = "$SPECIAL_VERSION" ]; then
+		if [ "$LATEST_LOCAL_BUILD" = "$SPECIAL_BUILD_VERSION" ]; then
+			p "${GREEN}Latest tag is ${SPECIAL_VERSION} and required build (${SPECIAL_BUILD_VERSION}) is already installed.${NC}"
+			check_for_GUI
+			return 0
+		fi
+		p "${YELLOW}Latest tag is ${SPECIAL_VERSION}; temporary core override required (${SPECIAL_BUILD_VERSION}).${NC}"
+		check_hash_update_qortal
+		return 0
+	fi
+
+	if [ -n "$LATEST_LOCAL_NUM" ] && [ -n "$LATEST_REMOTE_NUM" ]; then
+		if [ "$LATEST_LOCAL_NUM" -ge "$LATEST_REMOTE_NUM" ] 2>/dev/null; then
 			p "${GREEN}Local >= remote; no core update needed.${NC}"
 			check_for_GUI
 		else
@@ -264,11 +290,29 @@ check_qortal() {
 
 check_hash_update_qortal() {
 	p "${RED}Version check inconclusive or outdated. Doing hash check...${NC}"
+
+	if [ "$LATEST_REMOTE_TAG" = "$SPECIAL_VERSION" ] && [ "$LATEST_LOCAL_BUILD" = "$SPECIAL_BUILD_VERSION" ]; then
+		p "${GREEN}Required ${SPECIAL_BUILD_VERSION} build already detected; skipping core jar download.${NC}"
+		check_for_GUI
+		return 0
+	fi
+
+	jar_url="https://github.com/qortal/qortal/releases/latest/download/qortal.jar"
+	if [ "$LATEST_REMOTE_TAG" = "$SPECIAL_VERSION" ]; then
+		jar_url="$SPECIAL_JAR_URL"
+		p "${YELLOW}Applying temporary ${SPECIAL_VERSION} override jar source.${NC}"
+	fi
+
 	cd "${HOME}/qortal" || exit 1
+	rm -f -- local.md5 2>/dev/null || true
 	md5sum qortal.jar >/dev/null 2>&1 && md5sum qortal.jar > "local.md5"
 	cd || exit 1
 	p "${CYAN}Downloading latest core jar for comparison...${NC}"
-	fetch "https://github.com/qortal/qortal/releases/latest/download/qortal.jar" "${HOME}/qortal.jar" || true
+	if ! fetch "$jar_url" "${HOME}/qortal.jar"; then
+		p "${RED}Failed to download candidate core jar. Skipping core replacement this cycle.${NC}"
+		update_script
+		return 1
+	fi
 	md5sum "${HOME}/qortal.jar" >/dev/null 2>&1 && md5sum "${HOME}/qortal.jar" > "${HOME}/remote.md5"
 
 	LOCAL="$(cat "${HOME}/qortal/local.md5" 2>/dev/null || true)"
@@ -276,16 +320,23 @@ check_hash_update_qortal() {
 
 	if [ -n "$LOCAL" ] && [ -n "$REMOTE" ] && [ "$LOCAL" = "$REMOTE" ]; then
 		p "${CYAN}Hash check: core up-to-date. Checking environment...${NC}"
+		rm -f -- "${HOME}/qortal.jar" "${HOME}/remote.md5" "${HOME}/qortal/local.md5" 2>/dev/null || true
 		check_for_GUI
 		return 0
 	else
-		p "${RED}Core outdated. Updating and preparing bootstrap...${NC}"
+		p "${RED}Core outdated. Updating jar in update stage, then preparing bootstrap...${NC}"
 		cd "${HOME}/qortal" || exit 1
 		killall -9 java 2>/dev/null || true
 		sleep 3
-		rm -rf -- db log.t* qortal.log run.log run.pid qortal.jar 2>/dev/null || true
+		if [ ! -s "${HOME}/qortal.jar" ]; then
+			p "${RED}Downloaded jar missing/empty. Keeping existing jar and skipping update.${NC}"
+			rm -f -- "${HOME}/remote.md5" "${HOME}/qortal/local.md5" 2>/dev/null || true
+			cd || exit 1
+			update_script
+			return 1
+		fi
 		cp -f -- "${HOME}/qortal.jar" "${HOME}/qortal/qortal.jar" 2>/dev/null || true
-		rm -f -- "${HOME}/qortal.jar" "${HOME}/remote.md5" local.md5 2>/dev/null || true
+		rm -f -- "${HOME}/qortal.jar" "${HOME}/remote.md5" "${HOME}/qortal/local.md5" 2>/dev/null || true
 		cd || exit 1
 		potentially_update_settings
 		force_bootstrap
@@ -344,9 +395,10 @@ setup_raspi_cron() {
 
 check_height() {
 	local_height="$(curl -sS --connect-timeout 5 "http://localhost:12391/blocks/height" || true)"
+	HEIGHT_TRACK_FILE="${HOME}/auto_fix_last_height.txt"
 
-	if [ -f auto_fix_last_height.txt ]; then
-		previous_local_height="$(cat auto_fix_last_height.txt 2>/dev/null || true)"
+	if [ -f "$HEIGHT_TRACK_FILE" ]; then
+		previous_local_height="$(cat "$HEIGHT_TRACK_FILE" 2>/dev/null || true)"
 		if [ -n "$previous_local_height" ] && [ "$local_height" = "$previous_local_height" ]; then
 			p "${RED}Height unchanged since last run; waiting ~3 minutes to re-check...${NC}"
 			sleep 188
@@ -370,7 +422,7 @@ check_height() {
 		p "${RED}Local height empty. Is Qortal running?${NC}"
 		no_local_height
 	else
-		printf "%s" "$local_height" > auto_fix_last_height.txt
+		printf "%s" "$local_height" > "$HEIGHT_TRACK_FILE"
 		remote_height_checks
 	fi
 }
@@ -473,7 +525,7 @@ remote_height_checks() {
 }
 
 force_bootstrap() {
-	p "${RED}ISSUES DETECTED — forcing bootstrap...${NC}"
+	p "${RED}ISSUES DETECTED — forcing bootstrap (jar unchanged in this stage)...${NC}"
 	cd "${HOME}/qortal" || exit 1
 	killall -9 java 2>/dev/null || true
 	sleep 3
