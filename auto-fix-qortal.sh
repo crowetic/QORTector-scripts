@@ -30,8 +30,8 @@ PATCH_SETTINGS_MIRROR="${AUTO_FIX_PATCH_MIRROR_URL:-https://gitea.qortal.link/cr
 
 # Temporary 6.0.0 core override (remove once upstream release artifact is corrected)
 SPECIAL_VERSION="6.0.0"
-SPECIAL_BUILD_VERSION="qortal-6.0.0-5fc87a0"
-SPECIAL_JAR_URL="https://cloud.qortal.org/s/MAe2pLQajX7Bw78/download/qortal.jar"
+SPECIAL_BUILD_VERSION="qortal-6.0.0-ab20272"
+SPECIAL_JAR_URL="https://cloud.qortal.org/s/i3Jn6YeDb84zw8y/download/qortal.jar"
 
 LATEST_REMOTE_TAG=""
 LATEST_REMOTE_NUM=""
