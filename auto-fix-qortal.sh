@@ -106,6 +106,54 @@ is_valid_json_file() { # is_valid_json_file FILE
 	jq empty "$1" >/dev/null 2>&1
 }
 
+file_mtime_epoch() { # file_mtime_epoch FILE
+	file="$1"
+	[ -e "$file" ] || return 1
+	if stat -c %Y "$file" >/dev/null 2>&1; then
+		stat -c %Y "$file"
+		return 0
+	fi
+	if stat -f %m "$file" >/dev/null 2>&1; then
+		stat -f %m "$file"
+		return 0
+	fi
+	return 1
+}
+
+is_recent_file() { # is_recent_file FILE MAX_AGE_SECONDS
+	file="$1"
+	max_age="$2"
+	mtime="$(file_mtime_epoch "$file" 2>/dev/null || true)"
+	[ -n "$mtime" ] || return 1
+	now="$(date +%s)"
+	age=$((now - mtime))
+	[ "$age" -le "$max_age" ] 2>/dev/null
+}
+
+log_indicates_active_bootstrap() { # log_indicates_active_bootstrap LOG_FILE
+	log_file="$1"
+	[ -s "$log_file" ] || return 1
+	tail -n 200 "$log_file" 2>/dev/null \
+		| grep -Eiv 'bootstrap (complete|completed|finished|successful)|not bootstrapping|no bootstrap|bootstrap not required|bootstrap disabled|bootstrap=false' \
+		| grep -Ei 'bootstrapping|starting bootstrap|bootstrap (started|in progress|download|downloading|extract|extracting|import|importing|verify|verifying|apply|applying|sync)' \
+		>/dev/null 2>&1
+}
+
+is_actively_bootstrapping() { # is_actively_bootstrapping
+	log_file="${HOME}/qortal/qortal.log"
+	# Ignore stale logs to avoid false positives when the node isn't writing logs.
+	is_recent_file "$log_file" 900 || return 1
+	log_indicates_active_bootstrap "$log_file"
+}
+
+script_passes_sanity() { # script_passes_sanity FILE
+	script_file="$1"
+	[ -s "$script_file" ] || return 1
+	grep -q "initial_update()" "$script_file" \
+		&& grep -q "potentially_update_settings()" "$script_file" \
+		&& grep -q "is_actively_bootstrapping()" "$script_file"
+}
+
 # ================== Functions (keep order) ==================
 
 # Function to update the script initially if needed
@@ -114,8 +162,8 @@ initial_update() {
 		p "${YELLOW}Checking for the latest version of the script...${NC}"
 		dl="${HOME}/auto-fix-qortal.sh.download"
 		if fetch "$DEFAULT_SCRIPT_URL" "$dl" "$DEFAULT_SCRIPT_MIRROR"; then
-			# quick sanity: must contain key functions
-			if grep -q "initial_update()" "$dl" && grep -q "potentially_update_settings()" "$dl"; then
+			# quick sanity: must contain key functions and current bootstrap-detection logic
+			if script_passes_sanity "$dl"; then
 				chmod +x "$dl" 2>/dev/null || true
 				atomic_write "$dl" "${HOME}/auto-fix-qortal.sh"
 				: > "${HOME}/auto_fix_updated"
@@ -248,7 +296,7 @@ check_qortal() {
 	core_running="$(curl -s --max-time 3 localhost:12391/admin/status || true)"
 	if [ -z "$core_running" ]; then
 		p "${CYAN}Node not responding. Checking for bootstrapping...${NC}"
-		if tail -n 20 "${HOME}/qortal/qortal.log" 2>/dev/null | grep -Ei 'bootstrap|bootstrapping' >/dev/null 2>&1; then
+		if is_actively_bootstrapping; then
 			p "${RED}Bootstrapping detected. Updating script and exiting current cycle...${NC}"
 			update_script
 			return 0
@@ -451,7 +499,7 @@ check_height() {
 no_local_height() {
 	p "${WHITE}Checking for bootstrapping/log format...${NC}"
 	if [ -f "${HOME}/qortal/qortal.log" ]; then
-		if tail -n 40 "${HOME}/qortal/qortal.log" 2>/dev/null | grep -Ei 'bootstrap|bootstrapping' >/dev/null 2>&1; then
+		if is_actively_bootstrapping; then
 			p "${RED}Bootstrapping detected. Updating script and exiting this cycle...${NC}"
 			update_script
 			return 0
@@ -737,11 +785,16 @@ update_script() {
 
 	dl="${HOME}/qortal/new-scripts/auto-fix-qortal.sh.download"
 	if fetch "$DEFAULT_SCRIPT_URL" "$dl" "$DEFAULT_SCRIPT_MIRROR"; then
-		chmod +x "$dl" 2>/dev/null || true
-		atomic_write "$dl" "${HOME}/qortal/new-scripts/auto-fix-qortal.sh"
-		cp -f -- "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" "${HOME}/auto-fix-qortal.sh" 2>/dev/null || true
-		chmod +x "${HOME}/auto-fix-qortal.sh" 2>/dev/null || true
-		rm -f -- "${HOME}/auto_fix_updated"
+		if script_passes_sanity "$dl"; then
+			chmod +x "$dl" 2>/dev/null || true
+			atomic_write "$dl" "${HOME}/qortal/new-scripts/auto-fix-qortal.sh"
+			cp -f -- "${HOME}/qortal/new-scripts/auto-fix-qortal.sh" "${HOME}/auto-fix-qortal.sh" 2>/dev/null || true
+			chmod +x "${HOME}/auto-fix-qortal.sh" 2>/dev/null || true
+			rm -f -- "${HOME}/auto_fix_updated"
+		else
+			p "${RED}Self-update sanity check failed (missing required functions); keeping current script.${NC}"
+			rm -f -- "$dl" 2>/dev/null || true
+		fi
 	else
 		p "${RED}Self-update fetch failed. Keeping current script. (Will try again next run.)${NC}"
 	fi
