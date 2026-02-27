@@ -303,6 +303,27 @@ check_hash_update_qortal() {
 		p "${YELLOW}Applying temporary ${SPECIAL_VERSION} override jar source.${NC}"
 	fi
 
+	if [ ! -s "${HOME}/qortal/qortal.jar" ]; then
+		p "${YELLOW}No local qortal.jar found. Downloading required core jar...${NC}"
+		if ! fetch "$jar_url" "${HOME}/qortal.jar"; then
+			p "${RED}Failed to download required core jar. Skipping replacement this cycle.${NC}"
+			update_script
+			return 1
+		fi
+		if [ ! -s "${HOME}/qortal.jar" ]; then
+			p "${RED}Downloaded jar missing/empty. Skipping replacement this cycle.${NC}"
+			update_script
+			return 1
+		fi
+		mkdir -p "${HOME}/qortal" 2>/dev/null || true
+		cp -f -- "${HOME}/qortal.jar" "${HOME}/qortal/qortal.jar" 2>/dev/null || true
+		rm -f -- "${HOME}/qortal.jar" "${HOME}/remote.md5" "${HOME}/qortal/local.md5" 2>/dev/null || true
+		p "${GREEN}Missing qortal.jar restored from current release source.${NC}"
+		potentially_update_settings
+		force_bootstrap
+		return 0
+	fi
+
 	cd "${HOME}/qortal" || exit 1
 	rm -f -- local.md5 2>/dev/null || true
 	md5sum qortal.jar >/dev/null 2>&1 && md5sum qortal.jar > "local.md5"
