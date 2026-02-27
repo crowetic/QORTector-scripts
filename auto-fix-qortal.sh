@@ -106,6 +106,17 @@ is_valid_json_file() { # is_valid_json_file FILE
 	jq empty "$1" >/dev/null 2>&1
 }
 
+json_semantically_equal() { # json_semantically_equal FILE_A FILE_B
+	file_a="$1"
+	file_b="$2"
+	[ -s "$file_a" ] || return 1
+	[ -s "$file_b" ] || return 1
+	command -v jq >/dev/null 2>&1 || return 1
+	a_norm="$(jq -cS . "$file_a" 2>/dev/null || true)"
+	b_norm="$(jq -cS . "$file_b" 2>/dev/null || true)"
+	[ -n "$a_norm" ] && [ "$a_norm" = "$b_norm" ]
+}
+
 file_mtime_epoch() { # file_mtime_epoch FILE
 	file="$1"
 	[ -e "$file" ] || return 1
@@ -751,11 +762,16 @@ potentially_update_settings() {
 		' "$SETTINGS_FILE" > "$TMP_FILE" 2>/dev/null
 
 		if is_valid_json_file "$TMP_FILE"; then
-			atomic_write "$TMP_FILE" "$SETTINGS_FILE"
-			FINAL_BKP="${BACKUP_DIR}/backup-settings-postmerge-${TIMESTAMP}.json"
-			cp -f -- "$SETTINGS_FILE" "$FINAL_BKP" 2>/dev/null || true
-			ln -sfn "$(basename "$FINAL_BKP")" "$LATEST_GOOD_LINK" 2>/dev/null || true
-			p "${GREEN}settings.json merged successfully (max-merge + forced priorities from remote).${NC}"
+			if json_semantically_equal "$SETTINGS_FILE" "$TMP_FILE"; then
+				rm -f -- "$TMP_FILE" 2>/dev/null || true
+				p "${GREEN}settings.json already up-to-date; no rewrite needed.${NC}"
+			else
+				atomic_write "$TMP_FILE" "$SETTINGS_FILE"
+				FINAL_BKP="${BACKUP_DIR}/backup-settings-postmerge-${TIMESTAMP}.json"
+				cp -f -- "$SETTINGS_FILE" "$FINAL_BKP" 2>/dev/null || true
+				ln -sfn "$(basename "$FINAL_BKP")" "$LATEST_GOOD_LINK" 2>/dev/null || true
+				p "${GREEN}settings.json merged successfully (max-merge + forced priorities from remote).${NC}"
+			fi
 		else
 			p "${RED}Merged settings became invalid. Falling back to remote defaults.${NC}"
 			if is_valid_json_file "$REMOTE_FILE"; then
