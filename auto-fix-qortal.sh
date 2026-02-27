@@ -301,8 +301,12 @@ check_qortal() {
 			update_script
 			return 0
 		fi
-		p "${RED}Core not running; waiting 2 minutes in case it is starting slowly...${NC}"
-		sleep 120
+		if [ ! -s "${HOME}/qortal/qortal.jar" ]; then
+			p "${YELLOW}Core not running and qortal.jar missing. Skipping startup wait; running immediate jar/version recovery checks...${NC}"
+		else
+			p "${RED}Core not running; waiting 2 minutes in case it is starting slowly...${NC}"
+			sleep 120
+		fi
 	fi
 
 	local_info="$(curl -s --max-time 5 localhost:12391/admin/info || true)"
@@ -366,7 +370,11 @@ check_hash_update_qortal() {
 		mkdir -p "${HOME}/qortal" 2>/dev/null || true
 		cp -f -- "${HOME}/qortal.jar" "${HOME}/qortal/qortal.jar" 2>/dev/null || true
 		rm -f -- "${HOME}/qortal.jar" "${HOME}/remote.md5" "${HOME}/qortal/local.md5" 2>/dev/null || true
-		p "${GREEN}Missing qortal.jar restored from current release source.${NC}"
+		if [ "$LATEST_REMOTE_TAG" = "$SPECIAL_VERSION" ]; then
+			p "${GREEN}Missing qortal.jar restored from temporary ${SPECIAL_VERSION} override source.${NC}"
+		else
+			p "${GREEN}Missing qortal.jar restored from official latest release artifact.${NC}"
+		fi
 		potentially_update_settings
 		force_bootstrap
 		return 0
