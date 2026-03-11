@@ -28,9 +28,9 @@ DEFAULT_SETTINGS_MIRROR="${AUTO_FIX_SETTINGS_MIRROR_URL:-https://gitea.qortal.li
 PATCH_SETTINGS_URL="${AUTO_FIX_PATCH_URL:-https://raw.githubusercontent.com/crowetic/QORTector-scripts/refs/heads/main/settings-patch.json}"
 PATCH_SETTINGS_MIRROR="${AUTO_FIX_PATCH_MIRROR_URL:-https://gitea.qortal.link/crowetic/QORTector-scripts/raw/branch/main/settings-patch.json}"
 
-# Temporary 6.0.0 core override (remove once upstream release artifact is corrected)
-SPECIAL_VERSION="6.0.0"
-SPECIAL_BUILD_VERSION="qortal-6.0.0-93e7b2c"
+# Temporary 6.1.2 core override (useful in scenarios where release version is less than ideal.)
+SPECIAL_VERSION="6.1.2"
+SPECIAL_BUILD_VERSION="qortal-6.1.2-4ee9441"
 SPECIAL_JAR_URL="https://cloud.qortal.org/s/croweticTestJarDownload/download/qortal.jar"
 
 LATEST_REMOTE_TAG=""
