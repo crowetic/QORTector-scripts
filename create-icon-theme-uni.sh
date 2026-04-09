@@ -139,35 +139,54 @@ if [ -f "${ICON_CACHE_DIR}/index.theme" ]; then
 fi
 
 # Step 5: Set icon theme if DE supports it
-CURRENT_DESKTOP=$(echo "${XDG_CURRENT_DESKTOP}" | tr '[:upper:]' '[:lower:]')
+CURRENT_DESKTOP=$(printf '%s' "${XDG_CURRENT_DESKTOP:-}" | tr '[:upper:]' '[:lower:]')
 
 # Normalize aliases
 case "$CURRENT_DESKTOP" in
   x-cinnamon) CURRENT_DESKTOP="cinnamon" ;;
   xfce*) CURRENT_DESKTOP="xfce" ;;
+  *plasma* | *kde*) CURRENT_DESKTOP="plasma" ;;
   kde-plasma) CURRENT_DESKTOP="plasma" ;;
 esac
 
-if command -v gsettings >/dev/null; then
-  case "$CURRENT_DESKTOP" in
-    cinnamon)
+case "$CURRENT_DESKTOP" in
+  cinnamon)
+    if command -v gsettings >/dev/null 2>&1; then
       gsettings set org.cinnamon.desktop.interface icon-theme "${ICON_THEME_NAME}"
-      ;;
-    gnome)
+    else
+      echo "[!] gsettings not available. Please set the Cinnamon icon theme manually if needed."
+    fi
+    ;;
+  gnome)
+    if command -v gsettings >/dev/null 2>&1; then
       gsettings set org.gnome.desktop.interface icon-theme "${ICON_THEME_NAME}"
-      ;;
-    xfce)
+    else
+      echo "[!] gsettings not available. Please set the GNOME icon theme manually if needed."
+    fi
+    ;;
+  xfce)
+    if command -v xfconf-query >/dev/null 2>&1; then
       xfconf-query -c xsettings -p /Net/IconThemeName -s "${ICON_THEME_NAME}" 2>/dev/null
-      ;;
-    kde | plasma)
+    else
+      echo "[!] xfconf-query not available. Please set the XFCE icon theme manually if needed."
+    fi
+    ;;
+  kde | plasma)
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+      kwriteconfig6 --file kdeglobals --group Icons --key Theme "${ICON_THEME_NAME}"
+    elif command -v kwriteconfig5 >/dev/null 2>&1; then
       kwriteconfig5 --file kdeglobals --group Icons --key Theme "${ICON_THEME_NAME}"
-      ;;
-    *)
-      echo "[!] Unsupported or unknown DE: '$CURRENT_DESKTOP'. Set icon theme manually if needed."
-      ;;
-  esac
-else
-  echo "[!] gsettings not available. Please set icon theme manually if needed."
+    else
+      echo "[!] Neither kwriteconfig6 nor kwriteconfig5 is available. Please set the Plasma icon theme manually if needed."
+    fi
+    ;;
+  *)
+    echo "[!] Unsupported or unknown DE: '$CURRENT_DESKTOP'. Set icon theme manually if needed."
+    ;;
+esac
+
+if [ "$CURRENT_DESKTOP" = "plasma" ] && command -v qdbus >/dev/null 2>&1; then
+  qdbus org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
 fi
 
 
