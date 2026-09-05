@@ -37,7 +37,7 @@ active-plugins=['filebrowser', 'docinfo', 'sort', 'modelines', 'spell', 'openlin
 [plugins/filebrowser]
 root='file:///'
 tree-view=true
-virtual-root='file:///home/qortector/Desktop'
+virtual-root='file://$HOME/Desktop'
 
 [preferences/editor]
 display-line-numbers=false

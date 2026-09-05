@@ -1,6 +1,15 @@
 #!/bin/bash
 
-# Customize Yaru-blue-dark icon theme locally and add Qortal icons
+# Customize a Yaru-based icon theme locally and add Qortal icons.
+#
+# NOTE: Ubuntu 24.10+ (incl. 25.x/26.04) removed the separate "Yaru-blue" /
+# "Yaru-blue-dark" icon variants (they were merged into plain Yaru-dark).
+# On those systems the only pre-installed Yaru dark variant is the plain
+# orange-folder "Yaru-dark", which is exactly why the menu icons reverted to
+# orange. We therefore detect a usable Yaru base at runtime and fall back to
+# plain Yaru-dark only if nothing better exists, so the custom theme still
+# builds instead of silently reverting.
+
 ICON_THEME_NAME="Yaru-blue-qortal"
 ICON_SOURCE_DIR="${HOME}/Pictures/icons/icons_theme"
 ICON_CACHE_DIR="${HOME}/.icons/${ICON_THEME_NAME}"
@@ -19,21 +28,49 @@ declare -A ICON_MAP=(
 
 # Step 1: Copy system Yaru-dark theme as base
 if [ ! -d "${ICON_CACHE_DIR}" ]; then
-  echo "[*] Creating local copy of Yaru-dark theme as '${ICON_THEME_NAME}'..."
+  echo "[*] Creating local copy of a Yaru theme as '${ICON_THEME_NAME}'..."
   mkdir -p "${ICON_CACHE_DIR}"
-  rsync -a /usr/share/icons/Yaru-dark/ "${ICON_CACHE_DIR}/"
 
-  # Copy index.theme from Yaru-blue-dark if it exists
-  if [ -f /usr/share/icons/Yaru-blue-dark/index.theme ]; then
-    cp /usr/share/icons/Yaru-blue-dark/index.theme "${ICON_CACHE_DIR}/index.theme"
+  # Prefer the (older) blue Yaru variants, but they were removed on
+  # Ubuntu 24.10+. Fall back to the always-present plain Yaru-dark.
+  YARU_BASE=""
+  for cand in \
+    /usr/share/icons/Yaru-blue-dark \
+    /usr/share/icons/Yaru-blue \
+    /usr/share/icons/Yaru-dark \
+    /usr/share/icons/Yaru; do
+    if [ -d "$cand" ]; then
+      YARU_BASE="$cand"
+      break
+    fi
+  done
+
+  if [ -n "$YARU_BASE" ]; then
+    echo "[*] Using base theme: ${YARU_BASE}"
+    rsync -a "${YARU_BASE}/" "${ICON_CACHE_DIR}/"
+
+    # Copy index.theme from the blue variant if it still exists
+    if [ -f "${YARU_BASE}/index.theme" ]; then
+      cp "${YARU_BASE}/index.theme" "${ICON_CACHE_DIR}/index.theme"
+    fi
+  else
+    echo "[!] No Yaru icon base found. Creating a minimal index.theme..."
+    cat > "${ICON_CACHE_DIR}/index.theme" <<'INDEX'
+[Icon Theme]
+Name=Yaru-blue-qortal
+Type=Directory
+Inherits=Yaru,hicolor
+INDEX
   fi
 
   # Update index.theme metadata
-  sed -i 's/^Name=.*/Name=Yaru-blue-qortal/' "${ICON_CACHE_DIR}/index.theme"
-  sed -i 's/^Inherits=.*/Inherits=Yaru-blue-dark,Yaru-dark,Yaru,hicolor/' "${ICON_CACHE_DIR}/index.theme"
+  if [ -f "${ICON_CACHE_DIR}/index.theme" ]; then
+    sed -i 's/^Name=.*/Name=Yaru-blue-qortal/' "${ICON_CACHE_DIR}/index.theme"
+    sed -i 's/^Inherits=.*/Inherits=Yaru-blue-dark,Yaru-dark,Yaru,hicolor/' "${ICON_CACHE_DIR}/index.theme"
+  fi
 
   # Ensure Directories includes 48x48/apps
-  if ! grep -q "48x48/apps" "${ICON_CACHE_DIR}/index.theme"; then
+  if [ -f "${ICON_CACHE_DIR}/index.theme" ] && ! grep -q "48x48/apps" "${ICON_CACHE_DIR}/index.theme"; then
     echo "Directories=48x48/apps" >> "${ICON_CACHE_DIR}/index.theme"
     echo "
 [48x48/apps]
@@ -81,9 +118,8 @@ fi
 
 # Step 6: Set as active icon theme
 echo "[*] Setting '${ICON_THEME_NAME}' as the current icon theme..."
-gsettings set org.cinnamon.desktop.interface icon-theme "${ICON_THEME_NAME}"
+gsettings set org.cinnamon.desktop.interface icon-theme "${ICON_THEME_NAME}" || true
 
 echo "✅ Qortal icons installed into local theme: ${ICON_THEME_NAME}"
 echo "   You can now use Icon=qortal-ui (etc.) in .desktop files."
-echo "   Theme is now active with blue-dark base styling."
-
+echo "   Theme is now active with dark styling."

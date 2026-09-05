@@ -169,7 +169,7 @@ install_first_available_package libfuse2t64 libfuse2 || true
 
 if [ "$HEADLESS_MODE" = false ]; then
   install_packages_if_available \
-    gnome-software yaru-theme-icon yaru-theme-gtk yaru-theme-unity \
+    gnome-software yaru-theme-icon yaru-theme-gtk \
     vlc chromium-browser ksnip xsensors gparted cinnamon-desktop-environment \
     gnome-terminal dconf-cli gedit eog evince
 else
@@ -266,7 +266,10 @@ if [ "$HEADLESS_MODE" = false ]; then
   gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
   gsettings set org.cinnamon.theme name "Windows-10" || true
   gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
-  gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark" || true
+  # NOTE: Ubuntu 24.10+ removed the Yaru-blue(-dark) icon variant; on 26.04
+  # only plain "Yaru-dark" exists. Set the fallback to Yaru-dark so folders
+  # don't revert to the plain orange folder icon.
+  gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-dark" || true
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 
   ### CINNAMON PANEL + MENU CUSTOMIZATION ###
@@ -278,7 +281,8 @@ sleep 5
 gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10" || true
 gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
 gsettings set org.cinnamon.theme name "Windows-10" || true
-gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-dark" || true
+# NOTE: Ubuntu 24.10+ removed Yaru-blue(-dark); fall back to Yaru-dark.
+gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-dark" || true
 gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 
