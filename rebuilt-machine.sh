@@ -159,7 +159,7 @@ sudo apt-get -y upgrade
 install_packages_if_available \
   git jq openssh-server unzip vim curl wget ca-certificates zlib1g-dev \
   p7zip-full htop net-tools bpytop ffmpeg sysbench smartmontools \
-  fonts-symbola lm-sensors rsync xdg-utils
+  fonts-symbola lm-sensors rsync xdg-utils imagemagick
 
 install_first_available_package \
   openjdk-21-jre openjdk-21-jre-headless openjdk-17-jre openjdk-17-jre-headless || \
@@ -297,12 +297,12 @@ mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
 cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
 
 if command -v wget >/dev/null 2>&1; then
-  wget -O add-qortal-icon-theme.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh"
+  wget -O create-icon-theme-uni.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh"
 else
-  curl -L -o add-qortal-icon-theme.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh"
+  curl -L -o create-icon-theme-uni.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh"
 fi
-chmod +x add-qortal-icon-theme.sh
-./add-qortal-icon-theme.sh || true
+chmod +x create-icon-theme-uni.sh
+./create-icon-theme-uni.sh || true
 EOL
 
   cat > "$HOME/run-script-in-terminal.sh" <<'EOL'
@@ -383,9 +383,9 @@ X-GNOME-Autostart-Delay=6
 EOL
 
   echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
-  if download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/add-qortal-icon-theme.sh" "add-qortal-icon-theme.sh" 5; then
-    chmod +x add-qortal-icon-theme.sh
-    ./add-qortal-icon-theme.sh || true
+  if download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh" "create-icon-theme-uni.sh" 5; then
+    chmod +x create-icon-theme-uni.sh
+    ./create-icon-theme-uni.sh || true
   fi
 
   echo "${YELLOW} 🔄 Forcing Cinnamon Menu Refresh...${NC}"
