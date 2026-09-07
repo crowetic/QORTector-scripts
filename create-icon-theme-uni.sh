@@ -62,23 +62,42 @@ declare -A ICON_MAP=(
   ["qortal.png"]="qortal"
 )
 
-# Step 1: Choose base theme
+# Step 1: Choose base theme.
+# IMPORTANT: On Ubuntu the "Yaru-dark"/"Yaru-blue-dark" themes are EMPTY shells
+# (index.theme with an Inherits= line, but zero PNGs). The real folder artwork
+# lives in "Yaru" (orange) and "Yaru-blue" (blue). If we base the custom theme
+# on the empty "Yaru-dark", it has no folders and GTK walks the Inherits chain
+# down to the orange "Yaru" base => orange folders.
+#
+# So we base on the first candidate that actually SHIPS a folder icon. "Yaru-blue"
+# carries the blue folder.png that the "Yaru-blue-dark" profile renders, which is
+# the look we want. "Yaru" is the last resort (orange) so at least folders exist.
 BASE_THEME_DIR=""
-if [ -d "/usr/share/icons/Yaru-dark" ]; then
-  BASE_THEME_DIR="/usr/share/icons/Yaru-dark"
-  echo "[*] Using Yaru-dark as base."
-else
+for cand in \
+  /usr/share/icons/Yaru-blue \
+  /usr/share/icons/Yaru-dark \
+  /usr/share/icons/Yaru; do
+  if [ -d "$cand" ] && [ -f "$cand/48x48/places/folder.png" ]; then
+    BASE_THEME_DIR="$cand"
+    echo "[*] Using base theme (contains folder icons): $cand"
+    break
+  fi
+done
+
+if [ -z "$BASE_THEME_DIR" ]; then
+  # No standard Yaru content found; fall back to the current DE theme or a
+  # minimal index.theme so the Qortal app icons still install.
   CURRENT_THEME=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d "'")
   if [ -n "$CURRENT_THEME" ] && [ -d "/usr/share/icons/$CURRENT_THEME" ]; then
     BASE_THEME_DIR="/usr/share/icons/$CURRENT_THEME"
     echo "[*] Falling back to current icon theme: $CURRENT_THEME"
   else
-    echo "[!] Could not find Yaru-dark or current theme. Creating minimal fallback..."
+    echo "[!] Could not find a Yaru theme with icons. Creating minimal fallback..."
     mkdir -p "${ICON_CACHE_DIR}/48x48/apps"
     cat <<EOF > "${ICON_CACHE_DIR}/index.theme"
 [Icon Theme]
 Name=${ICON_THEME_NAME}
-Inherits=hicolor
+Inherits=Yaru-blue,Yaru,hicolor
 Directories=48x48/apps
 
 [48x48/apps]
