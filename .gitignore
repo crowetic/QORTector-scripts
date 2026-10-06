@@ -1,4 +1,10 @@
-bootstrap*.7z 
+bootstrap*.7z
 lib.zip
 db
 lib
+
+# Generated codebase graph artifacts
+/codegraph-cache/
+
+# Python regression-test bytecode
+__pycache__/

@@ -4,11 +4,11 @@
 # you need an entry for every *, there are 5 stars. each star represents 
 # a timeframe... minute, hour, day of month, month, day of week
 
-# the cron settings we have here represent running the command EVERY 5 DAYS at 1:01 AM
-# 1 minute past the hour, 1 hour, */5 means every 5th day, then * means every month, and * means every week.
+# the cron settings we have here represent running the command EVERY 3 DAYS at 1:01 AM
+# 1 minute past the hour, 1 hour, */3 selects every third day of the month, then * means every month, and * means every week.
 
 # if you have this cron, it is because your machine was determined to have a GUI, and you were switched to using GUI 
 # startup method for auto-fix script, and the cron startup method was removed.
 
-1 1 */3 * * ${home}/auto-fix-qortal.sh > log-auto-fix-cron.log 2>&1
+1 1 */3 * * "${HOME}/auto-fix-qortal.sh" > "${HOME}/log-auto-fix-cron.log" 2>&1
  
