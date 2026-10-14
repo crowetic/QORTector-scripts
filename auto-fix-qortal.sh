@@ -30,6 +30,7 @@
 #               targeted java kill, bash shebang, named constants.
 #   2026-10-05  Verified downloads/backups, explicit recovery reasons, 2500-block
 #               lag threshold, process shutdown checks and managed cron entries.
+#   2026-10-14  Prune excess small backups on startup/exit without age expiry.
 # ================= Colors (ANSI) =================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -63,7 +64,7 @@ LATEST_LOCAL_NUM=""
 
 # ================= Tunable constants (env-overridable) =================
 # Revision prevents self-update from reinstalling an older unsafe script.
-AFQ_SCRIPT_REVISION=3
+AFQ_SCRIPT_REVISION=5
 API_BASE="${AUTO_FIX_API_BASE:-http://localhost:12391}"
 MAX_BLOCKS_BEHIND="${AUTO_FIX_MAX_BLOCKS_BEHIND:-2500}"
 ACTIVE_LOG_MAX_AGE_SECONDS="${ACTIVE_LOG_MAX_AGE_SECONDS:-900}"
@@ -313,16 +314,26 @@ prune_small_backup_group() {
 	[ -d "$folder" ] && [ ! -L "$folder" ] || return 0
 	while IFS= read -r -d '' record; do
 		name="${record#*$'\t'}"
-		[[ "$name" =~ $pattern ]] || continue
 		[ "$folder/$name" != "$protected" ] || continue
 		count=$((count + 1))
-		if [ "$count" -gt "$SMALL_BACKUPS_TO_KEEP" ]; then rm -f -- "$folder/$name" || return 1; fi
-	done < <(find "$folder" -mindepth 1 -maxdepth 1 -type f -printf '%T@\t%f\0' | sort -z -nr)
+		if [ "$count" -gt "$SMALL_BACKUPS_TO_KEEP" ]; then
+			rm -f -- "$folder/$name" || return 1
+			p "Removed excess small backup: $folder/$name"
+		fi
+	done < <(
+		# Filename timestamps record creation even when cp -p preserves an old mtime.
+		while IFS= read -r -d '' name; do
+			[[ "$name" =~ $pattern ]] && [[ "$name" =~ [0-9]{14} ]] || continue
+			printf '%s\t%s\0' "${BASH_REMATCH[0]}" "$name"
+		done < <(find "$folder" -mindepth 1 -maxdepth 1 -type f -printf '%f\0') | sort -z -r
+	)
 }
 prune_small_backups() {
 	local settings="${HOME}/qortal/qortal-backup/auto-fix-settings-backup" protected
 	protected="$(readlink -f "$settings/latest-good.json" 2>/dev/null)" || protected=""
 	prune_small_backup_group "$settings" '^backup-settings-(default-|postmerge-)?[0-9]{14}\.json$' "$protected" || return 1
+	# Cover recognized settings backups left in the legacy location, too.
+	prune_small_backup_group "${HOME}/backups" '^backup-settings-(default-|postmerge-)?[0-9]{14}\.json$' "$protected" || return 1
 	prune_small_backup_group "${HOME}/qortal/new-scripts/backups" '^auto-fix-[0-9]{14}\.sh$' || return 1
 	prune_small_backup_group "${HOME}/backups/cron-backups" '^crontab-backup-[0-9]{14}$' || return 1
 	prune_small_backup_group "${HOME}/qortal/backup/logs" '^log4j2-[0-9]{14}\.properties$'
@@ -1016,4 +1027,8 @@ else
 	exit 1
 fi
 
+# Keep small backups bounded even when connectivity or maintenance fails. Both
+# passes run with the lock held; recovery copies still require confirmed startup.
+trap 'prune_small_backups || p "Could not prune small backup files."' EXIT
+prune_small_backups || p "Could not prune small backup files."
 initial_update

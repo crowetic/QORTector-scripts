@@ -1,4 +1,5 @@
 """Isolated recovery regression tests. No network or live Core is used."""
+import datetime
 import os
 import pathlib
 import shutil
@@ -530,6 +531,24 @@ wait_for_core_recovery() { return 1; }'''), success=False)
         self.assertTrue((root / 'db-manual' / 'data').exists())
         self.assertTrue((root / 'data-manual' / 'data').exists())
 
+    def test_confirmed_start_removes_old_recovery_copies_and_rollback_siblings(self):
+        root = self.core / 'backup'
+        for stamp, marker in [('20200101123456', '.auto-fix-verified'),
+                              ('20210101123456', '.auto-fix-pending')]:
+            backup = root / f'db-{stamp}-AbC123'
+            backup.mkdir(parents=True)
+            (backup / marker).touch()
+            for suffix in ['.original', '.failed-db']:
+                sibling = root / (backup.name + suffix)
+                sibling.mkdir()
+                (sibling / 'data').write_text('saved')
+        manual = root / 'db-20190101123456-AbC123'
+        manual.mkdir()
+        (manual / 'data').write_text('manual')
+        self.bash('wait_for_core_recovery() { return 0; }; cleanup_backups_if_ready')
+        self.assertEqual(list(root.iterdir()), [manual])
+        self.assertEqual((manual / 'data').read_text(), 'manual')
+
     def test_pending_cleanup_requires_confirmed_start(self):
         root = self.core / 'backup' / 'db-20261005123456-AbC123'
         root.mkdir(parents=True)
@@ -614,18 +633,115 @@ update_script startup_failed''')
     def test_small_backup_retention_keeps_latest_good_and_manual_files(self):
         folder = self.core / 'qortal-backup' / 'auto-fix-settings-backup'
         folder.mkdir(parents=True)
+        names = [f'backup-settings-{self.backup_stamp(seconds_ago=5-number)}.json'
+                 for number in range(5)]
         for number in range(5):
-            path = folder / f'backup-settings-2026100512345{number}.json'
+            path = folder / names[number]
             path.write_text('{}')
-            os.utime(path, (number, number))
-        (folder / 'latest-good.json').symlink_to('backup-settings-20261005123450.json')
+            # Preserved mtimes must not override backup creation timestamps.
+            os.utime(path, (5-number, 5-number))
+        (folder / 'latest-good.json').symlink_to(names[0])
         (folder / 'backup-settings-manual.json').write_text('{}')
         self.bash('SMALL_BACKUPS_TO_KEEP=2; prune_small_backups')
         self.assertTrue((folder / 'latest-good.json').exists())
-        self.assertTrue((folder / 'backup-settings-20261005123454.json').exists())
-        self.assertTrue((folder / 'backup-settings-20261005123453.json').exists())
-        self.assertFalse((folder / 'backup-settings-20261005123451.json').exists())
+        self.assertTrue((folder / names[4]).exists())
+        self.assertTrue((folder / names[3]).exists())
+        self.assertFalse((folder / names[1]).exists())
         self.assertTrue((folder / 'backup-settings-manual.json').exists())
+
+    def backup_stamp(self, days_ago=0, seconds_ago=0):
+        return (datetime.datetime.now() - datetime.timedelta(
+            days=days_ago, seconds=seconds_ago)).strftime('%Y%m%d%H%M%S')
+
+    def test_old_small_backups_remain_below_count_limit(self):
+        settings = self.core / 'qortal-backup' / 'auto-fix-settings-backup'
+        groups = [
+            (settings, 'backup-settings-{}.json'),
+            (settings, 'backup-settings-default-{}.json'),
+            (settings, 'backup-settings-postmerge-{}.json'),
+            (self.home / 'backups', 'backup-settings-{}.json'),
+            (self.core / 'new-scripts' / 'backups', 'auto-fix-{}.sh'),
+            (self.home / 'backups' / 'cron-backups', 'crontab-backup-{}'),
+            (self.core / 'backup' / 'logs', 'log4j2-{}.properties'),
+        ]
+        backups = []
+        for folder, template in groups:
+            folder.mkdir(parents=True, exist_ok=True)
+            old = folder / template.format(self.backup_stamp(days_ago=3650))
+            new = folder / template.format(self.backup_stamp(days_ago=29))
+            old.write_text('old')
+            new.write_text('new')
+            os.utime(new, (0, 0))
+            backups.extend([old, new])
+        self.bash('prune_small_backups')
+        for path in backups:
+            self.assertTrue(path.exists(), str(path))
+
+    def test_old_latest_good_settings_remain_beyond_count_limit(self):
+        settings = self.core / 'qortal-backup' / 'auto-fix-settings-backup'
+        settings.mkdir(parents=True)
+        saved = settings / f'backup-settings-{self.backup_stamp(days_ago=3650)}.json'
+        saved.write_text('{}')
+        (settings / 'latest-good.json').symlink_to(saved.name)
+        other = settings / f'backup-settings-{self.backup_stamp(days_ago=120)}.json'
+        other.write_text('{}')
+        newest = settings / f'backup-settings-{self.backup_stamp(days_ago=90)}.json'
+        newest.write_text('{}')
+        self.bash('SMALL_BACKUPS_TO_KEEP=1; prune_small_backups')
+        self.assertTrue(saved.exists())
+        self.assertTrue((settings / 'latest-good.json').exists())
+        self.assertTrue(newest.exists())
+        self.assertFalse(other.exists())
+
+    def test_small_backup_cleanup_preserves_manual_files_and_symlinks(self):
+        folder = self.home / 'backups' / 'cron-backups'
+        folder.mkdir(parents=True)
+        manual = folder / 'crontab-backup-manual'
+        manual.write_text('manual')
+        target = self.home / 'saved-cron'
+        target.write_text('saved')
+        link = folder / f'crontab-backup-{self.backup_stamp(days_ago=90)}'
+        link.symlink_to(target)
+        saved = self.home / 'saved-scripts'
+        saved.mkdir()
+        script = saved / f'auto-fix-{self.backup_stamp(days_ago=90)}.sh'
+        script.write_text('saved')
+        scripts = self.core / 'new-scripts'
+        scripts.mkdir()
+        (scripts / 'backups').symlink_to(saved, target_is_directory=True)
+        self.bash('prune_small_backups')
+        self.assertTrue(manual.exists())
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(target.read_text(), 'saved')
+        self.assertTrue(script.exists())
+
+    def test_small_backups_are_pruned_before_maintenance_and_after_failure(self):
+        folder = self.home / 'backups' / 'cron-backups'
+        folder.mkdir(parents=True)
+        old = folder / f'crontab-backup-{self.backup_stamp(days_ago=90)}'
+        newest = folder / f'crontab-backup-{self.backup_stamp()}'
+        newest.write_text('newest backup')
+        prefix, entry = SCRIPT.read_text().split('# ================= Entry =================')
+        isolated = self.home / 'entry.sh'
+        for finish in ['exit 1', 'return 23']:
+            with self.subTest(finish=finish):
+                old.write_text('existing old backup')
+                isolated.write_text(prefix + '''
+initial_update() {
+    [ ! -e "$EXCESS_BACKUP" ] || exit 88
+    printf old > "$EXCESS_BACKUP"
+    ''' + finish + '''
+}
+# ================= Entry =================
+''' + entry)
+                result = subprocess.run(['bash', str(isolated)], env={**os.environ,
+                    'HOME': str(self.home), 'EXCESS_BACKUP': str(old),
+                    'AUTO_FIX_SELF_UPDATE': '0', 'SMALL_BACKUPS_TO_KEEP': '1'},
+                    text=True, capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, int(finish.split()[1]),
+                                 result.stdout + result.stderr)
+                self.assertFalse(old.exists())
+                self.assertTrue(newest.exists())
 
     def test_script_and_cron_backups_are_bounded(self):
         scripts = self.core / 'new-scripts' / 'backups'
@@ -633,8 +749,9 @@ update_script startup_failed''')
         scripts.mkdir(parents=True)
         cron.mkdir(parents=True)
         for number in range(4):
-            (scripts / f'auto-fix-2026100512345{number}.sh').write_text('script')
-            (cron / f'crontab-backup-2026100512345{number}').write_text('cron')
+            stamp = self.backup_stamp(seconds_ago=4-number)
+            (scripts / f'auto-fix-{stamp}.sh').write_text('script')
+            (cron / f'crontab-backup-{stamp}').write_text('cron')
         (scripts / 'original.sh').write_text('original')
         self.bash('SMALL_BACKUPS_TO_KEEP=2; prune_small_backups')
         self.assertEqual(len(list(scripts.glob('auto-fix-*'))), 2)

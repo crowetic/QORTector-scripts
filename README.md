@@ -63,7 +63,9 @@ This script will be getting constant improvements to be more in-depth, and **che
 - `HEIGHT_STALL_WAIT_SECONDS=300`, `HEIGHT_STALL_RECHECKS=2`: two timed rechecks after an unchanged height across runs.
 - `CORE_START_WAIT_SECONDS=2100` is the maximum startup verification time, with polling and progress messages; confirmed startup returns early. `CORE_STOP_WAIT_SECONDS=120`, `FORCE_BOOTSTRAP_RESTART_WAIT_SECONDS=30` (sustained startup evidence before backup cleanup).
 - `ACTIVE_LOG_MAX_AGE_SECONDS=900`. Full database recovery copies are temporary, rather than retained indefinitely.
-- `SMALL_BACKUPS_TO_KEEP=10` keeps 10 recent timestamped settings, script, cron and logging configuration backups per category, plus the protected latest-good settings backup. Unrelated/manual files are preserved.
+- `SMALL_BACKUPS_TO_KEEP=10`: keep the 10 newest timestamped settings, script, cron and logging configuration backups per backup folder, plus the protected latest-good settings target. Small backups have no time limit and remain until displaced by newer copies beyond the count limit. Order uses each filename's creation timestamp, including older settings copies in `~/backups`.
+- Small backup cleanup runs under the lock at startup and exit, including offline or failed runs. The latest-good settings target, manual files and symlinks are protected. `original.sh` and `qortal.jar.previous` are single overwritten rollback files.
+- Database recovery copies remain protected until Core startup is confirmed, regardless of age; confirmed startup also cleans old script-owned recovery copies.
 - `AUTO_FIX_SELF_UPDATE=0` disables script self-updates for a test run; settings and helper refreshes still run.
 
 For remote testing, copy this version to `${HOME}/auto-fix-qortal.sh` and run as the Core user:
