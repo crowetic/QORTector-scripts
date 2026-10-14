@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Proxmox host storage every 15 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=15min
+Unit=proxmox-vm-capacity-watch.service
+
+[Install]
+WantedBy=timers.target

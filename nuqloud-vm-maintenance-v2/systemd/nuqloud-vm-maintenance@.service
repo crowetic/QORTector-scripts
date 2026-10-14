@@ -1,0 +1,14 @@
+[Unit]
+Description=NuQloud VM-level maintenance (%i)
+After=local-fs.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/nuqloud-vm-maintenance.sh --mode %i
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=1h
+StandardOutput=journal
+StandardError=journal

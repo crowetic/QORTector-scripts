@@ -1,0 +1,8 @@
+[Unit]
+Description=Check Proxmox host storage and VM QCOW2 allocation
+
+[Service]
+Type=oneshot
+Environment=MOUNT=/var/lib/vz
+Environment=VMID=108
+ExecStart=/usr/local/sbin/proxmox-vm-capacity-watch.sh

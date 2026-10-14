@@ -1,0 +1,11 @@
+[Unit]
+Description=NuQloud VM daily host-level maintenance
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=nuqloud-vm-maintenance@daily.service
+
+[Install]
+WantedBy=timers.target
