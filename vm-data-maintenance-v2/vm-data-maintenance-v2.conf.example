@@ -1,0 +1,15 @@
+# /etc/vm-data-maintenance-v2.conf - root-owned 0644 or stricter
+# HOST/GUEST-level maintenance only. NO NuQloud instance identifiers or commands.
+ENABLE_TRIM=1
+TRIM_MOUNTS=( / )
+REPORT_PATHS=( / )                     # add /srv or other guest data paths as needed
+ENABLE_JOURNAL_VACUUM=1
+JOURNAL_MAX_AGE=10d                     # positive integer with s/m/h/d/w
+JOURNAL_MAX_SIZE=200M                   # positive bytes or K/M/G/T suffix
+ENABLE_APT_AUTOCLEAN=1
+ENABLE_TMPFILES_CLEAN=0                 # opt-in, respects tmpfiles policy
+ENABLE_DOCKER_BUILD_CACHE_PRUNE=0       # opt-in; only build cache
+DOCKER_BUILD_CACHE_MIN_AGE=336h         # positive s/m/h; 14 days, if opted in
+REPORT_DOCKER=1
+WARN_GUEST_PERCENT=80
+CRIT_GUEST_PERCENT=90

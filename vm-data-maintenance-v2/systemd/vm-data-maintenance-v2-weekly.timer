@@ -1,11 +1,11 @@
 [Unit]
-Description=NuQloud VM weekly optional cache maintenance
+Description=VM weekly optional cache maintenance
 
 [Timer]
 OnCalendar=Sun *-*-* 03:20:00
 RandomizedDelaySec=10m
 Persistent=true
-Unit=nuqloud-vm-maintenance@weekly.service
+Unit=vm-data-maintenance-v2@weekly.service
 
 [Install]
 WantedBy=timers.target

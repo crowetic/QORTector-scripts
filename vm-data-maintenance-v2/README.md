@@ -1,4 +1,4 @@
-# NuQloud VM Data Maintenance (VM/host layer, v2)
+# VM Data Maintenance v2
 
 This utility is **independent** of NuQloud's existing per-instance maintenance performed during instance recreate/deploy. It does **not** execute `occ`, inspect tenant/customer data, modify Redis/database configuration, manage Nextcloud file retention, or invoke instance management scripts. It is for maintenance of the Linux Docker VM and, optionally, capacity monitoring on the Proxmox hypervisor.
 
@@ -17,24 +17,37 @@ The watcher logs warnings with `logger`/journald **only**. It does **not** send 
 
 ## Install within Docker guest (for example VM 108)
 
-Review the code and config before installation; copy this folder to the VM and run inside it:
+Copy `vm-data-maintenance-v2/` to the VM. For the first test, install without enabling the new timers:
 
 ```bash
-sudo install -m 0755 nuqloud-vm-maintenance.sh /usr/local/sbin/nuqloud-vm-maintenance.sh
-sudo install -o root -g root -m 0644 nuqloud-vm-maintenance.conf.example /etc/nuqloud-vm-maintenance.conf
-sudo install -m 0644 systemd/* /etc/systemd/system/
+cd vm-data-maintenance-v2
+sudo bash ./install.sh --no-enable
+```
 
-sudo /usr/local/sbin/nuqloud-vm-maintenance.sh --mode trim --dry-run
-sudo /usr/local/sbin/nuqloud-vm-maintenance.sh --mode daily --dry-run
-sudo /usr/local/sbin/nuqloud-vm-maintenance.sh --mode weekly --dry-run
+The installer creates `/usr/local/sbin/vm-data-maintenance-v2.sh`, `/etc/vm-data-maintenance-v2.conf` and the matching systemd units. It preserves an existing v2 config. If only `/etc/nuqloud-vm-maintenance.conf` exists, it migrates that config; if both configs exist, it preserves the old one as a root-only `vm-data-maintenance-v2.conf.pre-migration.*` backup. New/migrated configs are root-owned mode `0600`.
 
-sudo systemctl daemon-reload
+Before removing the legacy installation, the installer verifies all four modes with `--dry-run`. Only after those checks pass does it disable the three old `nuqloud-vm-maintenance-*.timer` units, stop the old guest service instances and remove the old script, config and units. A failed verification leaves the legacy files and schedules in place. The Proxmox watcher and stock `fstrim.timer` are unaffected. Reinstalling without `--no-enable` enables the new timers; `--no-enable` does not disable previously enabled v2 timers.
+
+Review `/etc/vm-data-maintenance-v2.conf`, then test inside the VM:
+
+```bash
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode report
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode trim --dry-run
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode daily --dry-run
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode weekly --dry-run
+sudo systemctl start vm-data-maintenance-v2@trim.service
+sudo journalctl -u vm-data-maintenance-v2@trim.service --since today --no-pager
+```
+
+The installer dry runs preview cleanup commands and run read-only reports; they do not prove that the virtual storage supports discard. Confirm the actual TRIM service succeeds before enabling the schedules:
+
+```bash
 sudo systemctl enable --now \
-  nuqloud-vm-maintenance-trim.timer \
-  nuqloud-vm-maintenance-daily.timer \
-  nuqloud-vm-maintenance-weekly.timer
+  vm-data-maintenance-v2-trim.timer \
+  vm-data-maintenance-v2-daily.timer \
+  vm-data-maintenance-v2-weekly.timer
 
-systemctl list-timers 'nuqloud-vm-maintenance*'
+systemctl list-timers 'vm-data-maintenance-v2*'
 ```
 
 **Only after you confirm the new trim timer is scheduled and executes**, disable the stock weekly `fstrim.timer` to avoid duplicate TRIM runs:
@@ -48,12 +61,24 @@ Do **not** disable the system's regular `logrotate.timer` or `systemd-tmpfiles-c
 Run an immediate test when you want:
 
 ```bash
-sudo /usr/local/sbin/nuqloud-vm-maintenance.sh --mode trim
-sudo /usr/local/sbin/nuqloud-vm-maintenance.sh --mode report
-journalctl -u 'nuqloud-vm-maintenance@trim.service' --since '1 day ago' --no-pager
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode trim
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode report
+journalctl -u 'vm-data-maintenance-v2@trim.service' --since '1 day ago' --no-pager
 ```
 
-Note: `systemctl list-timers` shows timer *unit* names; to see a specific timer's previous execution inspect `systemctl list-timers --all nuqloud-vm-maintenance-trim.timer` and `journalctl -u 'nuqloud-vm-maintenance@trim.service'`.
+Note: `systemctl list-timers` shows timer *unit* names; to see a specific timer's previous execution inspect `systemctl list-timers --all vm-data-maintenance-v2-trim.timer` and `journalctl -u 'vm-data-maintenance-v2@trim.service'`.
+
+## Guest configuration
+
+The config must exist, be root-owned, and have no group/other write permission. Its parent directories must also be root-owned and non-writable by other users; symlinks are rejected. Use `/etc/vm-data-maintenance-v2.conf`, including for dry runs, rather than a config in `/tmp` or a user-writable directory.
+
+- `TRIM_MOUNTS=( / )` selects actual mountpoints for discard. Every configured mountpoint is checked before any TRIM runs.
+- `REPORT_PATHS=( / )` selects filesystem usage report paths. Add a separate Docker/data path such as `/srv` if it resides on another filesystem; Docker metrics omit some bind-mounted data.
+- Journal retention accepts positive integer durations with `s`, `m`, `h`, `d` or `w`, and positive sizes in bytes or with `K`, `M`, `G` or `T`. Defaults are `10d` and `200M`.
+- Docker build-cache pruning remains disabled by default. Its minimum age accepts a positive integer with `s`, `m` or `h`; default `336h` is 14 days. Tmpfiles cleanup also remains opt-in.
+- Guest warning/critical percentages must be integers from 1 to 100 with warning below critical. Warnings appear in the journal; they do not send notifications.
+
+Missing or invalid config prevents maintenance. Failed report or cleanup commands give the service a failed status while the remaining independent checks still run. Concurrent guest modes skip when the private `/run/vm-data-maintenance-v2/maintenance.lock` is held.
 
 ## Install watcher on `orus-2` (Proxmox host, separate from the guest)
 
@@ -91,14 +116,14 @@ In your prior diagnostic sample, the WINNR Redis container had about 3.3 TB of c
 Check effective schedules and logs:
 
 ```bash
-systemctl list-timers --all 'nuqloud-vm-maintenance*'
-journalctl -u 'nuqloud-vm-maintenance@trim.service' --since today --no-pager
+systemctl list-timers --all 'vm-data-maintenance-v2*'
+journalctl -u 'vm-data-maintenance-v2@trim.service' --since today --no-pager
 ```
 
 To revert the guest scheduling:
 
 ```bash
-sudo systemctl disable --now nuqloud-vm-maintenance-trim.timer nuqloud-vm-maintenance-daily.timer nuqloud-vm-maintenance-weekly.timer
+sudo systemctl disable --now vm-data-maintenance-v2-trim.timer vm-data-maintenance-v2-daily.timer vm-data-maintenance-v2-weekly.timer
 sudo systemctl enable --now fstrim.timer
 ```
 

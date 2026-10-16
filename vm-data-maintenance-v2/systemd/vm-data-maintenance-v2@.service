@@ -1,11 +1,13 @@
 [Unit]
-Description=NuQloud VM-level maintenance (%i)
+Description=VM data maintenance v2 (%i)
 After=local-fs.target docker.service
 
 [Service]
 Type=oneshot
 User=root
-ExecStart=/usr/local/sbin/nuqloud-vm-maintenance.sh --mode %i
+UMask=0077
+NoNewPrivileges=true
+ExecStart=/usr/local/sbin/vm-data-maintenance-v2.sh --mode %i
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

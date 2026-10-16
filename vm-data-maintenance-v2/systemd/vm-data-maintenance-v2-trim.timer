@@ -1,11 +1,11 @@
 [Unit]
-Description=NuQloud VM TRIM every 4 hours
+Description=VM TRIM every 4 hours
 
 [Timer]
 OnCalendar=*-*-* 00,04,08,12,16,20:00:00
 RandomizedDelaySec=5m
 Persistent=true
-Unit=nuqloud-vm-maintenance@trim.service
+Unit=vm-data-maintenance-v2@trim.service
 
 [Install]
 WantedBy=timers.target
