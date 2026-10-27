@@ -214,7 +214,7 @@ command -v java >/dev/null 2>&1 || MISSING+=("java-runtime")
 command -v curl >/dev/null 2>&1 || MISSING+=("curl")
 command -v unzip >/dev/null 2>&1 || MISSING+=("unzip")
 command -v jq >/dev/null 2>&1 || MISSING+=("jq")
-command -v convert >/dev/null 2>&1 || MISSING+=("ImageMagick")
+command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1 || MISSING+=("ImageMagick")
 
 if [ "${#MISSING[@]}" -gt 0 ]; then
     echo -e "${RED}❌ Missing required tools: ${MISSING[*]}${NC}"
@@ -321,13 +321,7 @@ chmod +x "${HOME}/create-icon-theme-uni.sh"
 # If the script needs sudo internally, it should request it itself.
 # We still check for failure to warn.
 if ! "${HOME}/create-icon-theme-uni.sh"; then
-    echo -e "${YELLOW}⚠️ Icon theme helper returned non-zero. Falling back to basic icons only.${NC}"
-    # Basic fallback: ensure icon dirs exist (hicolor) and drop at least one icon name you reference.
-    mkdir -p "${HOME}/.local/share/icons/hicolor/512x512/apps"
-    mkdir -p "${HOME}/.local/share/icons/hicolor/256x256/apps"
-    # If you have known good PNGs hosted, you can fetch them here:
-    # curl -fsSL -o "${HOME}/.local/share/icons/hicolor/256x256/apps/qortal-hub.png" "<URL-to-icon>"
-    # (Left blank because you rely on the script; this fallback keeps dirs in place.)
+    echo -e "${YELLOW}⚠️ Qortal icon installation failed. Launchers may have no Qortal icons. Re-run bash \"${HOME}/create-icon-theme-uni.sh\" after correcting the error above.${NC}" >&2
 fi
 
 # Create desktop category in BOTH system-wide (if possible) and user scope.

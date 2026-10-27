@@ -140,6 +140,15 @@ ensure_qortal_setup_script() {
   return 1
 }
 
+install_qortal_icons() {
+  local helper="${HOME}/create-icon-theme-uni.sh"
+
+  download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh" "$helper" 5 || return 1
+  bash "$helper" || return 1
+  # The rebuild may run in GNOME before the first Cinnamon login.
+  gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-qortal" || true
+}
+
 HEADLESS_MODE=false
 if is_headless_mode; then
   HEADLESS_MODE=true
@@ -211,7 +220,7 @@ fi
 echo "${YELLOW} ⚙️ RUNNING FULL QORTAL SETUP VIA Qortal-Setup-Linux.sh ${NC}\n"
 if ensure_qortal_setup_script && [ -n "$QORTAL_SETUP_SCRIPT" ] && [ -f "$QORTAL_SETUP_SCRIPT" ]; then
   chmod +x "$QORTAL_SETUP_SCRIPT"
-  bash "$QORTAL_SETUP_SCRIPT"
+  bash "$QORTAL_SETUP_SCRIPT" || exit 1
 else
   echo "${RED}❌ Could not obtain Qortal-Setup-Linux.sh automatically.${NC}"
   exit 1
@@ -266,9 +275,7 @@ if [ "$HEADLESS_MODE" = false ]; then
   gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
   gsettings set org.cinnamon.theme name "Windows-10" || true
   gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
-  # NOTE: Ubuntu 24.10+ removed the Yaru-blue(-dark) icon variant; on 26.04
-  # only plain "Yaru-dark" exists. Set the fallback to Yaru-dark so folders
-  # don't revert to the plain orange folder icon.
+  # Use the system theme until the Qortal icon helper installs the custom theme.
   gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-dark" || true
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 
@@ -281,8 +288,6 @@ sleep 5
 gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10" || true
 gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
 gsettings set org.cinnamon.theme name "Windows-10" || true
-# NOTE: Ubuntu 24.10+ removed Yaru-blue(-dark); fall back to Yaru-dark.
-gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-dark" || true
 gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
 
@@ -296,13 +301,19 @@ mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
 
 cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
 
-if command -v wget >/dev/null 2>&1; then
-  wget -O create-icon-theme-uni.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh"
-else
-  curl -L -o create-icon-theme-uni.sh "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh"
+helper="${HOME}/create-icon-theme-uni.sh"
+if ! curl --fail --location --show-error --retry 3 --connect-timeout 15 --max-time 180 \
+    -o "${helper}.part" "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh"; then
+  rm -f "${helper}.part"
+  echo "Qortal icon helper download failed. Re-run Apply Cinnamon Settings to retry." >&2
+  exit 1
 fi
-chmod +x create-icon-theme-uni.sh
-./create-icon-theme-uni.sh || true
+mv -f "${helper}.part" "$helper"
+if ! bash "$helper"; then
+  echo "Qortal icon installation failed. Re-run create-icon-theme-uni.sh to retry." >&2
+  exit 1
+fi
+gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-qortal" || true
 EOL
 
   cat > "$HOME/run-script-in-terminal.sh" <<'EOL'
@@ -383,9 +394,9 @@ X-GNOME-Autostart-Delay=6
 EOL
 
   echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
-  if download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh" "create-icon-theme-uni.sh" 5; then
-    chmod +x create-icon-theme-uni.sh
-    ./create-icon-theme-uni.sh || true
+  if ! install_qortal_icons; then
+    echo "${RED} ❌ Qortal icon installation failed. Fix the error above and run bash \"${HOME}/create-icon-theme-uni.sh\" to retry. Automatic reboot cancelled. ${NC}" >&2
+    exit 1
   fi
 
   echo "${YELLOW} 🔄 Forcing Cinnamon Menu Refresh...${NC}"

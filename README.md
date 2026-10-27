@@ -33,6 +33,30 @@ This script is built to run on Ubuntu and Ubuntu-based Linux distros (PoP-OS, Zo
 - Full Qortal autoamtion 
 - Full Qortal integration 
 
+If the Qortal launchers or menu button have missing icons, run only the icon
+helper as your desktop user (without `sudo`) from this checkout:
+
+```bash
+bash ./create-icon-theme-uni.sh
+```
+
+This repairs the custom theme index, installs all seven Qortal icons into both
+the custom theme and the standard `hicolor` fallback, and selects the custom
+theme in supported desktop sessions, including Cinnamon and Ubuntu GNOME.
+It merges missing source artwork into `~/Pictures`, preserving unrelated files,
+and supports both ImageMagick 7 (`magick`) and older ImageMagick (`convert`).
+Dependencies are `curl`, `unzip`, `rsync`, and `imagemagick`. Log out and back in
+if a panel still displays cached icons. This repair does not reinstall Core or
+Hub and does not require a reboot. The full rebuild now stops before its
+automatic reboot if the final icon installation fails.
+
+Isolated icon regression checks (no network, desktop setting changes, or full
+machine setup):
+
+```bash
+python3 -m unittest discover -s tests -p 'test_qortal_icons.py' -v
+```
+
 
 ### 'auto-fix-qortal.sh'
 **auto-fix-qortal.sh** - This script is utilized to **automatically update the Qortal core and more, even if auto-update doesn't work for some reason.** The idea behind this script is that it will **keep your Qortal Core updated no matter what happens. With either a system reboot or automatically on a schedule.** Initial schedule is **every 3 days at 1:01 AM**.

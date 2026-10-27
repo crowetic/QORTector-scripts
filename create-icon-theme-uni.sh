@@ -2,102 +2,98 @@
 
 set -euo pipefail
 
-for cmd in rsync curl unzip convert; do
+for cmd in rsync curl unzip; do
   if ! command -v "$cmd" >/dev/null; then
-    echo "[!] Required command '$cmd' is not installed. Please install it and re-run."
+    echo "[!] Required command '$cmd' is not installed. Please install it and re-run." >&2
     exit 1
   fi
 done
+
+# ImageMagick 7 uses magick; older distributions provide convert.
+if command -v magick >/dev/null 2>&1; then
+  IMAGE_CONVERTER=magick
+elif command -v convert >/dev/null 2>&1; then
+  IMAGE_CONVERTER=convert
+else
+  echo "[!] ImageMagick is required (magick or convert). Please install it and re-run." >&2
+  exit 1
+fi
 
 ICON_SOURCE_DIR="${HOME}/Pictures/icons/icons_theme"
 ICON_THEME_NAME="Yaru-blue-qortal"
 ICON_CACHE_DIR="${HOME}/.icons/${ICON_THEME_NAME}"
 TARGET_THEME_DIR="${ICON_CACHE_DIR}/48x48/apps"
+HICOLOR_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/icons/hicolor"
+ICON_NAMES=(qortal qortal-hub qortal-ui qortal-menu-button qortal-menu-button-2 qortal-menu-button-3 qortal-menu-button-4)
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/qortal-icons.XXXXXX")
+trap 'rm -rf "$WORK_DIR"' EXIT
 
-# Download icons if missing
-if [ ! -d "${ICON_SOURCE_DIR}" ]; then
-  echo "🔽 Downloading Qortal icon set..."
-  mkdir -p "${HOME}/iconTemp"
-  trap 'rm -rf "${HOME}/iconTemp"' EXIT
-  cd "${HOME}/iconTemp" || exit 1
+have_icon_sources() {
+  local source_dir="$1" name
+  for name in "${ICON_NAMES[@]}"; do
+    [ -s "${source_dir}/${name}.png" ] || return 1
+  done
+}
 
-  #TODO - UPDATE THESE DOWNLOAD LOCATIONS WITH QDN LOCATIONS (MOST LIKELY PUBLISHED AS A WEBSITE TO ALLOW DIRECT WGET DOWNLOADS)
-
-  PRIMARY_URL="https://cloud.qortal.org/s/machinePicturesFolder/download" 
-  BACKUP_URL="https://cloud.crowetic.com/s/m9GZyy8k6n7NYJZ/download"  
-
-  echo "🌐 Trying primary source..."
-  if curl -fL -o Pictures.zip "$PRIMARY_URL"; then
-    echo "✅ Downloaded from primary."
-  else
-    echo "⚠️ Primary download failed. Trying backup source..."
-    if curl -fL -o Pictures.zip "$BACKUP_URL"; then
-      echo "✅ Downloaded from backup."
-    else
-      echo "❌ Both downloads failed. Aborting. ICON FILES FAILED TO DOWNLOAD, PLEASE RUN ./create-icon-theme-uni.sh LATER TO TRY AGAIN!"
-      exit 1
+# A previous interrupted install may have created an empty or partial directory.
+if ! have_icon_sources "$ICON_SOURCE_DIR"; then
+  echo "🔽 Downloading the complete Qortal icon set..."
+  sources=(
+    "https://cloud.qortal.org/s/machinePicturesFolder/download"
+    "https://cloud.crowetic.com/s/m9GZyy8k6n7NYJZ/download"
+  )
+  downloaded=false
+  for url in "${sources[@]}"; do
+    echo "🌐 Trying icon source: $url"
+    # A successful HTTP response may still be an HTML error page or a bad ZIP.
+    if curl --fail --location --show-error --connect-timeout 15 --max-time 180 --retry 2 \
+        -o "$WORK_DIR/Pictures.zip" "$url" && \
+        unzip -tq "$WORK_DIR/Pictures.zip" >/dev/null 2>&1; then
+      mkdir -p "$WORK_DIR/extracted"
+      if unzip -oq "$WORK_DIR/Pictures.zip" -d "$WORK_DIR/extracted" && \
+          have_icon_sources "$WORK_DIR/extracted/Pictures/icons/icons_theme"; then
+        mkdir -p "${HOME}/Pictures"
+        # Merge directories, including into an existing Pictures/icons directory.
+        rsync -a "$WORK_DIR/extracted/Pictures/" "${HOME}/Pictures/"
+        downloaded=true
+        break
+      fi
+      rm -rf "$WORK_DIR/extracted"
     fi
-  fi
-
-  if unzip Pictures.zip; then
-    echo "📂 Extracted icon archive."
-    mv Pictures/* "${HOME}/Pictures/"
-  else
-    echo "❌ Failed to unzip icon archive. Aborting."
+    echo "[!] Icon source did not provide a complete archive. Trying the next source." >&2
+  done
+  if [ "$downloaded" != true ] || ! have_icon_sources "$ICON_SOURCE_DIR"; then
+    echo "[!] Could not obtain all seven Qortal icons. Re-run create-icon-theme-uni.sh to retry." >&2
     exit 1
   fi
-
-  cd || exit 1
 fi
 
+# Convert everything before changing the installed theme or selecting it.
+mkdir -p "$WORK_DIR/rendered"
+for name in "${ICON_NAMES[@]}"; do
+  echo "[*] Preparing icon: $name"
+  "$IMAGE_CONVERTER" "${ICON_SOURCE_DIR}/${name}.png" -resize 48x48 "$WORK_DIR/rendered/${name}.png"
+  [ -s "$WORK_DIR/rendered/${name}.png" ]
+done
 
-# Define icon mappings
-declare -A ICON_MAP=(
-  ["qortal-menu-button.png"]="qortal-menu-button"
-  ["qortal-menu-button-2.png"]="qortal-menu-button-2"
-  ["qortal-menu-button-3.png"]="qortal-menu-button-3"
-  ["qortal-menu-button-4.png"]="qortal-menu-button-4"
-  ["qortal-ui.png"]="qortal-ui"
-  ["qortal-hub.png"]="qortal-hub"
-  ["qortal.png"]="qortal"
-)
-
-# Step 1: Choose base theme.
-# IMPORTANT: On Ubuntu the "Yaru-dark"/"Yaru-blue-dark" themes are EMPTY shells
-# (index.theme with an Inherits= line, but zero PNGs). The real folder artwork
-# lives in "Yaru" (orange) and "Yaru-blue" (blue). If we base the custom theme
-# on the empty "Yaru-dark", it has no folders and GTK walks the Inherits chain
-# down to the orange "Yaru" base => orange folders.
-#
-# So we base on the first candidate that actually SHIPS a folder icon. "Yaru-blue"
-# carries the blue folder.png that the "Yaru-blue-dark" profile renders, which is
-# the look we want. "Yaru" is the last resort (orange) so at least folders exist.
-BASE_THEME_DIR=""
-for cand in \
-  /usr/share/icons/Yaru-blue \
-  /usr/share/icons/Yaru-dark \
-  /usr/share/icons/Yaru; do
-  if [ -d "$cand" ] && [ -f "$cand/48x48/places/folder.png" ]; then
-    BASE_THEME_DIR="$cand"
-    echo "[*] Using base theme (contains folder icons): $cand"
+# Inherit system artwork instead of copying an entire theme and its index.
+# Dark Yaru variants have no app directory of their own; their inheritance
+# supplies normal icons. Our own index must explicitly declare Qortal apps.
+BASE_THEME=""
+for candidate in Yaru-blue-dark Yaru-blue Yaru-dark Yaru breeze Adwaita; do
+  if [ -f "/usr/share/icons/${candidate}/index.theme" ]; then
+    BASE_THEME="$candidate"
     break
   fi
 done
+INHERITED_THEMES="${BASE_THEME:+${BASE_THEME},}hicolor"
 
-if [ -z "$BASE_THEME_DIR" ]; then
-  # No standard Yaru content found; fall back to the current DE theme or a
-  # minimal index.theme so the Qortal app icons still install.
-  CURRENT_THEME=$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d "'")
-  if [ -n "$CURRENT_THEME" ] && [ -d "/usr/share/icons/$CURRENT_THEME" ]; then
-    BASE_THEME_DIR="/usr/share/icons/$CURRENT_THEME"
-    echo "[*] Falling back to current icon theme: $CURRENT_THEME"
-  else
-    echo "[!] Could not find a Yaru theme with icons. Creating minimal fallback..."
-    mkdir -p "${ICON_CACHE_DIR}/48x48/apps"
-    cat <<EOF > "${ICON_CACHE_DIR}/index.theme"
+mkdir -p "$TARGET_THEME_DIR" "$HICOLOR_DIR/48x48/apps"
+cat > "${ICON_CACHE_DIR}/index.theme" <<EOF
 [Icon Theme]
 Name=${ICON_THEME_NAME}
-Inherits=Yaru-blue,Yaru,hicolor
+Comment=Qortal application icons with system theme artwork
+Inherits=${INHERITED_THEMES}
 Directories=48x48/apps
 
 [48x48/apps]
@@ -105,110 +101,58 @@ Size=48
 Context=Applications
 Type=Fixed
 EOF
-  fi
-fi
 
-# Step 2: Copy base theme if found
-if [ -n "$BASE_THEME_DIR" ] && [ ! -d "${ICON_CACHE_DIR}" ]; then
-  echo "[*] Copying base theme from: $BASE_THEME_DIR"
-  mkdir -p "${ICON_CACHE_DIR}"
-  rsync -a "$BASE_THEME_DIR/" "${ICON_CACHE_DIR}/"
-
-  if [ -f "/usr/share/icons/Yaru-blue-dark/index.theme" ]; then
-    cp /usr/share/icons/Yaru-blue-dark/index.theme "${ICON_CACHE_DIR}/index.theme"
-  fi
-
-  sed -i 's/^Name=.*/Name=Yaru-blue-qortal/' "${ICON_CACHE_DIR}/index.theme"
-  sed -i 's/^Inherits=.*/Inherits=Yaru-blue-dark,Yaru-dark,Yaru,hicolor/' "${ICON_CACHE_DIR}/index.theme"
-
-  if ! grep -q "48x48/apps" "${ICON_CACHE_DIR}/index.theme"; then
-    echo "Directories=48x48/apps" >> "${ICON_CACHE_DIR}/index.theme"
-    echo "
-[48x48/apps]
-Size=48
-Context=Applications
-Type=Fixed" >> "${ICON_CACHE_DIR}/index.theme"
-  fi
-fi
-
-# Step 3: Install icons
-mkdir -p "${TARGET_THEME_DIR}"
-
-install_icon() {
-  local src="$1"
-  local name="$2"
-  local dest="${TARGET_THEME_DIR}/${name}.png"
-
-  if [ ! -f "$src" ]; then
-    echo "[!] Missing source icon: $src"
-    return
-  fi
-
-  echo "[*] Installing icon: $name"
-  convert "$src" -resize 48x48 "$dest"
-}
-
-for src in "${!ICON_MAP[@]}"; do
-  install_icon "${ICON_SOURCE_DIR}/${src}" "${ICON_MAP[$src]}"
+for name in "${ICON_NAMES[@]}"; do
+  install -m 644 "$WORK_DIR/rendered/${name}.png" "${TARGET_THEME_DIR}/${name}.png"
+  # hicolor is the standard fallback in every desktop icon theme. These names
+  # must resolve even when GNOME/Cinnamon keeps or later selects another theme.
+  install -m 644 "$WORK_DIR/rendered/${name}.png" "$HICOLOR_DIR/48x48/apps/${name}.png"
 done
 
-# Step 4: Update icon cache
-if [ -f "${ICON_CACHE_DIR}/index.theme" ]; then
-  gtk-update-icon-cache -f "${ICON_CACHE_DIR}" || echo "[!] gtk-update-icon-cache failed or not found."
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  for theme_dir in "$ICON_CACHE_DIR" "$HICOLOR_DIR"; do
+    gtk-update-icon-cache -f -t "$theme_dir" || echo "[!] Could not refresh icon cache: $theme_dir" >&2
+  done
 fi
+touch "$ICON_CACHE_DIR" "$HICOLOR_DIR"
 
-# Step 5: Set icon theme if DE supports it
+# Desktop identifiers may contain multiple colon-separated names, e.g.
+# ubuntu:GNOME, GNOME:GNOME-Classic, or X-Cinnamon.
 CURRENT_DESKTOP=$(printf '%s' "${XDG_CURRENT_DESKTOP:-}" | tr '[:upper:]' '[:lower:]')
-
-# Normalize aliases
-case "$CURRENT_DESKTOP" in
-  x-cinnamon) CURRENT_DESKTOP="cinnamon" ;;
-  xfce*) CURRENT_DESKTOP="xfce" ;;
-  *plasma* | *kde*) CURRENT_DESKTOP="plasma" ;;
-  kde-plasma) CURRENT_DESKTOP="plasma" ;;
-esac
+set_gsettings_theme() {
+  if ! command -v gsettings >/dev/null 2>&1 || \
+      ! gsettings set "$1" icon-theme "$ICON_THEME_NAME"; then
+    echo "[!] Could not select the custom theme for $1. Qortal icons are installed in hicolor." >&2
+  fi
+}
 
 case "$CURRENT_DESKTOP" in
-  cinnamon)
-    if command -v gsettings >/dev/null 2>&1; then
-      gsettings set org.cinnamon.desktop.interface icon-theme "${ICON_THEME_NAME}"
-    else
-      echo "[!] gsettings not available. Please set the Cinnamon icon theme manually if needed."
-    fi
+  *cinnamon*)
+    set_gsettings_theme org.cinnamon.desktop.interface
     ;;
-  gnome)
-    if command -v gsettings >/dev/null 2>&1; then
-      gsettings set org.gnome.desktop.interface icon-theme "${ICON_THEME_NAME}"
-    else
-      echo "[!] gsettings not available. Please set the GNOME icon theme manually if needed."
-    fi
+  *gnome* | *unity*)
+    set_gsettings_theme org.gnome.desktop.interface
     ;;
-  xfce)
+  *xfce*)
     if command -v xfconf-query >/dev/null 2>&1; then
-      xfconf-query -c xsettings -p /Net/IconThemeName -s "${ICON_THEME_NAME}" 2>/dev/null
-    else
-      echo "[!] xfconf-query not available. Please set the XFCE icon theme manually if needed."
+      xfconf-query -c xsettings -p /Net/IconThemeName -s "$ICON_THEME_NAME" || \
+        echo "[!] Could not select the XFCE theme. Qortal icons are installed in hicolor." >&2
     fi
     ;;
-  kde | plasma)
+  *plasma* | *kde*)
     if command -v kwriteconfig6 >/dev/null 2>&1; then
-      kwriteconfig6 --file kdeglobals --group Icons --key Theme "${ICON_THEME_NAME}"
+      kwriteconfig6 --file kdeglobals --group Icons --key Theme "$ICON_THEME_NAME" || true
     elif command -v kwriteconfig5 >/dev/null 2>&1; then
-      kwriteconfig5 --file kdeglobals --group Icons --key Theme "${ICON_THEME_NAME}"
-    else
-      echo "[!] Neither kwriteconfig6 nor kwriteconfig5 is available. Please set the Plasma icon theme manually if needed."
+      kwriteconfig5 --file kdeglobals --group Icons --key Theme "$ICON_THEME_NAME" || true
+    fi
+    if command -v qdbus >/dev/null 2>&1; then
+      qdbus org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
     fi
     ;;
   *)
-    echo "[!] Unsupported or unknown DE: '$CURRENT_DESKTOP'. Set icon theme manually if needed."
+    echo "ℹ️ No supported desktop session detected. Qortal icons are installed for the next login."
     ;;
 esac
 
-if [ "$CURRENT_DESKTOP" = "plasma" ] && command -v qdbus >/dev/null 2>&1; then
-  qdbus org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-fi
-
-
-echo "✅ Qortal icons installed into local theme: ${ICON_THEME_NAME}"
-echo "ℹ️  You can now use Icon=qortal-ui (etc.) in .desktop files."
-echo "💡  If icons don't show up immediately, try logging out and back in."
+echo "✅ All seven Qortal icons installed in ${ICON_THEME_NAME} and the hicolor fallback."
+echo "ℹ️ If an existing panel still shows cached icons, log out and back in."
