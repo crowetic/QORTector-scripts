@@ -1,440 +1,396 @@
 #!/bin/bash
+# Run as the desktop/Core user; sudo is used only for system packages.
 
-# Regular Colors
-BLACK='\033[0;30m'
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-WHITE='\033[0;37m'
-NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_URL="https://raw.githubusercontent.com/crowetic/QORTector-scripts/main"
+WARNINGS=()
+BACKUP_DIR=""
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-QORTAL_SETUP_URL="https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/Qortal-Setup-Linux.sh"
+warn() {
+  printf 'Warning: %s\n' "$*" >&2
+  WARNINGS+=("$*")
+}
+
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+validate_download() {
+  local file="$1" name="$2" first_line
+  [ -s "$file" ] || return 1
+  case "$name" in
+    *.sh)
+      IFS= read -r first_line < "$file" || return 1
+      [[ "$first_line" == '#!'* ]] && bash -n "$file"
+      ;;
+    *.json) jq -e 'type == "object"' "$file" >/dev/null ;;
+    *.zip) unzip -tq "$file" >/dev/null 2>&1 ;;
+  esac
+}
 
 download_with_retry() {
-  local url="$1"
-  local output="$2"
-  local attempts="${3:-6}"
-  local try=1
-  local backoff=2
-  local tmp="${output}.part"
-
-  rm -f "$tmp"
-
-  if command -v wget >/dev/null 2>&1; then
-    while [ "$try" -le "$attempts" ]; do
-      echo "${CYAN} 🌐 Download attempt ${try}/${attempts} (wget): ${url} ${NC}"
-      if wget --tries=1 --timeout=30 --continue -O "$tmp" "$url" && [ -s "$tmp" ]; then
-        mv -f "$tmp" "$output"
-        return 0
-      fi
-      if [ "$try" -lt "$attempts" ]; then
-        echo "${YELLOW} ⚠️ wget attempt failed. Retrying in ${backoff}s... ${NC}"
-        sleep "$backoff"
-        if [ "$backoff" -lt 20 ]; then
-          backoff=$((backoff * 2))
-          [ "$backoff" -gt 20 ] && backoff=20
-        fi
-      fi
-      try=$((try + 1))
-    done
-
-    echo "${YELLOW} ⚠️ wget retries exhausted. Trying curl fallback... ${NC}"
-    if curl --fail --location --show-error --http1.1 --continue-at - --output "$tmp" "$url" && [ -s "$tmp" ]; then
+  local url="$1" output="$2" attempts="${3:-5}" tmp try
+  tmp=$(mktemp "${output}.part.XXXXXX") || return 1
+  for ((try=1; try<=attempts; try++)); do
+    printf 'Downloading %s (attempt %s/%s)\n' "$url" "$try" "$attempts"
+    # Restart short script/archive downloads: resuming can append an error page
+    # or mix two revisions. Keep the installed file until a valid replacement exists.
+    if command_exists curl && curl --fail --location --show-error \
+        --connect-timeout 15 --max-time 180 --output "$tmp" "$url" && \
+        validate_download "$tmp" "$output"; then
       mv -f "$tmp" "$output"
       return 0
     fi
-  else
-    while [ "$try" -le "$attempts" ]; do
-      echo "${CYAN} 🌐 Download attempt ${try}/${attempts} (curl): ${url} ${NC}"
-      if curl --fail --location --show-error --http1.1 --continue-at - --output "$tmp" "$url" && [ -s "$tmp" ]; then
-        mv -f "$tmp" "$output"
-        return 0
-      fi
-      if [ "$try" -lt "$attempts" ]; then
-        echo "${YELLOW} ⚠️ curl attempt failed. Retrying in ${backoff}s... ${NC}"
-        sleep "$backoff"
-        if [ "$backoff" -lt 20 ]; then
-          backoff=$((backoff * 2))
-          [ "$backoff" -gt 20 ] && backoff=20
-        fi
-      fi
-      try=$((try + 1))
-    done
-  fi
-
+    if command_exists wget && wget --tries=1 --timeout=30 -O "$tmp" "$url" && \
+        validate_download "$tmp" "$output"; then
+      mv -f "$tmp" "$output"
+      return 0
+    fi
+    [ "$try" -eq "$attempts" ] || sleep "$((try * 2))"
+  done
   rm -f "$tmp"
-  echo "${RED} ❌ Failed to download: ${url} ${NC}"
+  printf 'Could not download a valid file: %s\n' "$url" >&2
   return 1
 }
 
-command_exists() {
-  command -v "$1" >/dev/null 2>&1
+backup_file() {
+  local target="$1" relative
+  [ -f "$target" ] || return 0
+  [ -n "$BACKUP_DIR" ] || return 0
+  relative="${target#"$HOME"/}"
+  mkdir -p "$BACKUP_DIR/$(dirname "$relative")"
+  # Keep the pre-run copy if this file is updated more than once.
+  [ -e "$BACKUP_DIR/$relative" ] || cp -p "$target" "$BACKUP_DIR/$relative"
+}
+
+write_managed_file() {
+  local target="$1" mode="${2:-644}" tmp
+  mkdir -p "$(dirname "$target")"
+  tmp=$(mktemp "${target}.new.XXXXXX") || return 1
+  cat > "$tmp"
+  if ! cmp -s "$tmp" "$target"; then
+    backup_file "$target"
+    chmod "$mode" "$tmp"
+    mv -f "$tmp" "$target"
+  else
+    rm -f "$tmp"
+    chmod "$mode" "$target"
+  fi
+}
+
+install_repo_file() {
+  local name="$1" target="$2" mode="${3:-755}" source_file="$SCRIPT_DIR/$1" tmp
+  mkdir -p "$(dirname "$target")"
+  if [ -f "$source_file" ]; then
+    validate_download "$source_file" "$name" || return 1
+    write_managed_file "$target" "$mode" < "$source_file"
+  else
+    tmp=$(mktemp "${target}.download.XXXXXX") || return 1
+    if ! download_with_retry "$REPO_URL/$name" "$tmp.$name"; then
+      rm -f "$tmp" "$tmp.$name"
+      return 1
+    fi
+    write_managed_file "$target" "$mode" < "$tmp.$name"
+    rm -f "$tmp" "$tmp.$name"
+  fi
 }
 
 is_headless_mode() {
-  if [ "${REBUILT_MACHINE_HEADLESS:-0}" = "1" ]; then
-    return 0
-  fi
-
-  if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ] || [ -n "${XDG_CURRENT_DESKTOP:-}" ]; then
+  case "${REBUILT_MACHINE_HEADLESS:-auto}" in
+    1) return 0 ;;
+    0) return 1 ;;
+    auto) ;;
+    *) printf 'REBUILT_MACHINE_HEADLESS must be auto, 0 or 1.\n' >&2; return 2 ;;
+  esac
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}${XDG_CURRENT_DESKTOP:-}" ]; then
     return 1
   fi
-
-  if [ -d /usr/share/xsessions ] || [ -d /usr/share/wayland-sessions ]; then
-    return 1
-  fi
-
+  # An empty sessions directory alone does not make a server a desktop.
+  compgen -G '/usr/share/xsessions/*.desktop' >/dev/null && return 1
+  compgen -G '/usr/share/wayland-sessions/*.desktop' >/dev/null && return 1
   return 0
+}
+
+package_available() {
+  local candidate
+  candidate=$(LC_ALL=C apt-cache policy "$1" | awk '/Candidate:/ {print $2; exit}') || return 1
+  [ -n "$candidate" ] && [ "$candidate" != '(none)' ]
 }
 
 install_packages_if_available() {
   local package
-
   for package in "$@"; do
-    if apt-cache show "$package" >/dev/null 2>&1; then
-      echo "${CYAN} 📦 Installing package: ${package} ${NC}"
-      sudo apt-get install -y "$package"
+    if package_available "$package"; then
+      sudo apt-get install -y "$package" || warn "Could not install optional package: $package"
     else
-      echo "${YELLOW} ⚠️ Package not available on this system, skipping: ${package} ${NC}"
+      warn "Optional package is unavailable: $package"
     fi
   done
 }
 
 install_first_available_package() {
   local package
-
   for package in "$@"; do
-    if apt-cache show "$package" >/dev/null 2>&1; then
-      echo "${CYAN} 📦 Installing preferred package: ${package} ${NC}"
-      sudo apt-get install -y "$package"
+    if package_available "$package" && sudo apt-get install -y "$package"; then
       return 0
     fi
   done
-
   return 1
 }
 
 ensure_qortal_setup_script() {
-  local local_script="${SCRIPT_DIR}/Qortal-Setup-Linux.sh"
-  local fallback_script="${HOME}/Qortal-Setup-Linux.sh"
-
-  QORTAL_SETUP_SCRIPT=""
-
-  if [ -f "$local_script" ]; then
-    QORTAL_SETUP_SCRIPT="$local_script"
-    return 0
-  fi
-
-  echo "${YELLOW} ⚠️ Local Qortal-Setup-Linux.sh not found. Downloading a fresh copy... ${NC}"
-
-  if download_with_retry "$QORTAL_SETUP_URL" "$fallback_script" 6; then
-    chmod +x "$fallback_script"
-    QORTAL_SETUP_SCRIPT="$fallback_script"
-    return 0
-  fi
-
-  return 1
+  QORTAL_SETUP_SCRIPT="$HOME/Qortal-Setup-Linux.sh"
+  install_repo_file Qortal-Setup-Linux.sh "$QORTAL_SETUP_SCRIPT"
 }
 
 install_qortal_icons() {
-  local helper="${HOME}/create-icon-theme-uni.sh"
-
-  download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh" "$helper" 5 || return 1
-  bash "$helper" || return 1
-  # The rebuild may run in GNOME before the first Cinnamon login.
-  gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-qortal" || true
+  install_repo_file create-icon-theme-uni.sh "$HOME/create-icon-theme-uni.sh" || return 1
+  bash "$HOME/create-icon-theme-uni.sh" || return 1
+  if [ "${HEADLESS_MODE:-false}" = false ]; then
+    gsettings set org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal || \
+      warn 'Could not select the Cinnamon icon theme; hicolor icons remain available.'
+  fi
 }
 
-HEADLESS_MODE=false
-if is_headless_mode; then
-  HEADLESS_MODE=true
-fi
-
-echo "${YELLOW} 🛠 UPDATING 🛠 UBUNTU AND INSTALLING REQUIRED SOFTWARE 📦 PACKAGES 📦 ${NC}\n"
-echo "${CYAN} ℹ️ Detected install mode: $( [ "$HEADLESS_MODE" = true ] && echo "headless/server" || echo "desktop" ) ${NC}\n"
-
-echo "${YELLOW} ⚙️ creating system folders that require admin permissions... and disabling 'ubuntu pro' notices in terminal..."
-if command_exists pro; then
-  sudo pro config set apt_news=false || true
-fi
-
-sudo apt-get update
-sudo apt-get -y upgrade
-
-install_packages_if_available \
-  git jq openssh-server unzip vim curl wget ca-certificates zlib1g-dev \
-  p7zip-full htop net-tools bpytop ffmpeg sysbench smartmontools \
-  fonts-symbola lm-sensors rsync xdg-utils imagemagick
-
-install_first_available_package \
-  openjdk-21-jre openjdk-21-jre-headless openjdk-17-jre openjdk-17-jre-headless || \
-  echo "${YELLOW} ⚠️ Unable to install a supported Java runtime automatically. ${NC}"
-
-install_first_available_package libfuse2t64 libfuse2 || true
-
-if [ "$HEADLESS_MODE" = false ]; then
-  install_packages_if_available \
-    gnome-software yaru-theme-icon yaru-theme-gtk \
-    vlc chromium-browser ksnip xsensors gparted cinnamon-desktop-environment \
-    gnome-terminal dconf-cli gedit eog evince
-else
-  echo "${CYAN} ℹ️ Headless mode detected. Skipping Cinnamon and GUI package installation. ${NC}\n"
-fi
-
-if [ "$HEADLESS_MODE" = false ]; then
-  echo "${YELLOW} 📦 INSTALLING SENSORS MONITOR APPLET FOR PANEL...${NC}\n"
-
-  mkdir -p "${HOME}/.local/share/cinnamon/applets"
-  cd "${HOME}/.local/share/cinnamon/applets" || exit 1
-  if download_with_retry "https://cinnamon-spices.linuxmint.com/files/applets/Sensors@claudiux.zip" "sensors-monitor.zip" 5; then
-    unzip -o sensors-monitor.zip -d Sensors@claudiux
-    rm -f sensors-monitor.zip
-    echo "✅ Applet installed. You can now add 'Sensors Monitor' to your panel manually."
+install_machine_artwork() {
+  local work
+  work=$(mktemp -d) || return 1
+  if download_with_retry 'https://cloud.qortal.org/s/machinefilesnew/download' "$work/machine.zip" && \
+      unzip -oq "$work/machine.zip" -d "$work" && [ -d "$work/Machine-files/Pictures" ]; then
+    mkdir -p "$HOME/Pictures"
+    # The bundle supplies artwork, not executable scripts or user configuration.
+    rsync -a "$work/Machine-files/Pictures/" "$HOME/Pictures/" || { rm -rf "$work"; return 1; }
   else
-    echo "${YELLOW} ⚠️ Could not download the Sensors Monitor applet. Continuing without it. ${NC}"
+    rm -rf "$work"
+    return 1
   fi
-  cd "${HOME}" || exit 1
+  rm -rf "$work"
+}
 
-  ### SET DEFAULT SESSION TO CINNAMON ###
-  echo "${YELLOW} ⚙️ SETTING CINNAMON AS DEFAULT DESKTOP SESSION ${NC}\n"
+install_sensors_applet() {
+  local work applets="${XDG_DATA_HOME:-$HOME/.local/share}/cinnamon/applets"
+  work=$(mktemp -d) || return 1
+  if download_with_retry 'https://cinnamon-spices.linuxmint.com/files/applets/Sensors@claudiux.zip' "$work/sensors.zip" && \
+      unzip -oq "$work/sensors.zip" -d "$work" && [ -f "$work/Sensors@claudiux/metadata.json" ]; then
+    mkdir -p "$applets/Sensors@claudiux"
+    # The ZIP already contains Sensors@claudiux/, so do not nest it twice.
+    rsync -a "$work/Sensors@claudiux/" "$applets/Sensors@claudiux/" || { rm -rf "$work"; return 1; }
+  else
+    rm -rf "$work"
+    return 1
+  fi
+  rm -rf "$work"
+}
 
-  # Works for most LightDM and GDM-based setups
-  echo "cinnamon" > "${HOME}/.xsession"
-  chmod +x "${HOME}/.xsession"
-
-  cat > "${HOME}/.dmrc" <<EOL
-[Desktop]
-Session=cinnamon
-EOL
-
-  echo "${GREEN} Cinnamon session will be loaded by default on next login! ${NC}\n"
-else
-  echo "${CYAN} ℹ️ Headless mode detected. Skipping Cinnamon session configuration. ${NC}\n"
-fi
-
-### RUN FULL QORTAL SETUP ###
-echo "${YELLOW} ⚙️ RUNNING FULL QORTAL SETUP VIA Qortal-Setup-Linux.sh ${NC}\n"
-if ensure_qortal_setup_script && [ -n "$QORTAL_SETUP_SCRIPT" ] && [ -f "$QORTAL_SETUP_SCRIPT" ]; then
-  chmod +x "$QORTAL_SETUP_SCRIPT"
-  bash "$QORTAL_SETUP_SCRIPT" || exit 1
-else
-  echo "${RED}❌ Could not obtain Qortal-Setup-Linux.sh automatically.${NC}"
-  exit 1
-fi
-
-
-### DOWNLOAD EXTRA FILES ###
-cd "${HOME}" || exit 1
-
-download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/refresh-qortal.sh" "refresh-qortal.sh" 5
-download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/auto-fix-qortal.sh" "auto-fix-qortal.sh" 5
-download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/check-qortal-status.sh" "check-qortal-status.sh" 5
-download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal.sh" "start-qortal.sh" 5
-download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/start-qortal-core.sh" "start-qortal-core.sh" 5
-#todo update the download location below to multiple locations and QDN location
-download_with_retry "https://cloud.qortal.org/s/machinefilesnew/download" "download" 6
-
-chmod +x ./*.sh 2>/dev/null || true
-
-if unzip -o download >/dev/null 2>&1 && [ -d Machine-files ]; then
-  rsync -raPz Machine-files/ "${HOME}/"
-else
-  echo "${YELLOW} ⚠️ Could not unpack Machine-files bundle cleanly. Continuing with the rest of setup. ${NC}"
-fi
-
-
-rm -rf download Machine-files
-if [ "$HEADLESS_MODE" = false ]; then
-  ### CINNAMON THEMING ###
-  echo "${YELLOW} 📦 INSTALLING WINDOWS 10 THEMES FOR CINNAMON ${NC}\n"
-
-  mkdir -p "${HOME}/.themes"
-
-  if [ ! -d "${HOME}/.themes/Windows-10" ]; then
-    if download_with_retry "https://cinnamon-spices.linuxmint.com/files/themes/Windows-10.zip?time=$(date +%s)" "Windows-10.zip" 5; then
-      unzip -o Windows-10.zip >/dev/null 2>&1
-      mv -f Windows-10 "${HOME}/.themes/" 2>/dev/null || true
-      rm -f Windows-10.zip
+install_desktop_themes() {
+  local work
+  mkdir -p "$HOME/.themes"
+  if [ ! -d "$HOME/.themes/Windows-10" ]; then
+    work=$(mktemp -d) || return 1
+    if download_with_retry 'https://cinnamon-spices.linuxmint.com/files/themes/Windows-10.zip' "$work/theme.zip" && \
+        unzip -oq "$work/theme.zip" -d "$work" && [ -d "$work/Windows-10" ]; then
+      mv "$work/Windows-10" "$HOME/.themes/"
     else
-      echo "${YELLOW} ⚠️ Unable to download Windows-10 Cinnamon theme. Continuing. ${NC}"
+      warn 'Windows-10 Cinnamon theme was unavailable; keeping installed theme.'
     fi
+    rm -rf "$work"
   fi
-
-  if [ ! -d "${HOME}/.themes/Windows-10-Dark" ]; then
-    git clone https://github.com/B00merang-Project/Windows-10-Dark.git "${HOME}/.themes/Windows-10-Dark" || true
+  if [ ! -d "$HOME/.themes/Windows-10-Dark" ]; then
+    work=$(mktemp -d) || return 1
+    if git clone --depth 1 https://github.com/B00merang-Project/Windows-10-Dark.git "$work/theme"; then
+      mv "$work/theme" "$HOME/.themes/Windows-10-Dark"
+    else
+      warn 'Windows-10-Dark GTK theme was unavailable; keeping installed theme.'
+    fi
+    rm -rf "$work"
   fi
+}
 
-  ### APPLY THEMES (WILL WORK AFTER REBOOT TOO) ###
-  echo "${YELLOW} ⚙️ APPLYING CINNAMON THEMES ${NC}\n"
+# Quote arguments using both desktop-entry escaping and Exec quoting rules.
+desktop_exec() {
+  python3 - "$@" <<'PYEXEC'
+import sys
+# Keep the executable token stable: GIO checks it before expanding %% in paths.
+print('/usr/bin/env', end=' ')
+for arg in sys.argv[1:]:
+    quoted = '"' + ''.join('\\' + c if c in '\\"`$' else c for c in arg) + '"'
+    print(quoted.replace('\\', '\\\\').replace('%', '%%'), end=' ')
+print()
+PYEXEC
+}
 
-  gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10-Dark" || true
-  gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
-  gsettings set org.cinnamon.theme name "Windows-10" || true
-  gsettings set org.cinnamon.desktop.background picture-uri "file://${HOME}/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
-  # Use the system theme until the Qortal icon helper installs the custom theme.
-  gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-dark" || true
-  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
-
-  ### CINNAMON PANEL + MENU CUSTOMIZATION ###
-  echo "${YELLOW} ⚙️ CREATING CINNAMON PANEL AND MENU CONFIGURATION SCRIPT AND SETTING TO RUN POST-STARTUP NEXT TIME. ${NC}\n"
-
-  cat > "$HOME/apply-cinnamon-settings.sh" <<'EOL'
+install_desktop_launchers() {
+  local config="${XDG_CONFIG_HOME:-$HOME/.config}" applications="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+  write_managed_file "$HOME/run-script-in-terminal.sh" 755 <<'WRAPPER'
 #!/bin/bash
-sleep 5
-gsettings set org.cinnamon.desktop.wm.preferences theme "Windows-10" || true
-gsettings set org.cinnamon.desktop.interface gtk-theme "Windows-10-Dark" || true
-gsettings set org.cinnamon.theme name "Windows-10" || true
-gsettings set org.cinnamon.desktop.background picture-uri "file://$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" || true
-gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
-
-echo "Downloading additional settings..."
-if command -v wget >/dev/null 2>&1; then
-  wget -O cinnamon-settings.json "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json"
-else
-  curl -L -o cinnamon-settings.json "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json"
+set -eu
+if [ "${1:-}" = --delay ]; then
+  sleep "$2"
+  shift 2
 fi
-mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
-
-cp cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
-
-helper="${HOME}/create-icon-theme-uni.sh"
-if ! curl --fail --location --show-error --retry 3 --connect-timeout 15 --max-time 180 \
-    -o "${helper}.part" "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/create-icon-theme-uni.sh"; then
-  rm -f "${helper}.part"
-  echo "Qortal icon helper download failed. Re-run Apply Cinnamon Settings to retry." >&2
-  exit 1
-fi
-mv -f "${helper}.part" "$helper"
-if ! bash "$helper"; then
-  echo "Qortal icon installation failed. Re-run create-icon-theme-uni.sh to retry." >&2
-  exit 1
-fi
-gsettings set org.cinnamon.desktop.interface icon-theme "Yaru-blue-qortal" || true
-EOL
-
-  cat > "$HOME/run-script-in-terminal.sh" <<'EOL'
-#!/bin/bash
-TARGET_SCRIPT="$1"
-shift || true
-
-if [ -z "$TARGET_SCRIPT" ] || [ ! -x "$TARGET_SCRIPT" ]; then
-  echo "Target script is missing or not executable: $TARGET_SCRIPT"
-  exit 1
-fi
-
+TARGET_SCRIPT="${1:-}"
+[ -n "$TARGET_SCRIPT" ] && [ -x "$TARGET_SCRIPT" ] || { echo "Missing executable: $TARGET_SCRIPT" >&2; exit 1; }
+shift
 if command -v gnome-terminal >/dev/null 2>&1; then
   exec gnome-terminal -- "$TARGET_SCRIPT" "$@"
 elif command -v mate-terminal >/dev/null 2>&1; then
   exec mate-terminal -- "$TARGET_SCRIPT" "$@"
 elif command -v xfce4-terminal >/dev/null 2>&1; then
-  exec xfce4-terminal -e "$TARGET_SCRIPT"
+  exec xfce4-terminal --execute "$TARGET_SCRIPT" "$@"
 elif command -v x-terminal-emulator >/dev/null 2>&1; then
-  exec x-terminal-emulator -e "$TARGET_SCRIPT"
+  exec x-terminal-emulator -e "$TARGET_SCRIPT" "$@"
 else
   exec "$TARGET_SCRIPT" "$@"
 fi
-EOL
-
-  chmod +x "$HOME/apply-cinnamon-settings.sh" "$HOME/run-script-in-terminal.sh"
-
-  echo "${GREEN} ⬇️ Downloading additional ${NC}${YELLOW}CINNAMON${NC}${GREEN}settings${NC}\n"
-
-  download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/cinnamon-settings.json" "cinnamon-settings.json" 5
-  mkdir -p "${HOME}/.cinnamon/configs/menu@cinnamon.org"
-  cp -f cinnamon-settings.json "${HOME}/.cinnamon/configs/menu@cinnamon.org/0.json"
-
-  echo "${YELLOW} Configuring terminal, default apps, and more...${NC}\n"
-  if download_with_retry "https://raw.githubusercontent.com/crowetic/QORTector-scripts/main/configure-terminal-and-more.sh" "configure-terminal-and-more.sh" 5; then
-    chmod +x configure-terminal-and-more.sh
-    ./configure-terminal-and-more.sh || echo "${YELLOW} ⚠️ Desktop preference configuration returned a non-zero status. Continuing. ${NC}"
-  fi
-  cd "${HOME}" || exit 1
-
-  echo "continuing desktop configuration..."
-
-  mkdir -p "$HOME/.config/autostart"
-  mkdir -p "$HOME/.local/share/applications"
-
-  cat > "$HOME/.local/share/applications/apply-cinnamon-settings.desktop" <<EOL
+WRAPPER
+  write_managed_file "$applications/apply-cinnamon-settings.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Exec=${HOME}/run-script-in-terminal.sh ${HOME}/apply-cinnamon-settings.sh
-Hidden=false
-NoDisplay=false
+Exec=$(desktop_exec "$HOME/run-script-in-terminal.sh" "$HOME/apply-cinnamon-settings.sh")
+Icon=preferences-desktop-theme
 Name=Apply Cinnamon Settings
-Comment=Reapplies Cinnamon panel, theme, and menu customizations
-EOL
-
-  cat > "${HOME}/.config/autostart/auto-fix-qortal-GUI.desktop" <<EOL
+Comment=Apply Qortal desktop settings and the 40-pixel menu icon
+Terminal=false
+Categories=Settings;
+EOF
+  write_managed_file "$config/autostart/apply-cinnamon-settings.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Exec=${HOME}/run-script-in-terminal.sh ${HOME}/auto-fix-qortal.sh
-X-GNOME-Autostart-enabled=true
-NoDisplay=false
-Hidden=false
-Name[en_US]=auto-fix-visible
-Comment[en_US]=Run auto-fix script visibly 7 min after system startup.
-X-GNOME-Autostart-Delay=420
-EOL
-
-  cat > "${HOME}/.config/autostart/start-qortal.desktop" <<EOL
+Exec=$(desktop_exec "$HOME/apply-cinnamon-settings.sh" --first-login)
+OnlyShowIn=X-Cinnamon;
+NoDisplay=true
+Name=Finish Qortal Cinnamon Setup
+Icon=qortal
+EOF
+  write_managed_file "$config/autostart/auto-fix-qortal-GUI.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Exec=${HOME}/start-qortal-core.sh
-X-GNOME-Autostart-enabled=true
-NoDisplay=false
-Hidden=false
-Name[en_US]=start-qortal
-Comment[en_US]=start qortal core 6 seconds after boot
-X-GNOME-Autostart-Delay=6
-EOL
+Exec=$(desktop_exec "$HOME/run-script-in-terminal.sh" --delay 420 "$HOME/auto-fix-qortal.sh")
+Name=Qortal Maintenance
+Comment=Run Qortal maintenance seven minutes after login
+Icon=qortal
+Terminal=false
+EOF
+  write_managed_file "$config/autostart/start-qortal.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Exec=$(desktop_exec "$HOME/start-qortal-core.sh")
+Name=Qortal Core
+Icon=qortal
+Terminal=false
+EOF
+  command_exists update-desktop-database && update-desktop-database "$applications" || true
+}
 
-  echo "${CYAN} Adding CUSTOM QORTAL ICON THEME...${NC}\n"
-  if ! install_qortal_icons; then
-    echo "${RED} ❌ Qortal icon installation failed. Fix the error above and run bash \"${HOME}/create-icon-theme-uni.sh\" to retry. Automatic reboot cancelled. ${NC}" >&2
-    exit 1
+install_rebuilt_cron() {
+  local work
+  work=$(mktemp -d) || return 1
+  if ! LC_ALL=C crontab -l > "$work/old" 2> "$work/errors"; then
+    if ! grep -qi 'no crontab' "$work/errors"; then
+      cat "$work/errors" >&2
+      rm -rf "$work"
+      return 1
+    fi
   fi
-
-  echo "${YELLOW} 🔄 Forcing Cinnamon Menu Refresh...${NC}"
-  if command_exists cinnamon; then
-    cinnamon --replace > /dev/null 2>&1 &
+  # Preserve comments, variables and unrelated jobs, including manual schedules.
+  awk '/^[[:space:]]*#/ || ($0 !~ /(^|[ /])auto-fix-qortal\.sh(["[:space:]]|$)/ && !($0 ~ /^@reboot/ && $0 ~ /start-qortal-core\.sh/))' "$work/old" > "$work/new"
+  if [ "$HEADLESS_MODE" = true ]; then
+    printf '@reboot "${HOME}/start-qortal-core.sh"\n' >> "$work/new"
+    printf '@reboot sleep 399 && "${HOME}/auto-fix-qortal.sh" > "${HOME}/auto-fix-startup.log" 2>&1\n' >> "$work/new"
   fi
-else
-  echo "${CYAN} ℹ️ Headless mode detected. Skipping Cinnamon theming, applets, autostart launchers, and desktop preference setup. ${NC}\n"
-fi
-
-### CRONTAB SETUP ###
-echo "${YELLOW} SETTING CRONTAB TASKS ${NC}\n"
-
-{
-  echo "1 1 */3 * * ${HOME}/auto-fix-qortal.sh > \"${HOME}/qortal/auto-fix-01.log\" 2>&1"
-} > rebuilt-machine-cron
-
-crontab rebuilt-machine-cron
-rm -f rebuilt-machine-cron rebuilt-machine*.txt configure-terminal-and-more.sh cinnamon-settings.json
-
-if [ "$HEADLESS_MODE" = false ]; then
-  echo "${YELLOW} Refreshing Cinnamon Panel/Menu to apply changes ${NC}"
-  if command_exists cinnamon; then
-    cinnamon --replace > /dev/null 2>&1 &
+  printf '1 1 */3 * * "${HOME}/auto-fix-qortal.sh" > "${HOME}/log-auto-fix-cron.log" 2>&1\n' >> "$work/new"
+  if ! cmp -s "$work/old" "$work/new"; then
+    [ -z "$BACKUP_DIR" ] || cp "$work/old" "$BACKUP_DIR/crontab"
+    crontab "$work/new" || { rm -rf "$work"; return 1; }
   fi
-fi
+  rm -rf "$work"
+}
 
-if [ "$HEADLESS_MODE" = false ]; then
-  echo "${GREEN} SETUP COMPLETE! CINNAMON WILL BE USED ON NEXT LOGIN. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now... NOTE - YOU MUST REBOOT TO FINISH ALL SETUP. IF CINNAMON DESKTOP IS NOT SELECTED, SELECT IT PRIOR TO INPUTTING LOGIN PASSWORD UPON REBOOT.)${NC}\n"
-else
-  echo "${GREEN} SETUP COMPLETE! HEADLESS MODE CHANGES ARE FINISHED. REBOOTING IN 30 SECONDS (use cntrl+c to CANCEL reboot within next 30 seconds if you do not want to reboot now.)${NC}\n"
+main() {
+  set -Eeuo pipefail
+  trap 'printf "Rebuild failed at line %s. Automatic reboot cancelled.\n" "$LINENO" >&2' ERR
+  if [ "$(id -u)" -eq 0 ]; then
+    echo 'Run this script as the intended desktop/Core user, without sudo. It requests sudo for packages.' >&2
+    return 1
+  fi
+  command_exists apt-get && command_exists sudo || { echo 'An Ubuntu/Debian-based system with sudo is required.' >&2; return 1; }
+  case "${REBUILT_MACHINE_HEADLESS:-auto}" in auto|0|1) ;; *) echo 'REBUILT_MACHINE_HEADLESS must be auto, 0 or 1.' >&2; return 1 ;; esac
+  case "${REBUILT_MACHINE_REBOOT:-1}" in 0|1) ;; *) echo 'REBUILT_MACHINE_REBOOT must be 0 or 1.' >&2; return 1 ;; esac
+  HEADLESS_MODE=false
+  if is_headless_mode; then HEADLESS_MODE=true; fi
+  if [ "$HEADLESS_MODE" = true ]; then
+    # Do not let a forced headless run configure or launch a desktop in a child.
+    unset DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+  fi
+  printf 'Rebuilt-machine setup: %s mode\n' "$([ "$HEADLESS_MODE" = true ] && echo headless || echo desktop)"
+  mkdir -p "$HOME/backups"
+  BACKUP_DIR=$(mktemp -d "$HOME/backups/rebuilt-machine-$(date +%Y%m%d-%H%M%S).XXXXXX")
+  sudo -v
+  if command_exists pro; then sudo pro config set apt_news=false || warn 'Could not disable Ubuntu Pro terminal news.'; fi
+  sudo apt-get -o APT::Update::Error-Mode=any update
+  sudo apt-get -y upgrade
+  sudo apt-get install -y git jq unzip curl wget ca-certificates rsync python3 imagemagick cron util-linux
+  install_packages_if_available openssh-server vim zlib1g-dev htop net-tools ffmpeg sysbench smartmontools fonts-symbola lm-sensors xdg-utils
+  install_first_available_package 7zip p7zip-full || warn 'No supported 7-Zip package could be installed.'
+  install_first_available_package btop bpytop || warn 'No optional system monitor could be installed.'
+  install_first_available_package openjdk-21-jre openjdk-21-jre-headless openjdk-17-jre openjdk-17-jre-headless || { echo 'A supported Java runtime is required.' >&2; return 1; }
+  install_first_available_package libfuse2t64 libfuse2 || warn 'FUSE2 unavailable; Hub may require AppImage extraction mode.'
+  if [ "$HEADLESS_MODE" = false ]; then
+    install_first_available_package cinnamon-desktop-environment cinnamon || { echo 'Cinnamon installation failed.' >&2; return 1; }
+    install_packages_if_available gnome-software yaru-theme-icon yaru-theme-gtk vlc chromium-browser ksnip xsensors gparted gnome-terminal dconf-cli
+    install_first_available_package gnome-text-editor gedit || warn 'No supported text editor could be installed.'
+    install_first_available_package loupe eog || warn 'No supported image viewer could be installed.'
+    install_first_available_package papers evince || warn 'No supported PDF viewer could be installed.'
+    install_sensors_applet || warn 'Sensors Monitor applet installation failed.'
+    # Display managers may ignore .dmrc. Do not replace a custom .xsession.
+    backup_file "$HOME/.dmrc"
+    python3 - <<'PYSESSION'
+import configparser, os
+from pathlib import Path
+p = Path.home() / '.dmrc'
+c = configparser.ConfigParser(interpolation=None)
+c.optionxform = str
+if p.exists():
+    c.read(p)
+if not c.has_section('Desktop'):
+    c.add_section('Desktop')
+c.set('Desktop', 'Session', 'cinnamon')
+with p.open('w') as out:
+    c.write(out)
+PYSESSION
+  fi
+  ensure_qortal_setup_script
+  # The rebuild installs automation after all assets/preferences are ready.
+  QSL_INSTALL_AUTOMATION=0 bash "$QORTAL_SETUP_SCRIPT"
+  local helper
+  for helper in refresh-qortal.sh auto-fix-qortal.sh check-qortal-status.sh start-qortal-core.sh; do
+    install_repo_file "$helper" "$HOME/$helper"
+  done
+  install_machine_artwork || warn 'Machine artwork bundle unavailable; the icon helper can fetch Qortal icons separately.'
+  install_qortal_icons
+  if [ "$HEADLESS_MODE" = false ]; then
+    install_desktop_themes
+    install_repo_file cinnamon-settings.json "$HOME/cinnamon-settings.json" 644
+    install_repo_file apply-cinnamon-settings.sh "$HOME/apply-cinnamon-settings.sh"
+    install_repo_file configure-terminal-and-more.sh "$HOME/configure-terminal-and-more.sh"
+    REBUILT_MACHINE_BACKUP_DIR="$BACKUP_DIR" bash "$HOME/apply-cinnamon-settings.sh" --settings-only
+    REBUILT_MACHINE_BACKUP_DIR="$BACKUP_DIR" bash "$HOME/configure-terminal-and-more.sh" || warn 'Some optional desktop preferences could not be applied.'
+    install_desktop_launchers
+    echo 'At the next login, choose Cinnamon in the login-screen session selector. Settings finish automatically in Cinnamon.'
+  fi
+  install_rebuilt_cron
+  printf 'Setup complete. Previous configuration is backed up in %s\n' "$BACKUP_DIR"
+  if [ "${#WARNINGS[@]}" -gt 0 ]; then
+    printf 'Optional setup warnings:\n'
+    printf ' - %s\n' "${WARNINGS[@]}"
+  fi
+  if [ "${REBUILT_MACHINE_REBOOT:-1}" = 0 ]; then
+    echo 'Automatic reboot disabled. Reboot when ready to start boot-time automation.'
+    return 0
+  fi
+  echo 'Rebooting in 30 seconds. Press Ctrl+C to cancel.'
+  sleep 30
+  sudo reboot
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
 fi
-sleep 10
-echo "${YELLOW}20 seconds remaining...${NC}\n"
-sleep 9 
-echo "${RED}10 Seconds remaining...${NC}\n"
-sleep 4
-echo "${RED}5 seconds remaining...${NC}\n"
-sleep 3 
-echo "${GREEN} REBOOTING MACHINE NOW!${NC}\n"
-sudo reboot

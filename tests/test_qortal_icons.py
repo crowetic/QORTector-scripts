@@ -201,12 +201,11 @@ cp "$archive" "$out"
 
     def test_rebuild_propagates_download_and_helper_failures(self):
         functions = self.root / 'rebuild-functions.sh'
-        functions.write_text((ROOT / 'rebuilt-machine.sh').read_text().split(
-            '\nHEADLESS_MODE=false\n')[0])
-        for download in ('return 1', 'printf "exit 7\\n" > "$2"'):
-            with self.subTest(download=download):
+        functions.write_text((ROOT / 'rebuilt-machine.sh').read_text())
+        for install in ('return 1', 'printf "exit 7\\n" > "$2"'):
+            with self.subTest(install=install):
                 code = ('source "$TASK_FUNCTIONS"\n'
-                        f'download_with_retry() {{ {download}; }}\n'
+                        f'install_repo_file() {{ {install}; }}\n'
                         'if install_qortal_icons; then exit 99; fi\n')
                 result = subprocess.run([BASH, '-c', code], capture_output=True,
                                         text=True, timeout=10,
@@ -216,28 +215,17 @@ cp "$archive" "$out"
                 self.assertFalse(self.log.exists())
 
     def test_apply_cinnamon_settings_preserves_theme_when_helper_fails(self):
-        rebuild = (ROOT / 'rebuilt-machine.sh').read_text()
-        generated = rebuild.split(
-            'cat > "$HOME/apply-cinnamon-settings.sh" <<\'EOL\'\n', 1)[1].split('\nEOL', 1)[0]
         settings = self.root / 'apply-settings.sh'
-        settings.write_text(generated)
+        settings.write_text((ROOT / 'apply-cinnamon-settings.sh').read_text())
+        (self.root / 'create-icon-theme-uni.sh').write_text('exit 7\n')
         (self.bin / 'bash').symlink_to(BASH)
-        for command in ('mv', 'chmod'):
+        for command in ('dirname',):
             (self.bin / command).symlink_to(shutil.which(command))
-        self.stub('sleep', 'exit 0\n')
-        # Return a failing helper, without contacting its download URL.
-        self.stub('curl', '''while [ "$#" -gt 0 ]; do
-  if [ "$1" = -o ]; then printf 'exit 7\n' > "$2"; exit 0; fi
-  shift
-done
-exit 1
-''')
-        (self.home / 'cinnamon-settings.json').write_text('{}')
         result = subprocess.run([BASH, str(settings)], env=self.env, cwd=self.home,
                                 capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Qortal icon installation failed', result.stderr)
-        self.assertNotIn('icon-theme', self.log.read_text())
+        self.assertFalse(self.log.exists())
 
 
 if __name__ == '__main__':

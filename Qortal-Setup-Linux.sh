@@ -164,7 +164,7 @@ case "$FAMILY" in
     debian)
         $SUDO apt-get update -y
         # Prefer JRE 21 (fallback to 17), and FUSE2 for AppImage (Hub)
-        $SUDO apt-get install -y curl wget unzip jq imagemagick zlib1g-dev ca-certificates || true
+        $SUDO apt-get install -y curl wget unzip jq imagemagick rsync zlib1g-dev ca-certificates || true
         $SUDO apt-get install -y openjdk-21-jre || $SUDO apt-get install -y openjdk-21-jre-headless || \
             $SUDO apt-get install -y openjdk-17-jre || $SUDO apt-get install -y openjdk-17-jre-headless || true
         $SUDO apt-get install -y libfuse2t64 || $SUDO apt-get install -y libfuse2 || true
@@ -172,20 +172,20 @@ case "$FAMILY" in
     rhel)
         # dnf or yum
         PM="dnf"; command -v dnf >/dev/null 2>&1 || PM="yum"
-        $SUDO $PM -y install curl wget unzip jq ImageMagick zlib-devel ca-certificates || true
+        $SUDO $PM -y install curl wget unzip jq ImageMagick rsync zlib-devel ca-certificates || true
         $SUDO $PM -y install java-21-openjdk || $SUDO $PM -y install java-17-openjdk || true
         # FUSE2 is typically 'fuse' (FUSE3 is 'fuse3'); AppImage needs FUSE2
         $SUDO $PM -y install fuse || true
         ;;
     arch)
-        $SUDO pacman -Sy --noconfirm --needed curl wget unzip jq zlib imagemagick ca-certificates || true
+        $SUDO pacman -Sy --noconfirm --needed curl wget unzip jq zlib imagemagick rsync ca-certificates || true
         $SUDO pacman -Sy --noconfirm --needed jre21-openjdk || $SUDO pacman -Sy --noconfirm --needed jre17-openjdk || true
         # AppImage needs FUSE2 on Arch
         $SUDO pacman -Sy --noconfirm --needed fuse2 || true
         ;;
     suse)
         $SUDO zypper -n refresh
-        $SUDO zypper -n install curl wget unzip jq ImageMagick zlib-devel ca-certificates || true
+        $SUDO zypper -n install curl wget unzip jq ImageMagick rsync zlib-devel ca-certificates || true
         $SUDO zypper -n install java-21-openjdk || $SUDO zypper -n install java-17-openjdk || true
         # FUSE2 compat (package names vary by SUSE version); try both
         $SUDO zypper -n install fuse || true
@@ -194,7 +194,7 @@ case "$FAMILY" in
     alpine)
         $SUDO apk update
         # Alpine package names differ slightly; prefer openjdk21-jre
-        $SUDO apk add --no-cache curl wget unzip jq imagemagick zlib-dev ca-certificates || true
+        $SUDO apk add --no-cache curl wget unzip jq imagemagick rsync zlib-dev ca-certificates || true
         $SUDO apk add --no-cache openjdk21-jre || $SUDO apk add --no-cache openjdk21 || \
             $SUDO apk add --no-cache openjdk17-jre || $SUDO apk add --no-cache openjdk17 || true
         # Alpine uses fuse (may need fuse-openrc on non-systemd)
@@ -214,6 +214,7 @@ command -v java >/dev/null 2>&1 || MISSING+=("java-runtime")
 command -v curl >/dev/null 2>&1 || MISSING+=("curl")
 command -v unzip >/dev/null 2>&1 || MISSING+=("unzip")
 command -v jq >/dev/null 2>&1 || MISSING+=("jq")
+command -v rsync >/dev/null 2>&1 || MISSING+=("rsync")
 command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1 || MISSING+=("ImageMagick")
 
 if [ "${#MISSING[@]}" -gt 0 ]; then
@@ -399,15 +400,20 @@ fi
 
 echo -e "${CYAN}🖥️  Creating Qortal Hub launcher...${NC}"
 mkdir -p "${HOME}/.local/share/applications"
+HUB_LAUNCHER_PREFIX=""
+if [ "${APPIMAGE_EXTRACT_AND_RUN:-0}" = 1 ]; then
+    # The installer environment does not survive a later desktop launch.
+    HUB_LAUNCHER_PREFIX="env APPIMAGE_EXTRACT_AND_RUN=1 "
+fi
 cat > "${HOME}/.local/share/applications/qortal-hub.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Hub
 Comment=Launch Qortal Hub
-Exec=${QORTAL_HUB_DIR}/Qortal-Hub${SANDBOX_FLAG}
+Exec=${HUB_LAUNCHER_PREFIX}"${QORTAL_HUB_DIR}/Qortal-Hub"${SANDBOX_FLAG}
 Icon=qortal-hub
 Terminal=false
 Type=Application
-Categories=Qortal;Network;Utility;
+Categories=X-Qortal;Utility;
 EOL
 
 echo -e "${CYAN}🧩 Creating Qortal Core launcher...${NC}"
@@ -420,11 +426,11 @@ cat > "${HOME}/.local/share/applications/qortal-core.desktop" <<EOL
 [Desktop Entry]
 Name=Qortal Core
 Comment=Launch Qortal Core
-Exec=${HOME}/start-qortal-core.sh
+Exec="${HOME}/start-qortal-core.sh"
 Icon=qortal
 Terminal=false
 Type=Application
-Categories=Qortal;Network;Utility;
+Categories=X-Qortal;Utility;
 EOL
 
 echo -e "${CYAN}🧭 Forcing launchers into the 'Qortal' menu...${NC}"
@@ -452,6 +458,7 @@ cat > "${HOME}/.config/menus/applications-merged/Qortal.menu" <<'XML'
         <Name>Qortal</Name>
         <Directory>Qortal.directory</Directory>
         <Include>
+            <Category>X-Qortal</Category>
             <Category>Qortal</Category>
         </Include>
     </Menu>
@@ -470,15 +477,14 @@ cp -f "${HOME}/.config/menus/applications-merged/Qortal.menu" \
 fix_desktop_categories() {
     local file="$1"
     if [ -f "$file" ]; then
-        # Remove any 'Network;' token; ensure 'Qortal;' and 'Utility;' present.
-        # a) normalize Categories line; b) drop Network; c) add Qortal;Utility; if missing
+        # Remove any 'Network;' token; ensure 'X-Qortal;' and 'Utility;' present.
         if grep -q '^Categories=' "$file"; then
             sed -i 's/^\(Categories=.*\)$/\1/; s/Network;//g' "$file"
         else
             echo "Categories=Utility;" >> "$file"
         fi
-        # Add Qortal;Utility; if not present
-        grep -q 'Categories=.*Qortal;' "$file" || sed -i 's/^Categories=\(.*\)$/Categories=\1Qortal;/' "$file"
+        # X- is required for custom desktop categories; the menu also accepts legacy Qortal.
+        grep -q 'Categories=.*X-Qortal;' "$file" || sed -i 's/^Categories=\(.*\)$/Categories=\1X-Qortal;/' "$file"
         grep -q 'Categories=.*Utility;' "$file" || sed -i 's/^Categories=\(.*\)$/Categories=\1Utility;/' "$file"
     fi
 }
@@ -555,6 +561,10 @@ if [ "$BACKUP_EXECUTED" = true ]; then
 fi
 
 echo -e "\n${GREEN}🎉 Qortal setup complete! You can now start Qortal Core and Qortal Hub.${NC}"
+if [ "${QSL_INSTALL_AUTOMATION:-ask}" = 0 ]; then
+    echo 'Automation is being configured by the parent installer; skipping the standalone automation prompt.'
+    exit 0
+fi
 echo -e "\n${YELLOW}🛠️  Would you like to install Qortal Automation scripts by crowetic?${NC}"
 echo -e "${CYAN}This will:\n - Ensure Qortal is always running\n - Stay within 1500 blocks of the network\n - Auto-update Core + potentially settings\n - Recover from common issues\n - Configure autostart or cron${NC}"
 echo -e "${YELLOW}Install automation now? (y/N) — auto-skip in 20 seconds...${NC}"

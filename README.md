@@ -1,132 +1,387 @@
 # QORTector-scripts
 
-## All scripts related to Qortal and linux (some Mac compatible) by crowetic.
-Visit https://crowetic.com for more information on crowetic and CHD.
+Linux installation, desktop integration, Core recovery, and VM storage-maintenance
+scripts maintained by [crowetic / Crowetic Hardware Development](https://crowetic.com).
+The repository supports desktop and headless workflows on x86 and ARM; individual
+scripts have different platform requirements. Older Raspberry Pi and Mac helpers
+remain available, but the scripts below are the main starting points.
 
-# Primary Scripts / Functions
+## Choose a script
 
-### 'Qortal-Setup-Linux.sh' 
-This script is built to automatically **INSTALL and CONFIGURE BOTH the QORTAL CORE AND QORTAL HUB on ANY linux machine**. The script is also available on 'install-linux.qortal.org' but the primary repo that it comes from is here. The clone version on the qortal repo (https://github.com/Qortal/QORTector-scripts) is the one that automatically updates the install-linux link above. 
+Run user-level commands from the repository root as the intended desktop/Core
+user. Qortal installations and preferences are stored under that user's home.
+Installers request `sudo` for system changes; VM maintenance runs as root.
 
-- Automatically detects the linux version running
-- Installs necessary dependencies (and some additional helpful packages) - Java, unzip, jq, etc.
-- Installs Qortal Core (and makes a backup if an existing version is found), it also restores the data path location and other important settings found if a backup takes place. 
-- Installs Qortal Hub
-- Installs Qortal Icon theme (a beautiful icon theme that allows use of 'qortal' 'qortal-hub' 'qortal-menu-button' as icons in linux desktop environments)
-- Creates launchers for Qortal Hub and Qortal Core
-- Offers the user the option to setup the auto-fix-qortal.sh script to automate ensuring Qortal is always updated and synchronized within 2500 blocks of the network height (based upon calls to a redundant set of public nodes run by CHD - https://crowetic.com )
+| Task | Script | What it changes |
+| --- | --- | --- |
+| Install Qortal Core and Hub | [`Qortal-Setup-Linux.sh`](Qortal-Setup-Linux.sh) | Dependencies, `~/qortal`, `~/qortal-hub`, icons, launchers, optional automation |
+| Prepare a new Ubuntu-based machine | [`rebuilt-machine.sh`](rebuilt-machine.sh) | System packages/upgrades, Cinnamon desktop when applicable, Qortal installation and automation |
+| Repair missing Qortal icons | [`create-icon-theme-uni.sh`](create-icon-theme-uni.sh) | User icon theme and standard `hicolor` fallback |
+| Apply Cinnamon menu/desktop settings | [`apply-cinnamon-settings.sh`](apply-cinnamon-settings.sh) | Installed menu instances and selected desktop preferences |
+| Keep an existing Core updated and recover synchronization | [`auto-fix-qortal.sh`](auto-fix-qortal.sh) | Core jar, settings, start scripts, schedules, and guarded database recovery |
+| Start an installed Core | [`start-qortal-core.sh`](start-qortal-core.sh) | Launches `start.sh` from `${QORTAL_DIR:-$HOME/qortal}`, forwarding arguments |
+| Maintain a Linux Docker VM's storage | [`vm-data-maintenance-v2/install.sh`](vm-data-maintenance-v2/install.sh) | Guest maintenance utility, root-owned config, and systemd timers |
+| Watch Proxmox storage capacity | [`proxmox-vm-capacity-watch.sh`](vm-data-maintenance-v2/proxmox-host/proxmox-vm-capacity-watch.sh) | Reports host capacity and VM allocation; separate host service/timer |
 
-This script is definitely the simplest way to install Qortal on any linux computer. 
+## Recent changes
 
-Run this script in the recommended fashion with the command below... 
-`bash <(curl -fsSL https://install-linux.qortal.org || wget -qO- https://install-linux.qortal.org)`
+The latest committed changes concentrate on recovery safeguards, disk-space
+management, and desktop compatibility:
 
+| Date | Commit | Change |
+| --- | --- | --- |
+| 2026-10-26 | `0611ee9` | Reworked universal icon installation for Ubuntu 26: declared theme directories, seven Qortal icons in `hicolor`, validated artwork downloads, ImageMagick 6/7 support, and isolated regression tests. |
+| 2026-10-15 | `cd2ee74` | Renamed the new NuQloud VM utility to **VM Data Maintenance v2**; added its installer, config validation, legacy-name migration, failure reporting, and tests. |
+| 2026-10-14 | `7086b8b` | Introduced the VM guest maintenance suite and a separate Proxmox capacity watcher. |
+| 2026-10-14 | `8e9a308` | Bounded small auto-fix backups by count, including startup/exit cleanup during offline or failed runs. |
+| 2026-10-06 | `383f57d` | Hardened Core updates and bootstrap recovery with verified downloads/backups, targeted process shutdown, concurrency locking, height confirmation, rollback, and managed cron entries. |
 
-### 'rebuilt-machine.sh' 
-This script is built to run on Ubuntu and Ubuntu-based Linux distros (PoP-OS, ZorinOS, etc.) It configures and installs all software recommended by default by CHD (https://crowetic.com), and configures a customized version of the **cinnamon desktop environment**. This script is meant to be run on a NEW installation of Ubuntu or supported distros. 
+**Pending changes in this checkout:** the rebuild refactor adds desktop/headless
+controls, package fallbacks, configuration backups, validated helper downloads,
+and deferred automation. It also adds `apply-cinnamon-settings.sh` for installed
+Cinnamon schemas and 40-pixel menu icons, preserves Hub's AppImage extraction
+fallback in its launcher, and fixes Core startup from arbitrary directories.
+The instructions below include these pending changes. Use a checkout containing
+those files; downloaded or hosted copies may represent a different revision.
 
-- Configures Ubuntu Distro and required/recommended default packages.
-- Configures and sets up Qortal Core
-- Qortal HUB (with launchers in the menu) 
-- Custom Qortal icon theme to be able to use 'qortal' 'qortal-ui' 'qortal-hub' 'qortal-menu-button' through 'qortal-menu-button-4' and more.
-- Qortal Core installation 
-- Full Qortal autoamtion 
-- Full Qortal integration 
+## Install Qortal Core and Hub
 
-If the Qortal launchers or menu button have missing icons, run only the icon
-helper as your desktop user (without `sudo`) from this checkout:
+```bash
+bash ./Qortal-Setup-Linux.sh
+```
+
+The installer detects Debian/Ubuntu, RHEL, Arch, SUSE, and Alpine package-manager
+families. It attempts Java 21 with Java 17 fallbacks and installs tools including
+`curl`, `wget`, `unzip`, `jq`, `rsync`, and ImageMagick. Package availability and
+Hub compatibility still depend on the distribution and architecture.
+
+Core goes into `~/qortal`; Hub goes into `~/qortal-hub`. The Hub download selects
+ARM64 for `aarch64`/`arm64`, otherwise the standard AppImage. The script also
+creates menu entries and user launchers. Over SSH or without a GUI, it skips the
+Hub test launch but still downloads Hub and creates its desktop assets. When
+FUSE2 is unavailable, the current launcher retains `APPIMAGE_EXTRACT_AND_RUN=1`.
+
+An existing responsive, synchronized Core is retained. Otherwise, the installer
+moves the existing installation to `~/backups/qortal-<epoch>` before installing
+Core again. It restores selected content such as minting/trade backups, lists,
+default-location data, API key, and `dataPath`; verify custom settings and data
+afterward. For routine maintenance of an existing node, use auto-fix below.
+
+At the end, the installer offers automation and can run it immediately.
+**A 20-second prompt timeout currently installs automation**, despite the prompt's
+“auto-skip” wording. Answer `n` to decline, or explicitly skip that step:
+
+```bash
+QSL_INSTALL_AUTOMATION=0 bash ./Qortal-Setup-Linux.sh
+```
+
+The hosted installation entry point is also available:
+
+```bash
+bash <(curl -fsSL https://install-linux.qortal.org || wget -qO- https://install-linux.qortal.org)
+```
+
+That command executes the hosted script, which may differ from this checkout.
+
+## Prepare a new Ubuntu-based machine
+
+`rebuilt-machine.sh` is intended for a **new installation** of Ubuntu or an
+Ubuntu-based distribution such as Pop!_OS or Zorin OS. It upgrades system
+packages, installs Core/Hub, configures automation, and installs/configures
+Cinnamon in desktop mode. Use the targeted repairs below for an existing desktop.
+
+Run without `sudo`; the script requests it where needed. This example leaves the
+final reboot under your control:
+
+```bash
+REBUILT_MACHINE_REBOOT=0 bash ./rebuilt-machine.sh
+```
+
+| Environment variable | Default | Meaning |
+| --- | --- | --- |
+| `REBUILT_MACHINE_HEADLESS` | `auto` | Detect a desktop session or installed desktop session files; `1` forces server mode, `0` forces desktop mode. |
+| `REBUILT_MACHINE_REBOOT` | `1` | Reboot after successful setup and a 30-second delay; `0` leaves rebooting to you. |
+
+Server mode skips Cinnamon setup and uses boot-time cron entries. It still calls
+the Core/Hub installer, so it is not a Core-only installation. Desktop mode
+installs Cinnamon, themes, artwork, launchers, and application preferences. Package
+selection tries current applications such as GNOME Text Editor, Loupe, Papers,
+and 7-Zip, with older package fallbacks. Required package/helper failures stop
+setup and cancel the automatic reboot; optional failures are listed at completion.
+
+Helpers beside the rebuild script take precedence over network downloads.
+Downloaded scripts, JSON, and archives are validated before use. The rebuild
+suppresses the child installer's automation step and configures schedules after
+its own assets and preferences are ready.
+
+After desktop setup, choose **Cinnamon** in the login-screen session selector.
+The installer does not switch a running GNOME/Wayland session to Cinnamon. A
+one-time Cinnamon autostart finishes menu settings after the first login; an
+**Apply Cinnamon Settings** launcher remains available for later repairs.
+Core starts at login, with maintenance seven minutes later. Server mode starts
+Core at boot and maintenance after 399 seconds. Both modes install
+`1 1 */3 * *`: 01:01 on every third day of the month, rather than a fixed
+72-hour interval. Unrelated cron jobs are preserved.
+
+Before changing configuration, the rebuild saves previous files under
+`~/backups/rebuilt-machine-<timestamp>.<suffix>/` and prints the directory. Copies
+include the previous crontab and changed launchers, menu settings, and application
+preferences. Restore the relevant file to its original location to recover;
+restore scheduling with `crontab /path/to/backup/crontab`, or application exports
+with `dconf load <original-application-path> < /path/to/backup/<application>.dconf`.
+These are setup/preference backups; the Core installer separately manages Core
+installation backups. A failed rebuild can leave completed package changes in
+place, so its backup directory is not a full system rollback.
+
+## Repair desktop icons and Cinnamon settings
+
+For missing Qortal launcher/menu icons, run the icon helper as your desktop user,
+without `sudo`:
 
 ```bash
 bash ./create-icon-theme-uni.sh
 ```
 
-This repairs the custom theme index, installs all seven Qortal icons into both
-the custom theme and the standard `hicolor` fallback, and selects the custom
-theme in supported desktop sessions, including Cinnamon and Ubuntu GNOME.
-It merges missing source artwork into `~/Pictures`, preserving unrelated files,
-and supports both ImageMagick 7 (`magick`) and older ImageMagick (`convert`).
-Dependencies are `curl`, `unzip`, `rsync`, and `imagemagick`. Log out and back in
-if a panel still displays cached icons. This repair does not reinstall Core or
-Hub and does not require a reboot. The full rebuild now stops before its
-automatic reboot if the final icon installation fails.
+It installs `qortal`, `qortal-hub`, `qortal-ui`, and `qortal-menu-button` through
+`qortal-menu-button-4` in both `~/.icons/Yaru-blue-qortal` and the user `hicolor`
+fallback. It repairs the theme index, inherits installed system artwork, merges
+missing source artwork into `~/Pictures` while preserving unrelated files, and
+supports ImageMagick 7 (`magick`) and older ImageMagick (`convert`). Dependencies
+are `curl`, `unzip`, `rsync`, and ImageMagick. It selects the theme in supported
+Cinnamon, GNOME/Unity, XFCE, and KDE sessions; fallback icons remain available
+when theme selection fails or no desktop session is detected.
 
-Isolated icon regression checks (no network, desktop setting changes, or full
-machine setup):
+For an existing Cinnamon desktop, follow icon repair with:
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_qortal_icons.py' -v
+bash ./apply-cinnamon-settings.sh --menu-only
 ```
 
+Keep `cinnamon-settings.json` beside the helper. It merges preferences with the
+installed Cinnamon menu schema for **each enabled menu instance** under
+`${XDG_CONFIG_HOME:-$HOME/.config}/cinnamon/spices/menu@cinnamon.org/`. It preserves
+new schema entries and existing values where no preference overrides them,
+uses a **40-pixel** menu icon, and can migrate legacy `~/.cinnamon/configs/` values.
+It does not assume the menu instance is `0` or re-enable a disabled menu applet.
+Previous menu settings are backed up under `~/backups/cinnamon-menu/` when used
+outside a rebuild.
 
-### 'auto-fix-qortal.sh'
-**auto-fix-qortal.sh** - This script is utilized to **automatically update the Qortal core and more, even if auto-update doesn't work for some reason.** The idea behind this script is that it will **keep your Qortal Core updated no matter what happens. With either a system reboot or automatically on a schedule.** Initial schedule is **every 3 days at 1:01 AM**.
+Running `bash ./apply-cinnamon-settings.sh` without an option also installs icons
+and applies desktop theme/wallpaper preferences. `--settings-only` applies those
+preferences and menu settings without rerunning icon installation;
+`--first-login` is used by the rebuild's one-time autostart. The companion
+[`configure-terminal-and-more.sh`](configure-terminal-and-more.sh) handles
+application and terminal preferences during the rebuild.
 
-This script will be getting constant improvements to be more in-depth, and **check for more potential scenarios** where issues may arise, and resolve them automatically as well.
+These repairs do not reinstall Core/Hub. Log out and back in if the panel still
+shows cached icons; a full machine reboot is not required.
 
-#### How it works (decision flow)
-1. **Self-update** validates Bash syntax, required functions and script revision. Older scripts cannot overwrite this version.
-2. **Check connectivity**, refresh helper scripts, and install a syntax-checked JVM start script for the platform and RAM size.
-3. **Version check** uses GitHub release metadata, its latest-release redirect, then the releases list (excluding drafts and prereleases). Version components are compared correctly. Unknown release metadata preserves an existing jar.
-4. **Jar update** compares file contents, validates the downloaded archive, stops the specific Core process and retains `qortal.jar.previous`. Updating the jar preserves the database.
-5. **Settings merge** retains custom settings and backs up changes. Missing `jq`, failed downloads, or failed merges preserve existing settings.
-6. **Height recovery** uses `api.qortal.org` as the primary reference and queries `qortal.link` only if the primary request fails or returns an invalid height. Bootstrapping triggers when the selected reference is **more than 2,500 blocks ahead**, with a fresh confirmation before shutdown. A confirmed height stall at any height can also trigger bootstrap, after two timed rechecks and a final confirmation. Unknown heights and active bootstraps do not trigger database replacement.
-7. **Database backup** stops Core, copies and verifies `qortal/db`, then removes it from Core's path. Backup failure aborts recovery. Core must remain running with a responsive height API or active bootstrap evidence for 30 seconds before its recovery copies are deleted. Failed startup restores the original database, including when a partial new database was created. Script-owned recovery copies retained after failure are cleaned on a later confirmed successful start. Custom repository paths require manual recovery.
+## Maintain and recover Qortal Core
 
-#### Schedule / triggers
-- Cron: `@reboot sleep 399` and `1 1 */3 * *` (every third day of the month at 1:01 AM).
-- Cron updates preserve unrelated jobs and environment settings.
-- `flock` permits one auto-fix instance at a time. Core starts with the lock descriptor closed so later runs remain possible.
+`auto-fix-qortal.sh` maintains Core at **`$HOME/qortal`** with its HTTP API at
+`http://localhost:12391` by default. Run it as the Core user. It requires Linux
+`/proc`, Bash, `curl`, `flock`, `timeout`, `jq` (installation attempted if missing),
+and `unzip` or the JDK `jar` tool. Database recovery needs enough free space for
+a complete verified database copy.
 
-#### Prerequisites
-- Linux `/proc`, Bash, `curl`, `flock`, `timeout`, `jq` (installation attempted if missing), and `unzip` or the JDK `jar` tool.
-- Qortal Core in `${HOME}/qortal`, with its HTTP API listening on `localhost:12391` by default.
-- Enough free disk space for a full database backup. Shutdown failure or insufficient backup space aborts database recovery.
+To install the checkout's version and perform real maintenance:
 
-#### Tunables (env-overridable)
-- `AUTO_FIX_MAX_BLOCKS_BEHIND=2500`, `AUTO_FIX_API_BASE=http://localhost:12391`.
-- `HEIGHT_STALL_WAIT_SECONDS=300`, `HEIGHT_STALL_RECHECKS=2`: two timed rechecks after an unchanged height across runs.
-- `CORE_START_WAIT_SECONDS=2100` is the maximum startup verification time, with polling and progress messages; confirmed startup returns early. `CORE_STOP_WAIT_SECONDS=120`, `FORCE_BOOTSTRAP_RESTART_WAIT_SECONDS=30` (sustained startup evidence before backup cleanup).
-- `ACTIVE_LOG_MAX_AGE_SECONDS=900`. Full database recovery copies are temporary, rather than retained indefinitely.
-- `SMALL_BACKUPS_TO_KEEP=10`: keep the 10 newest timestamped settings, script, cron and logging configuration backups per backup folder, plus the protected latest-good settings target. Small backups have no time limit and remain until displaced by newer copies beyond the count limit. Order uses each filename's creation timestamp, including older settings copies in `~/backups`.
-- Small backup cleanup runs under the lock at startup and exit, including offline or failed runs. The latest-good settings target, manual files and symlinks are protected. `original.sh` and `qortal.jar.previous` are single overwritten rollback files.
-- Database recovery copies remain protected until Core startup is confirmed, regardless of age; confirmed startup also cleans old script-owned recovery copies.
-- `AUTO_FIX_SELF_UPDATE=0` disables script self-updates for a test run; settings and helper refreshes still run.
+```bash
+install -m 0755 ./auto-fix-qortal.sh "$HOME/auto-fix-qortal.sh"
+bash "$HOME/auto-fix-qortal.sh"
+```
 
-For remote testing, copy this version to `${HOME}/auto-fix-qortal.sh` and run as the Core user:
+This is an active maintenance command: it can update files, configure schedules,
+restart Core, or bootstrap its database. There is **no dry-run mode**. To retain
+the installed script version during a diagnostic run:
 
 ```bash
 AUTO_FIX_SELF_UPDATE=0 bash "$HOME/auto-fix-qortal.sh" 2>&1 | tee "$HOME/auto-fix-test.log"
 ```
 
-This performs real maintenance and may bootstrap if the confirmed lag exceeds 2,500 blocks. Isolated local regression checks use `python3 -m unittest discover -s tests -v` and require `jq`, `unzip`, and `flock`; they do not contact the network or operate a live Core.
+Disabling self-update leaves settings/helper refreshes and other maintenance
+enabled. Normal runs update the script itself after checking Bash syntax,
+required functions, and revision so an older script cannot replace this version.
 
-#### Disabling the schedule
-Remove the cron entries: `crontab -e` and delete the `auto-fix-qortal.sh` lines, or run the script manually (`bash ${HOME}/auto-fix-qortal.sh`) without the cron triggers. The `@reboot` entry runs it ~6.5 minutes after every boot.
+### Update and recovery behavior
 
-As of **May 24th 2023** the script has been **updated** to include **a new feature that automatically sets the RAM for the JVM on linux-based machines.** This feature was built so that no matter how much RAM your systme has, the Qortal Core will be **given optimal RAM settings** and will **run correctly in any scenario**. (This is the HOPE, anyway... there are always anomalies...)
+1. Acquire a single-instance lock, prune excess small backups, check connectivity,
+   refresh helpers, and select a syntax-checked JVM start script for RAM/platform.
+2. Resolve Core releases using GitHub release metadata, the latest-release
+   redirect, then a list excluding drafts/prereleases. Compare version components;
+   preserve an existing jar when release metadata is unknown. A retained special
+   case selects build `qortal-6.1.2-4ee9441` from the configured override URL when
+   the latest release tag is `6.1.2`.
+3. Validate a changed jar before replacement, stop this installation's JVM,
+   retain `qortal.jar.previous`, and preserve the database during jar updates.
+4. Merge settings while retaining custom settings and backing up changes. Missing
+   `jq`, bad downloads, failed merges, and unchanged settings preserve the file.
+5. Use `api.qortal.org` for reference height, consulting `qortal.link` only if the
+   primary request fails or is invalid. A lag **greater than 2,500 blocks** can
+   trigger bootstrap after a fresh confirmation. A height unchanged across runs
+   requires two timed rechecks and a final stall confirmation. Unknown heights
+   and active bootstraps do not justify replacing the database.
+6. Before bootstrap, stop Core, copy and verify `qortal/db`, and move the original
+   aside. Failed backup/shutdown aborts recovery. Failed startup restores the
+   original database, including when a partial new database was created.
+7. Remove script-owned recovery copies only after Core stays running with a
+   responsive height API or active-bootstrap evidence for 30 seconds. Retained
+   copies are reconsidered on a later confirmed successful start. Custom
+   repository paths require manual recovery.
 
-The **auto-fix-script also updates itself**, so if you have **installed the script in the past** you **do NOT have to continaully come back and check for new versions, the script does that for you every time it is run.** (If you do not want the script to do this, you can simply remove the cron entry that runs it automatically on a schedule, but it is not recommended to remove this unless you know what you're doing and plan to manage your node yourself.)
+`qortal.jar.previous` and `original.sh` are single overwritten rollback files.
+Small timestamped settings/script/cron/logging backups retain the newest ten per
+managed group, ordered by filename timestamp, plus the protected latest-good
+settings target. They have no age expiry. Startup and exit cleanup run under the
+lock, including offline/failed runs; manual files and symlinks are protected.
+Full database recovery copies follow the startup-confirmation rule above rather
+than this count limit. Stop Core before manually restoring any jar or database.
 
-The script **will check for a GUI-based machine, then modify the auto-fix script so that it runs in a VISIBLE fashion.** This is to address concerns over potentially not SEEING that the script is RUNNING, and rebooting machines during the process, thus causing issues with the Qortal installation.
+### Configuration and schedules
 
-This feature will **modify existing auto-fix machines automatically** when the script runs on its schedule, and if all goes well, there should be no manual intervention necessary in any regard. Once this modification DOES go live, the auto-fix script will be VISIBLE when it is run upon system startup, and users can follow what the script is doing with the output it displays in the terminal. This will also make it so that if the script DOES have to 'fix' the Qortal Core, it will do THAT in a visible fashion as well, allowing the user to SEE the bootstrap process with the normal Qortal 'splash screen'.
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `AUTO_FIX_API_BASE` | `http://localhost:12391` | Local Core API |
+| `AUTO_FIX_MAX_BLOCKS_BEHIND` | `2500` | Lag must exceed this value to justify recovery |
+| `HEIGHT_STALL_WAIT_SECONDS` | `300` | Delay between stall rechecks |
+| `HEIGHT_STALL_RECHECKS` | `2` | Number of timed stall rechecks |
+| `CORE_START_WAIT_SECONDS` | `2100` | Maximum startup verification time; confirmed startup returns early |
+| `CORE_STOP_WAIT_SECONDS` | `120` | Shutdown wait limit |
+| `FORCE_BOOTSTRAP_RESTART_WAIT_SECONDS` | `30` | Sustained startup evidence before recovery-copy cleanup |
+| `ACTIVE_LOG_MAX_AGE_SECONDS` | `900` | Recency window for bootstrap log evidence |
+| `SMALL_BACKUPS_TO_KEEP` | `10` | Count limit per managed small-backup group |
+| `AUTO_FIX_SELF_UPDATE` | `1` | Set `0` to disable script self-update only |
 
-As time goes on the plan is to also make this script check that the node is within x number of blocks from the chain tip, then if it is not, resolve that scenario as well.
+The managed schedule is `1 1 */3 * *` (01:01 on every third day of the month).
+Headless mode also uses `@reboot sleep 399` and a Core boot launcher; desktop
+setups use login autostart where applicable. Cron changes preserve unrelated jobs
+and environment settings. Core starts without inheriting the maintenance lock.
 
-## Many other scripts / tools
+Inspect schedules with `crontab -l` and `~/.config/autostart/`. To stop automatic
+maintenance, remove the auto-fix cron entries with `crontab -e` and disable its
+autostart entry if present. Running auto-fix again can recreate its schedules.
+Headless cron output goes to `~/auto-fix-startup.log` and
+`~/log-auto-fix-cron.log`.
 
-There are many other scripts and tools in this repo, most of which are not fully labeled. Explanations of each will be published as time goes on, so that they become more useful to others outside of Crowetic Hardware Development team.
+## Maintain Linux VM storage with v2
 
+[`vm-data-maintenance-v2/`](vm-data-maintenance-v2/) is a separate guest/host
+storage utility. It is independent of Core maintenance and NuQloud's per-instance
+recreate/deploy maintenance. It does not run Nextcloud `occ` commands or modify
+application/database/Redis configuration.
 
+| Location / mode | Schedule | Default action |
+| --- | --- | --- |
+| Guest: `trim` | Every four hours, up to five minutes randomized delay | `fstrim` on configured mountpoints; `/` by default |
+| Guest: `daily` | 02:15 daily, up to ten minutes delay | Filesystem/Docker reports; vacuum archived journals to `10d` / `200M` |
+| Guest: `weekly` | Sunday 03:20, up to ten minutes delay | Reports and APT `autoclean`; tmpfiles cleanup and Docker build-cache pruning are opt-in |
+| Guest: `report` | Manual | Read-only filesystem and Docker usage reports |
+| Proxmox host watcher | Five minutes after boot, then 15 minutes after each run | Capacity status; warning at 75%, critical at 85%; log messages only |
 
+The guest installer requires a running systemd manager. Guest commands use Bash,
+Linux utilities including `flock`/`mountpoint`/`fstrim`, and a trusted root-owned
+config. Docker reporting is skipped when Docker is unavailable. APT cleanup is
+skipped when `apt-get` is unavailable. Guest capacity warnings default to 80%/90%.
 
+Install **inside the guest** without enabling new timers for the first check:
 
+```bash
+sudo bash ./vm-data-maintenance-v2/install.sh --no-enable
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode report
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode trim --dry-run
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode daily --dry-run
+sudo /usr/local/sbin/vm-data-maintenance-v2.sh --mode weekly --dry-run
+```
 
+Review `/etc/vm-data-maintenance-v2.conf`, including `TRIM_MOUNTS` and
+`REPORT_PATHS` for separate Docker/data filesystems. Config files and their
+parent directories must be root-owned, not writable by group/others, and free of
+symlinks. The config is sourced as Bash; this requirement also applies to dry
+runs. New/migrated configs are installed with mode `0600`.
 
+The installer preserves an existing v2 config and verifies all four modes with
+dry runs before retiring the older **`nuqloud-vm-maintenance`** guest installation.
+It migrates that config if no v2 config exists, or backs it up separately if both
+exist. `--no-enable` still installs files and can retire that legacy installation;
+it does not disable already-enabled v2 timers. The distinct root-level v1
+`vm-data-maintenance` installation is **not** migrated or disabled automatically.
+Check its timer before enabling overlapping schedules.
 
+Dry runs preview cleanup commands and execute reports, but do not prove discard
+support. After reviewing configuration, perform an actual TRIM and inspect it:
 
+```bash
+sudo systemctl start vm-data-maintenance-v2@trim.service
+sudo journalctl -u vm-data-maintenance-v2@trim.service --since today --no-pager
+sudo systemctl enable --now \
+  vm-data-maintenance-v2-trim.timer \
+  vm-data-maintenance-v2-daily.timer \
+  vm-data-maintenance-v2-weekly.timer
+systemctl list-timers --all 'vm-data-maintenance-v2*'
+```
 
-#### This repo is no longer solely about ARM-based systems, and is able to be utilized on multiple systems. 
-**This used to be a location for scripts solely related to the raspberry pi** - this is **no longer the case**. 
+Only after confirming the new TRIM schedule works, disable duplicate stock
+`fstrim.timer` scheduling if present. Keep normal `logrotate.timer` and
+`systemd-tmpfiles-clean.timer` policies enabled. To revert v2 scheduling:
 
+```bash
+sudo systemctl disable --now \
+  vm-data-maintenance-v2-trim.timer \
+  vm-data-maintenance-v2-daily.timer \
+  vm-data-maintenance-v2-weekly.timer
+sudo systemctl enable --now fstrim.timer
+```
 
+V2 does not prune Docker images, containers, or volumes. Optional build-cache
+pruning is separate and disabled by default, as is tmpfiles cleanup. It serializes
+jobs and reports failed maintenance commands through the service exit status.
+TRIM bytes are **discard requests, not measured host space reclaimed**.
+
+The Proxmox watcher must be installed on the **hypervisor**, separately from the
+guest. Its service defaults to `/var/lib/vz` and VM `108`; change those environment
+values for your host. It reports allocated VM image space and capacity thresholds
+through output/journald; connect external monitoring to receive notifications.
+It performs no reclamation. For host installation, complete configuration,
+migration details, and verification, see the
+[VM Data Maintenance v2 README](vm-data-maintenance-v2/README.md).
+
+## Older utilities
+
+The root-level [`setup-vm-data-maintenance.sh`](setup-vm-data-maintenance.sh),
+[`vm-data-maintenance.sh`](vm-data-maintenance.sh), and
+[`vm-data-maintenance.conf`](vm-data-maintenance.conf) are the **v1** utility.
+It installs `/usr/local/sbin/vm-data-maintenance` and a daily
+`vm-data-maintenance.timer`. Its policy includes broader log/temp/package cleanup,
+explicit extra deletion targets, and optional Docker system pruning. Its config
+and dry-run handling differ from v2; do not reuse its commands or config for v2.
+
+Other retained tools include Raspberry Pi/Titan setup scripts, RAM-specific Core
+start scripts, earlier UI installers, scheduled restart/peer helpers, WireGuard
+helpers, and HSQLDB tools. Review their assumptions before use; they are not all
+part of the current installer or maintenance path. In particular,
+`auto-fix-qortal-oldVersion.sh` and the older icon helpers are historical
+alternatives to the versions documented above.
+
+## Local verification
+
+Run the isolated regression suite from the repository root:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Tests use temporary homes, fixtures, and mocked network/system/desktop commands;
+they do not install software, maintain a live Core, or run real VM cleanup.
+Coverage includes auto-fix recovery/backups, icon installation, rebuild/Cinnamon
+behavior, and v2 guest configuration/installer migration. Install `bash`, `jq`,
+`unzip`, `rsync`, and `flock` for the relevant suites. Some optional checks require
+JDK `jar`, `desktop-file-validate`, or Python GIO bindings and may be skipped.
+These checks do not replace validation on the target desktop or virtual storage.
+
+For an individual suite, select its file, for example:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_rebuilt_machine.py' -v
+python3 -m unittest discover -s tests -p 'test_qortal_icons.py' -v
+python3 -m unittest discover -s tests -p 'test_vm_data_maintenance_v2.py' -v
+```
