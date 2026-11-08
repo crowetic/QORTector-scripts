@@ -109,7 +109,16 @@ main() {
   set -euo pipefail
   local mode="${1:-all}"
   case "$mode" in all|--menu-only|--settings-only|--first-login) ;; *) echo 'Usage: apply-cinnamon-settings.sh [--menu-only|--settings-only|--first-login]' >&2; return 1 ;; esac
-  if [ "$mode" = --first-login ]; then sleep 5; fi
+  if [ "$mode" = --first-login ]; then
+    sleep 5
+    # The first login can occur long after setup. Save the current state again
+    # before any gsettings changes, rather than relying on the setup-time copy.
+    local backup="${REBUILT_MACHINE_BACKUP_DIR:-$HOME/backups/cinnamon-menu}"
+    command -v dconf >/dev/null || { echo 'dconf is required before applying first-login defaults.' >&2; return 1; }
+    mkdir -p "$backup"
+    dconf dump / > "$backup/first-login-$(date +%s%N).dconf"
+    export QORTAL_ICONS_PRESERVE_EXISTING=1
+  fi
   if [ "$mode" = all ] || [ "$mode" = --first-login ]; then
     if ! bash "$SETTINGS_SCRIPT_DIR/create-icon-theme-uni.sh"; then
       echo 'Qortal icon installation failed. Run create-icon-theme-uni.sh to retry.' >&2

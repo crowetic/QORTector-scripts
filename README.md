@@ -15,7 +15,7 @@ Installers request `sudo` for system changes; VM maintenance runs as root.
 | Task | Script | What it changes |
 | --- | --- | --- |
 | Install Qortal Core and Hub | [`Qortal-Setup-Linux.sh`](Qortal-Setup-Linux.sh) | Dependencies, `~/qortal`, `~/qortal-hub`, icons, launchers, optional automation |
-| Prepare a new Ubuntu-based machine | [`rebuilt-machine.sh`](rebuilt-machine.sh) | System packages/upgrades, Cinnamon desktop when applicable, Qortal installation and automation |
+| Prepare or repair a Linux machine | [`rebuilt-machine.sh`](rebuilt-machine.sh) | Missing packages, Cinnamon desktop when applicable, preserved Qortal installs and additive automation |
 | Repair missing Qortal icons | [`create-icon-theme-uni.sh`](create-icon-theme-uni.sh) | User icon theme and standard `hicolor` fallback |
 | Apply Cinnamon menu/desktop settings | [`apply-cinnamon-settings.sh`](apply-cinnamon-settings.sh) | Installed menu instances and selected desktop preferences |
 | Keep an existing Core updated and recover synchronization | [`auto-fix-qortal.sh`](auto-fix-qortal.sh) | Core jar, settings, start scripts, schedules, and guarded database recovery |
@@ -36,13 +36,9 @@ management, and desktop compatibility:
 | 2026-10-14 | `8e9a308` | Bounded small auto-fix backups by count, including startup/exit cleanup during offline or failed runs. |
 | 2026-10-06 | `383f57d` | Hardened Core updates and bootstrap recovery with verified downloads/backups, targeted process shutdown, concurrency locking, height confirmation, rollback, and managed cron entries. |
 
-**Pending changes in this checkout:** the rebuild refactor adds desktop/headless
-controls, package fallbacks, configuration backups, validated helper downloads,
-and deferred automation. It also adds `apply-cinnamon-settings.sh` for installed
-Cinnamon schemas and 40-pixel menu icons, preserves Hub's AppImage extraction
-fallback in its launcher, and fixes Core startup from arbitrary directories.
-The instructions below include these pending changes. Use a checkout containing
-those files; downloaded or hosted copies may represent a different revision.
+The rebuild now supports apt, pacman and dnf, preserves configured machines by
+default, and provides explicit update, desktop-default, upgrade and dry-run flags.
+The earlier Cinnamon/schema and launcher improvements are included in `main`.
 
 ## Install Qortal Core and Hub
 
@@ -83,55 +79,111 @@ bash <(curl -fsSL https://install-linux.qortal.org || wget -qO- https://install-
 
 That command executes the hosted script, which may differ from this checkout.
 
-## Prepare a new Ubuntu-based machine
+## Prepare or repair a Linux machine
 
-`rebuilt-machine.sh` is intended for a **new installation** of Ubuntu or an
-Ubuntu-based distribution such as Pop!_OS or Zorin OS. It upgrades system
-packages, installs Core/Hub, configures automation, and installs/configures
-Cinnamon in desktop mode. Use the targeted repairs below for an existing desktop.
+`rebuilt-machine.sh` supports Debian/Ubuntu derivatives with `apt-get`, Arch and
+Manjaro with `pacman`, and Fedora with `dnf`. It reads `ID` and `ID_LIKE` from
+`/etc/os-release` and maps package names for Python, Java, FUSE2, Cinnamon, cron,
+GLib and other tools. Unknown distributions warn and try an available supported
+manager; distributions without one of these three managers need manual setup.
+Unavailable optional packages are skipped with warnings. Yaru packages are
+skipped on Arch/Fedora; icons inherit an installed theme and `hicolor` instead.
+Cinnamon uses the regular Arch/Fedora repositories; no COPR or AUR repository is
+enabled automatically. Package availability still depends on enabled repositories.
 
-Run without `sudo`; the script requests it where needed. This example leaves the
-final reboot under your control:
+Run as the intended desktop/Core user, without `sudo`. Start with a preview:
 
 ```bash
-REBUILT_MACHINE_REBOOT=0 bash ./rebuilt-machine.sh
+bash ./rebuilt-machine.sh --help
+bash ./rebuilt-machine.sh --dry-run
+bash ./rebuilt-machine.sh
 ```
 
-| Environment variable | Default | Meaning |
+The default run fills missing packages, applications, desktop assets and
+schedules. It **does not upgrade the system, replace existing Core/Hub, apply
+desktop preferences, or reboot**. Existing Core directories are retained even
+when stopped, syncing, inaccessible, or incomplete; incomplete installations warn
+for manual repair. User settings, helper scripts, launchers, disabled autostarts,
+matching Pictures files and existing theme directories are preserved. Desktop
+mode still installs Cinnamon and optional desktop apps on a fresh machine.
+
+| Flag | Equivalent environment variable | Default / behavior |
 | --- | --- | --- |
-| `REBUILT_MACHINE_HEADLESS` | `auto` | Detect a desktop session or installed desktop session files; `1` forces server mode, `0` forces desktop mode. |
-| `REBUILT_MACHINE_REBOOT` | `1` | Reboot after successful setup and a 30-second delay; `0` leaves rebooting to you. |
+| `--dry-run` | `REBUILT_MACHINE_DRY_RUN=1` | Preview only; no sudo, downloads, child scripts, files or state changes. |
+| `--update-core` | `REBUILT_MACHINE_UPDATE_CORE=1` | Download and validate the release; replace only a changed jar in an existing **stopped** Core. Preserve settings, database, keys, lists, data and custom scripts; back up the old jar. |
+| `--update-hub` | `REBUILT_MACHINE_UPDATE_HUB=1` | Check the release tag and recorded binary SHA-256; skip the binary download when current. Otherwise validate/download, compare, and back up before replacement. Untracked AppImages need one download for comparison. |
+| `--upgrade-packages` | `REBUILT_MACHINE_UPGRADE=1` | Opt in to `apt-get upgrade`, `pacman -Syu`, or `dnf upgrade`. |
+| `--apply-defaults` | `REBUILT_MACHINE_APPLY_DEFAULTS=1` | Export dconf before changing desktop preferences, session selection, themes, menu and application defaults. Add a missing first-login settings job. |
+| `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork, icon files and themes. Desktop preference selection still requires `--apply-defaults`. |
+| — | `REBUILT_MACHINE_HEADLESS=auto` | Detect sessions/installed session files; `1` forces server mode and `0` forces desktop mode. |
+| — | `REBUILT_MACHINE_REBOOT=1` | Opt in to reboot after success and a 30-second cancellation delay; default is `0`. |
 
-Server mode skips Cinnamon setup and uses boot-time cron entries. It still calls
-the Core/Hub installer, so it is not a Core-only installation. Desktop mode
-installs Cinnamon, themes, artwork, launchers, and application preferences. Package
-selection tries current applications such as GNOME Text Editor, Loupe, Papers,
-and 7-Zip, with older package fallbacks. Required package/helper failures stop
-setup and cancel the automatic reboot; optional failures are listed at completion.
+Boolean variables accept only `0` or `1`. To get the repository's desktop look on
+a fresh install, run `bash ./rebuilt-machine.sh --apply-defaults`. To update an
+existing Core, first stop it using `bash ~/qortal/stop.sh`; the rebuild refuses a
+jar update while this installation's JVM is running. Start it afterward with
+`bash ~/start-qortal-core.sh`. Ordinary reruns never stop or restart Core.
+The rebuild shares the maintenance lock with auto-fix.
 
-Helpers beside the rebuild script take precedence over network downloads.
-Downloaded scripts, JSON, and archives are validated before use. The rebuild
-suppresses the child installer's automation step and configures schedules after
-its own assets and preferences are ready.
+Installed package alternatives are kept rather than replaced by a preferred
+alternative. Individual apt installs use `--no-upgrade`; installing a missing
+package may still require dependency changes. Arch installs use the existing
+sync database, never `pacman -Sy`. If it is stale, explicitly opt in to a full
+upgrade with `--upgrade-packages`; partial upgrades are unsupported by Arch.
+See [Arch system maintenance](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported).
+Cron is enabled on Arch/Fedora only when its package was previously absent;
+existing service enablement choices are retained.
+
+Server mode skips Cinnamon and uses boot-time cron entries. It still installs a
+missing Hub AppImage on x86_64/ARM64; unsupported Hub architectures warn and keep
+Core available. Desktop mode creates missing Core/Hub menu entries and launchers,
+retains the AppImage FUSE extraction fallback, and tests only a newly installed
+Hub when a GUI is available. The rebuild uses its own preserve-existing install
+path; the standalone `Qortal-Setup-Linux.sh` retains its separate behavior above.
 
 After desktop setup, choose **Cinnamon** in the login-screen session selector.
-The installer does not switch a running GNOME/Wayland session to Cinnamon. A
-one-time Cinnamon autostart finishes menu settings after the first login; an
-**Apply Cinnamon Settings** launcher remains available for later repairs.
-Core starts at login, with maintenance seven minutes later. Server mode starts
-Core at boot and maintenance after 399 seconds. Both modes install
-`1 1 */3 * *`: 01:01 on every third day of the month, rather than a fixed
-72-hour interval. Unrelated cron jobs are preserved.
+The rebuild does not switch the running desktop. Applying defaults adds a
+one-time Cinnamon autostart which backs up dconf again at first login. Without
+`--apply-defaults`, no defaults autostart is created. An **Apply Cinnamon Settings**
+launcher remains available for deliberate customization later.
 
-Before changing configuration, the rebuild saves previous files under
-`~/backups/rebuilt-machine-<timestamp>.<suffix>/` and prints the directory. Copies
-include the previous crontab and changed launchers, menu settings, and application
-preferences. Restore the relevant file to its original location to recover;
-restore scheduling with `crontab /path/to/backup/crontab`, or application exports
-with `dconf load <original-application-path> < /path/to/backup/<application>.dconf`.
-These are setup/preference backups; the Core installer separately manages Core
-installation backups. A failed rebuild can leave completed package changes in
-place, so its backup directory is not a full system rollback.
+On machines without custom automation, Core starts at login, with maintenance
+seven minutes later; server mode starts Core at boot and maintenance after 399
+seconds. Both modes add `1 1 */3 * *` (01:01 on every third day of the month) when
+no periodic auto-fix job exists. Existing custom schedules for these scripts take
+precedence. Cron entries and existing autostarts are never removed or rewritten,
+including when switching modes. Review existing schedules manually if changing
+between server and desktop operation.
+
+Helpers beside the rebuild take precedence over network downloads; Gitea is the
+fallback source. Existing home helpers are preserved by default; explicit `--apply-defaults`
+refreshes its desktop preference/icon helpers with backups so first-login
+configuration uses the current safety guards. The rebuild executes its
+current icon helper with preservation switches so an older installed copy cannot
+reset preferences. Scripts, JSON and archives are validated before use. Artwork
+is merged without replacing matching files, then marked with
+`~/Pictures/.qortector-artwork-installed` to skip future bundle downloads. Remove
+that marker to fill missing artwork again, or use `--force-artwork` to replace it.
+`~/.qortector-setup-state.json` records the last successful run, distro, package
+manager and backup directory for reference; it does not override file checks.
+
+Before replacing managed content, the rebuild saves old files under
+`~/backups/rebuilt-machine-<timestamp>.<suffix>/` and prints the directory. Applying
+defaults saves a full `desktop.dconf` export and the previous `.dmrc`; menu and
+application helpers save their own backups. Force-artwork saves Pictures and
+replaced themes/icons. Required failures stop setup and cancel reboot; optional
+failures are listed at completion. Completed package changes remain in place if
+a later step fails; this is not a whole-system rollback.
+
+To roll out these changes, pull the updated repository, inspect `--dry-run`, then
+run the script as that machine's intended user with the chosen flags. No service
+restart is needed merely to update the repository. Verify Core status with
+`bash ~/check-qortal-status.sh`, launch Hub manually, and inspect `crontab -l`.
+Restore a replaced jar from `<backup>/qortal/qortal.jar` **with Core stopped**, or
+restore the backed-up Hub binary at its original path. Restore preference files
+to their original locations and use `dconf load / < "$backup/desktop.dconf"` (set `backup` to the printed path) to
+restore the exported desktop state. Restore scheduling with
+`crontab "$backup/crontab"` if needed. Keep the printed backup path until verified.
 
 ## Repair desktop icons and Cinnamon settings
 

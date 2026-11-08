@@ -199,9 +199,28 @@ cp "$archive" "$out"
         self.assert_icons()
         self.assertIn('Inherits=hicolor\n', (self.theme / 'index.theme').read_text())
 
+    def test_preserve_mode_keeps_custom_artwork_icons_and_theme_selection(self):
+        # Partial sources force the download/merge path without replacing the
+        # user's existing source, generated icon or theme index.
+        self.source.mkdir(parents=True)
+        (self.source / 'qortal.png').write_bytes(b'personal source')
+        (self.theme / '48x48/apps').mkdir(parents=True)
+        (self.theme / 'index.theme').write_text('personal index\n')
+        (self.theme / '48x48/apps/qortal.png').write_bytes(b'personal icon')
+        self.fallback.mkdir(parents=True)
+        (self.fallback / 'qortal.png').write_bytes(b'personal fallback')
+        self.run_helper(QORTAL_ICONS_PRESERVE_EXISTING='1', QORTAL_ICONS_SELECT_THEME='0')
+        self.assertEqual((self.source / 'qortal.png').read_bytes(), b'personal source')
+        self.assertEqual((self.theme / 'index.theme').read_text(), 'personal index\n')
+        self.assertEqual((self.theme / '48x48/apps/qortal.png').read_bytes(), b'personal icon')
+        self.assertEqual((self.fallback / 'qortal.png').read_bytes(), b'personal fallback')
+        self.assertTrue((self.fallback / 'qortal-hub.png').exists())
+        self.assertNotIn('set org.', self.log.read_text())
+
     def test_rebuild_propagates_download_and_helper_failures(self):
         functions = self.root / 'rebuild-functions.sh'
         functions.write_text((ROOT / 'rebuilt-machine.sh').read_text())
+        (self.root / 'create-icon-theme-uni.sh').write_text('#!/bin/bash\nexit 7\n')
         for install in ('return 1', 'printf "exit 7\\n" > "$2"'):
             with self.subTest(install=install):
                 code = ('source "$TASK_FUNCTIONS"\n'

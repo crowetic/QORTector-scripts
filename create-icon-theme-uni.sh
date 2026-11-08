@@ -54,7 +54,11 @@ if ! have_icon_sources "$ICON_SOURCE_DIR"; then
           have_icon_sources "$WORK_DIR/extracted/Pictures/icons/icons_theme"; then
         mkdir -p "${HOME}/Pictures"
         # Merge directories, including into an existing Pictures/icons directory.
-        rsync -a "$WORK_DIR/extracted/Pictures/" "${HOME}/Pictures/"
+        if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" = 1 ]; then
+          rsync -a --ignore-existing "$WORK_DIR/extracted/Pictures/" "${HOME}/Pictures/"
+        else
+          rsync -a "$WORK_DIR/extracted/Pictures/" "${HOME}/Pictures/"
+        fi
         downloaded=true
         break
       fi
@@ -89,6 +93,7 @@ done
 INHERITED_THEMES="${BASE_THEME:+${BASE_THEME},}hicolor"
 
 mkdir -p "$TARGET_THEME_DIR" "$HICOLOR_DIR/48x48/apps"
+if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -e "${ICON_CACHE_DIR}/index.theme" ]; then
 cat > "${ICON_CACHE_DIR}/index.theme" <<EOF
 [Icon Theme]
 Name=${ICON_THEME_NAME}
@@ -101,12 +106,17 @@ Size=48
 Context=Applications
 Type=Fixed
 EOF
+fi
 
 for name in "${ICON_NAMES[@]}"; do
-  install -m 644 "$WORK_DIR/rendered/${name}.png" "${TARGET_THEME_DIR}/${name}.png"
+  if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -e "${TARGET_THEME_DIR}/${name}.png" ]; then
+    install -m 644 "$WORK_DIR/rendered/${name}.png" "${TARGET_THEME_DIR}/${name}.png"
+  fi
   # hicolor is the standard fallback in every desktop icon theme. These names
   # must resolve even when GNOME/Cinnamon keeps or later selects another theme.
-  install -m 644 "$WORK_DIR/rendered/${name}.png" "$HICOLOR_DIR/48x48/apps/${name}.png"
+  if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -e "$HICOLOR_DIR/48x48/apps/${name}.png" ]; then
+    install -m 644 "$WORK_DIR/rendered/${name}.png" "$HICOLOR_DIR/48x48/apps/${name}.png"
+  fi
 done
 
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
@@ -126,6 +136,7 @@ set_gsettings_theme() {
   fi
 }
 
+if [ "${QORTAL_ICONS_SELECT_THEME:-1}" = 1 ]; then
 case "$CURRENT_DESKTOP" in
   *cinnamon*)
     set_gsettings_theme org.cinnamon.desktop.interface
@@ -153,6 +164,7 @@ case "$CURRENT_DESKTOP" in
     echo "ℹ️ No supported desktop session detected. Qortal icons are installed for the next login."
     ;;
 esac
+fi
 
 echo "✅ All seven Qortal icons installed in ${ICON_THEME_NAME} and the hicolor fallback."
 echo "ℹ️ If an existing panel still shows cached icons, log out and back in."

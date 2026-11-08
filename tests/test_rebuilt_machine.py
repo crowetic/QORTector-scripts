@@ -154,8 +154,8 @@ if [ "$1" = dump ]; then echo '[old]'; else cat >> "$REBUILD_TEST_LOG"; fi
 sudo() { printf '%s\n' "$*" >> "$REBUILD_TEST_LOG"; [[ "$*" == *good ]]; }
 install_first_available_package unavailable broken good''')
         result = self.log.read_text()
-        self.assertIn('install -y broken', result)
-        self.assertIn('install -y good', result)
+        self.assertIn('install -y --no-upgrade broken', result)
+        self.assertIn('install -y --no-upgrade good', result)
         self.assertNotIn('install -y unavailable', result)
 
     def test_failed_package_candidates_return_failure(self):
@@ -179,8 +179,7 @@ install_rebuilt_cron
 install_rebuilt_cron''')
         gui = self.cron.read_text()
         self.assertIn(original, gui)
-        self.assertNotIn('@reboot', gui)
-        self.assertEqual(gui.count('auto-fix-qortal.sh'), 1)
+        self.assertEqual(gui, headless)
 
     def test_cron_read_error_does_not_replace_schedule(self):
         original = self.cron.read_text()
@@ -240,7 +239,7 @@ install_machine_artwork''', extra_env={'TEST_ARCHIVE': str(archive)})
         self.assertEqual(result.stdout.splitlines(), [str(core), 'one argument'])
 
     def test_launchers_validate_with_spaces_in_home(self):
-        self.bash('install_desktop_launchers')
+        self.bash('APPLY_DEFAULTS=1; install_desktop_launchers')
         if shutil.which('desktop-file-validate'):
             for path in list(self.data.rglob('*.desktop')) + list(self.config.rglob('*.desktop')):
                 result = subprocess.run(['desktop-file-validate', str(path)], capture_output=True, text=True)
@@ -313,9 +312,12 @@ assert json.loads(path.read_text()) == [os.environ['TEST_TARGET'], 'two words']
 id() { echo 1000; }
 package_available() { return 0; }
 install_machine_artwork() { return 0; }
+install_qortal_core() { echo 'mock Core install' >> "$REBUILD_TEST_LOG"; }
+install_qortal_hub() { echo 'mock Hub install' >> "$REBUILD_TEST_LOG"; }
 main''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': '1'})
         calls = self.log.read_text()
-        self.assertIn('setup automation=0', calls)
+        self.assertIn('mock Core install', calls)
+        self.assertIn('mock Hub install', calls)
         self.assertNotIn('sudo reboot', calls)
         self.assertNotIn('gsettings', calls)
         self.assertFalse((self.config / 'autostart').exists())
@@ -337,7 +339,9 @@ package_available() { return 0; }
 install_machine_artwork() { return 0; }
 install_sensors_applet() { return 0; }
 install_desktop_themes() { return 0; }
-main''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': '0',
+install_qortal_core() { return 0; }
+install_qortal_hub() { return 0; }
+main --apply-defaults''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': '0',
                     'REBUILD_TEST_APPLETS': "['panel1:left:0:menu@cinnamon.org:7']"})
         self.assertIn('Session = cinnamon', (self.home / '.dmrc').read_text())
         once = self.config / 'autostart/apply-cinnamon-settings.desktop'
@@ -354,7 +358,7 @@ main''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': 
     def test_failed_required_update_stops_before_core_setup(self):
         self.bash('''id() { echo 1000; }
 sudo() { [[ "$*" != *update* ]]; }
-ensure_qortal_setup_script() { echo UNEXPECTED_CORE_SETUP; }
+install_qortal_core() { echo UNEXPECTED_CORE_SETUP; }
 main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         self.assertNotIn('auto-fix-qortal.sh', self.cron.read_text())
 
@@ -375,6 +379,323 @@ HUB_LAUNCHER_PREFIX=""
         if shutil.which('desktop-file-validate'):
             result = subprocess.run(['desktop-file-validate', str(launcher)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def os_release(self, ident, like=''):
+        path = self.root / 'os-release'
+        path.write_text(f'ID={ident}\nID_LIKE="{like}"\n')
+        return {'REBUILT_MACHINE_OS_RELEASE': str(path)}
+
+    def test_distro_detection_prefers_id_and_like_over_other_installed_managers(self):
+        for manager in ('apt-get', 'pacman', 'dnf'):
+            self.stub(manager, 'exit 0\n')
+        for ident, like, expected in [('ubuntu', 'debian', 'apt-get'),
+                                      ('manjaro', 'arch', 'pacman'),
+                                      ('custom', 'arch', 'pacman'),
+                                      ('fedora', '', 'dnf')]:
+            with self.subTest(distro=ident):
+                result = self.bash('detect_distro; echo "selected=$PKG_MANAGER"',
+                                   extra_env=self.os_release(ident, like))
+                self.assertIn('selected=' + expected, result.stdout)
+        result = self.bash('detect_distro', extra_env=self.os_release('unknown'))
+        self.assertIn('Unknown distribution', result.stderr)
+
+    def test_package_managers_map_names_skip_installed_and_skip_yaru(self):
+        for manager, python, fuse, cinnamon in [('apt-get', 'python3', 'libfuse2', 'cinnamon-desktop-environment'),
+                                               ('pacman', 'python', 'fuse2', 'cinnamon'),
+                                               ('dnf', 'python3', 'fuse-libs', 'cinnamon')]:
+            with self.subTest(manager=manager):
+                self.log.unlink(missing_ok=True)
+                self.bash(f'''PKG_MANAGER={manager}
+package_installed() {{ [ "$1" = git ]; }}
+pkg_install git python3 libfuse2 cinnamon-desktop-environment
+install_packages_if_available yaru-theme-icon
+''')
+                calls = self.log.read_text()
+                self.assertIn(python, calls)
+                self.assertIn(fuse, calls)
+                self.assertIn(cinnamon, calls)
+                self.assertNotIn(' git', calls)
+                if manager != 'apt-get':
+                    self.assertNotIn('yaru', calls)
+                    self.assertNotIn('apt-get', calls)
+
+    def test_installed_fallback_avoids_installing_preferred_alternative(self):
+        self.bash('''PKG_MANAGER=pacman
+package_installed() { [ "$1" = jre17-openjdk ]; }
+package_available() { echo UNEXPECTED_QUERY >&2; exit 99; }
+install_first_available_package openjdk-21-jre openjdk-17-jre''')
+        self.assertFalse(self.log.exists())
+
+    def test_system_upgrades_are_opt_in_and_arch_never_uses_sy_alone(self):
+        for manager in ('apt-get', 'pacman', 'dnf'):
+            with self.subTest(manager=manager):
+                self.log.unlink(missing_ok=True)
+                self.bash(f'PKG_MANAGER={manager}; prepare_packages')
+                calls = self.log.read_text() if self.log.exists() else ''
+                self.assertNotIn('upgrade', calls)
+                self.assertNotIn('-Syu', calls)
+                self.bash(f'PKG_MANAGER={manager}; UPGRADE_PACKAGES=1; prepare_packages')
+                calls = self.log.read_text()
+                self.assertIn('-Syu' if manager == 'pacman' else 'upgrade', calls)
+                self.assertNotIn(' -Sy ', calls)
+
+    def test_dry_run_all_flags_has_no_side_effects_on_any_supported_distro(self):
+        for manager in ('pacman', 'dnf'):
+            self.stub(manager, 'exit 1\n')
+        before = sorted(str(p.relative_to(self.home)) for p in self.home.rglob('*'))
+        for ident in ('ubuntu', 'arch', 'fedora', 'unknown'):
+            with self.subTest(distro=ident):
+                result = self.bash('main --dry-run --update-core --update-hub --upgrade-packages --apply-defaults --force-artwork',
+                                   extra_env={**self.os_release(ident), 'REBUILT_MACHINE_HEADLESS': '0',
+                                              'REBUILT_MACHINE_REBOOT': '1'})
+                self.assertIn('[dry-run]', result.stdout)
+                self.assertFalse(self.log.exists())
+                self.assertEqual(before, sorted(str(p.relative_to(self.home)) for p in self.home.rglob('*')))
+
+    def test_help_and_bad_flags_do_not_require_sudo_or_change_files(self):
+        self.assertIn('--update-core', self.bash('main --help').stdout)
+        self.bash('main --unknown', success=False)
+        self.bash('main', success=False, extra_env={'REBUILT_MACHINE_UPDATE_CORE': 'yes'})
+        self.assertFalse(self.log.exists())
+
+    def test_existing_core_and_hub_are_preserved_without_any_network(self):
+        core = self.home / 'qortal'
+        core.mkdir()
+        (core / 'qortal.jar').write_bytes(b'custom offline or syncing core')
+        (core / 'settings.json').write_text('{"dataPath":"/custom"}')
+        hub = self.home / 'qortal-hub'
+        hub.mkdir()
+        (hub / 'Qortal-Hub.AppImage').write_bytes(b'custom Hub')
+        self.bash('''download_with_retry() { echo UNEXPECTED_DOWNLOAD >&2; exit 99; }
+core_is_running() { echo UNEXPECTED_HEALTH_CHECK >&2; exit 99; }
+install_qortal_core
+install_qortal_hub''')
+        self.assertEqual((core / 'qortal.jar').read_bytes(), b'custom offline or syncing core')
+        self.assertEqual((hub / 'Qortal-Hub.AppImage').read_bytes(), b'custom Hub')
+        self.assertEqual(list(self.backup.iterdir()), [])
+
+    def core_archive(self, valid=True):
+        jar = self.root / 'release.jar'
+        with zipfile.ZipFile(jar, 'w') as archive:
+            archive.writestr('META-INF/MANIFEST.MF', 'Main-Class: org.qortal.Qortal\n' if valid else 'invalid\n')
+        release = self.root / 'core.zip'
+        with zipfile.ZipFile(release, 'w') as archive:
+            archive.write(jar, 'qortal/qortal.jar')
+            archive.writestr('qortal/start.sh', '#!/bin/bash\nexit 0\n')
+            archive.writestr('qortal/settings.json', '{"newDefault":true}')
+        return {'TEST_CORE_ARCHIVE': str(release)}
+
+    def test_explicit_core_update_changes_only_jar_and_keeps_backup(self):
+        core = self.home / 'qortal'
+        (core / 'db').mkdir(parents=True)
+        (core / 'db/blockchain.data').write_bytes(b'database')
+        (core / 'settings.json').write_text('{"custom":true}')
+        (core / 'qortal.jar').write_bytes(b'old jar')
+        self.bash('''BACKUP_DIR="$REBUILT_MACHINE_BACKUP_DIR"
+UPDATE_CORE=1
+core_is_running() { return 1; }
+download_with_retry() { cp "$TEST_CORE_ARCHIVE" "$2"; }
+install_qortal_core''', extra_env=self.core_archive())
+        self.assertTrue(zipfile.is_zipfile(core / 'qortal.jar'))
+        self.assertEqual((core / 'settings.json').read_text(), '{"custom":true}')
+        self.assertEqual((core / 'db/blockchain.data').read_bytes(), b'database')
+        self.assertFalse((core / 'start.sh').exists())
+        self.assertEqual((self.backup / 'qortal/qortal.jar').read_bytes(), b'old jar')
+
+    def test_invalid_core_download_and_running_core_leave_installation_intact(self):
+        core = self.home / 'qortal'
+        core.mkdir()
+        (core / 'qortal.jar').write_bytes(b'old jar')
+        self.bash('''UPDATE_CORE=1
+core_is_running() { return 1; }
+download_with_retry() { cp "$TEST_CORE_ARCHIVE" "$2"; }
+install_qortal_core''', success=False, extra_env=self.core_archive(valid=False))
+        self.assertEqual((core / 'qortal.jar').read_bytes(), b'old jar')
+        self.bash('''UPDATE_CORE=1
+core_is_running() { return 0; }
+download_with_retry() { echo UNEXPECTED_DOWNLOAD >&2; exit 99; }
+install_qortal_core''', success=False)
+        self.assertEqual((core / 'qortal.jar').read_bytes(), b'old jar')
+
+    @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'JDK required for process isolation test')
+    def test_core_process_detection_targets_this_installation(self):
+        source = self.root / 'Sleeper.java'
+        source.write_text('public class Sleeper { public static void main(String[] a) throws Exception { Thread.sleep(60000); } }')
+        subprocess.run(['javac', str(source)], check=True, capture_output=True, timeout=15)
+        other = self.root / 'other-core'
+        other.mkdir()
+        jar = other / 'qortal.jar'
+        with zipfile.ZipFile(jar, 'w') as z:
+            z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\nMain-Class: Sleeper\n\n')
+            z.write(self.root / 'Sleeper.class', 'Sleeper.class')
+        core = self.home / 'qortal'
+        core.mkdir()
+        shutil.copy2(jar, core / 'qortal.jar')
+        def launch(directory):
+            process = subprocess.Popen(['java', '-jar', 'qortal.jar'], cwd=directory,
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.addCleanup(lambda: process.wait(timeout=5))
+            self.addCleanup(process.terminate)
+            return process
+        other_process = launch(other)
+        self.bash('core_is_running', success=False)
+        own_process = launch(core)
+        self.bash('core_is_running')
+        self.bash('UPDATE_CORE=1; install_qortal_core', success=False)
+        self.assertIsNone(own_process.poll())
+        self.assertIsNone(other_process.poll())
+
+    def test_fresh_core_installs_validated_release(self):
+        self.bash('''download_with_retry() { cp "$TEST_CORE_ARCHIVE" "$2"; }
+install_qortal_core''', extra_env=self.core_archive())
+        self.assertTrue(zipfile.is_zipfile(self.home / 'qortal/qortal.jar'))
+        self.assertTrue(os.access(self.home / 'qortal/start.sh', os.X_OK))
+
+    def test_hub_update_skips_download_for_current_version_and_hash(self):
+        hub = self.home / 'qortal-hub'
+        hub.mkdir()
+        binary = hub / 'Qortal-Hub'
+        binary.write_bytes(b'local appimage')
+        (hub / '.qortector-release.json').write_text(json.dumps({
+            'version': 'v1.2.3', 'sha256': hashlib.sha256(binary.read_bytes()).hexdigest()}))
+        self.bash('''UPDATE_HUB=1
+uname() { echo x86_64; }
+download_with_retry() {
+  [[ "$1" == *api.github.com* ]] || { echo UNEXPECTED_BINARY_DOWNLOAD >&2; exit 99; }
+  echo '{"tag_name":"v1.2.3"}' > "$2"
+}
+install_qortal_hub''')
+        self.assertEqual(binary.read_bytes(), b'local appimage')
+
+    def test_hub_update_validates_before_replacing_and_preserves_filename(self):
+        hub = self.home / 'qortal-hub'
+        hub.mkdir()
+        binary = hub / 'Qortal-Hub.AppImage'
+        binary.write_bytes(b'old Hub')
+        new = self.root / 'Hub.AppImage'
+        new.write_bytes(b'\x7fELFnew Hub')
+        code = '''BACKUP_DIR="$REBUILT_MACHINE_BACKUP_DIR"
+UPDATE_HUB=1
+uname() { echo aarch64; }
+download_with_retry() {
+  if [[ "$1" == *api.github.com* ]]; then echo '{"tag_name":"v2"}' > "$2";
+  else [[ "$1" == *arm64.AppImage ]] && cp "$TEST_HUB_BINARY" "$2"; fi
+}
+install_qortal_hub'''
+        self.bash(code, extra_env={'TEST_HUB_BINARY': str(new)})
+        self.assertEqual(binary.read_bytes(), new.read_bytes())
+        self.assertEqual((self.backup / 'qortal-hub/Qortal-Hub.AppImage').read_bytes(), b'old Hub')
+        new.write_bytes(b'<html>bad release</html>')
+        self.bash(code.replace('v2', 'v3'), success=False, extra_env={'TEST_HUB_BINARY': str(new)})
+        self.assertEqual(binary.read_bytes(), b'\x7fELFnew Hub')
+
+    def test_custom_cron_and_disabled_autostarts_survive_repeated_runs(self):
+        custom = '17 4 * * 6 /custom/auto-fix-qortal.sh --mine\n@reboot sleep 42 && /custom/start-qortal-core.sh\n'
+        self.cron.write_text(self.cron.read_text() + custom)
+        auto = self.config / 'autostart/auto-fix-qortal-GUI.desktop'
+        auto.parent.mkdir(parents=True)
+        auto.write_text('[Desktop Entry]\nHidden=true\nX-GNOME-Autostart-Delay=900\n')
+        self.bash('''BACKUP_DIR="$REBUILT_MACHINE_BACKUP_DIR"
+HEADLESS_MODE=true
+install_rebuilt_cron
+HEADLESS_MODE=false
+install_desktop_launchers
+install_rebuilt_cron
+install_desktop_launchers''')
+        self.assertIn(custom, self.cron.read_text())
+        self.assertEqual(self.cron.read_text().count('auto-fix-qortal.sh'), 1)
+        self.assertIn('Hidden=true', auto.read_text())
+        self.assertFalse((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
+        self.assertFalse((self.config / 'autostart/start-qortal.desktop').exists())
+
+    def test_artwork_preserves_matching_files_and_force_backs_up(self):
+        pictures = self.home / 'Pictures'
+        pictures.mkdir()
+        (pictures / 'wallpaper.png').write_bytes(b'personal')
+        archive = self.root / 'art.zip'
+        with zipfile.ZipFile(archive, 'w') as z:
+            z.writestr('Machine-files/Pictures/wallpaper.png', b'repo')
+        code = '''BACKUP_DIR="$REBUILT_MACHINE_BACKUP_DIR"
+download_with_retry() { cp "$TEST_ART" "$2"; }
+install_machine_artwork'''
+        self.bash(code, extra_env={'TEST_ART': str(archive)})
+        self.assertEqual((pictures / 'wallpaper.png').read_bytes(), b'personal')
+        self.bash('download_with_retry() { exit 99; }; install_machine_artwork')
+        self.bash('FORCE_ARTWORK=1\n' + code, extra_env={'TEST_ART': str(archive)})
+        self.assertEqual((pictures / 'wallpaper.png').read_bytes(), b'repo')
+        self.assertEqual((self.backup / 'Pictures/wallpaper.png').read_bytes(), b'personal')
+
+
+    def test_complete_default_rerun_preserves_configured_desktop_and_no_reboot(self):
+        checkout = self.root / 'checkout'
+        checkout.mkdir()
+        for name in ('rebuilt-machine.sh', 'apply-cinnamon-settings.sh', 'cinnamon-settings.json',
+                     'configure-terminal-and-more.sh', 'auto-fix-qortal.sh', 'refresh-qortal.sh',
+                     'check-qortal-status.sh', 'start-qortal-core.sh'):
+            shutil.copy2(ROOT / name, checkout / name)
+        (checkout / 'create-icon-theme-uni.sh').write_text('#!/bin/bash\nexit 0\n')
+        core = self.home / 'qortal'
+        core.mkdir()
+        hub = self.home / 'qortal-hub'
+        hub.mkdir()
+        custom = {core / 'qortal.jar': b'existing core', core / 'settings.json': b'custom settings',
+                  hub / 'Qortal-Hub': b'existing Hub', self.home / '.dmrc': b'[Desktop]\nSession=plasma\n',
+                  self.home / 'auto-fix-qortal.sh': b'#!/bin/bash\n# my helper\n'}
+        autostart = self.config / 'autostart/start-qortal.desktop'
+        autostart.parent.mkdir(parents=True)
+        custom[autostart] = b'[Desktop Entry]\nHidden=true\n'
+        for path, content in custom.items():
+            path.write_bytes(content)
+        self.cron.write_text(self.cron.read_text() + '42 3 * * * /custom/auto-fix-qortal.sh\n')
+        old_cron = self.cron.read_text()
+        self.bash('''source "$TEST_CHECKOUT/rebuilt-machine.sh"
+unset REBUILT_MACHINE_REBOOT
+id() { echo 1000; }
+package_installed() { return 0; }
+install_machine_artwork() { return 0; }
+install_sensors_applet() { return 0; }
+install_desktop_themes() { return 0; }
+main
+main''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': '0'})
+        for path, content in custom.items():
+            self.assertEqual(path.read_bytes(), content, str(path))
+        self.assertEqual(self.cron.read_text(), old_cron)
+        calls = self.log.read_text()
+        for unexpected in ('upgrade', 'install -y', 'gsettings', 'dconf', 'reboot'):
+            self.assertNotIn(unexpected, calls)
+        self.assertFalse((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
+        self.assertEqual(json.loads((self.home / '.qortector-setup-state.json').read_text())['packageManager'], 'apt-get')
+
+    def test_alternate_autostart_names_are_not_duplicated(self):
+        folder = self.config / 'autostart'
+        folder.mkdir(parents=True)
+        (folder / 'my-core.desktop').write_text('[Desktop Entry]\nExec=/custom/start-qortal-core.sh\nHidden=true\n')
+        (folder / 'my-maintenance.desktop').write_text('[Desktop Entry]\nExec=/custom/auto-fix-qortal.sh\n')
+        self.bash('install_desktop_launchers')
+        self.assertFalse((folder / 'start-qortal.desktop').exists())
+        self.assertFalse((folder / 'auto-fix-qortal-GUI.desktop').exists())
+
+    def test_rebuild_hub_menu_preserves_appimage_path_and_extraction_fallback(self):
+        hub = self.home / 'qortal-hub'
+        hub.mkdir()
+        (hub / 'Qortal-Hub-arm64.AppImage').write_bytes(b'installed')
+        self.bash('ldconfig() { return 1; }; HUB_SANDBOX_FLAG=--no-sandbox; install_qortal_menu')
+        launcher = self.data / 'applications/qortal-hub.desktop'
+        text = launcher.read_text()
+        self.assertIn('"APPIMAGE_EXTRACT_AND_RUN=1"', text)
+        self.assertIn('Qortal-Hub-arm64.AppImage', text)
+        self.assertIn('"--no-sandbox"', text)
+        if shutil.which('desktop-file-validate'):
+            result = subprocess.run(['desktop-file-validate', str(launcher)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_desktop_dconf_backup_failure_prevents_defaults(self):
+        self.stub('dconf', 'echo cannot-export >&2; exit 1\n')
+        self.bash('''set -e
+BACKUP_DIR="$REBUILT_MACHINE_BACKUP_DIR"
+backup_desktop_settings
+gsettings set org.cinnamon.theme name changed''', success=False)
+        self.assertFalse(self.log.exists())
 
 
 if __name__ == '__main__':
