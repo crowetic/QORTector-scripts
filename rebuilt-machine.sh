@@ -38,6 +38,8 @@ Equivalent REBUILT_MACHINE_* variables (0 or 1): DRY_RUN, UPDATE_CORE,
 UPDATE_HUB, UPGRADE, APPLY_DEFAULTS, FORCE_ARTWORK. Defaults are all 0.
 REBUILT_MACHINE_REBOOT=1 explicitly enables reboot after a 30-second delay.
 REBUILT_MACHINE_HEADLESS=auto|1|0 selects automatic/server/desktop mode.
+REBUILT_MACHINE_PKG_RETRIES=3 sets total package install attempts (positive integer).
+Failed noncritical packages warn and continue; required packages stop setup.
 Existing Core/Hub, preferences, custom cron and autostarts are preserved by default.
 HELP
 }
@@ -62,6 +64,7 @@ parse_args() {
   done
   case "${REBUILT_MACHINE_REBOOT:-0}" in 0|1) ;; *) echo 'REBUILT_MACHINE_REBOOT must be 0 or 1.' >&2; return 1 ;; esac
   case "${REBUILT_MACHINE_HEADLESS:-auto}" in auto|0|1) ;; *) echo 'REBUILT_MACHINE_HEADLESS must be auto, 0 or 1.' >&2; return 1 ;; esac
+  validate_pkg_retries
 }
 
 run() {
@@ -137,8 +140,33 @@ package_installed() {
   esac
 }
 
+validate_pkg_retries() {
+  local attempts=${REBUILT_MACHINE_PKG_RETRIES:-3}
+  [[ "$attempts" =~ ^[1-9][0-9]*$ ]] && [ "$attempts" -gt 0 ] 2>/dev/null || {
+    echo 'REBUILT_MACHINE_PKG_RETRIES must be a positive integer (total attempts).' >&2
+    return 1
+  }
+}
+
 pkg_install() {
-  local package mapped
+  local package mapped attempt status option configured manual_command required=0
+  local attempts=${REBUILT_MACHINE_PKG_RETRIES:-3}
+  local -a apt_options=() install_command=()
+  validate_pkg_retries || return 1
+  # Alternative-package callers need failure status so they can try the next
+  # candidate, even when a normal install would only warn and continue.
+  if [ "${1:-}" = --required ]; then required=1; shift; fi
+  if [ "${PKG_MANAGER:-apt-get}" = apt-get ]; then
+    for option in APT::Get::Retry Acquire::Retries; do
+      configured=""
+      if [ "$DRY_RUN" = 0 ] && command_exists apt-config; then
+        configured=$(apt-config shell retry_value "$option" 2>/dev/null) || configured=""
+      fi
+      # Preserve explicit local settings, including zero. Acquire::Retries is
+      # the effective APT download retry option; no persistent config is written.
+      [ -n "$configured" ] || apt_options+=(-o "$option=$attempts")
+    done
+  fi
   for package in "$@"; do
     mapped=$(map_package "$package") || { warn "No $PKG_MANAGER equivalent for $package; skipping."; continue; }
     if [ "$DRY_RUN" = 0 ] && package_installed "$mapped"; then
@@ -146,11 +174,40 @@ pkg_install() {
       continue
     fi
     case "${PKG_MANAGER:-apt-get}" in
-      apt-get) run sudo apt-get install -y --no-upgrade "$mapped" || return 1 ;;
-      pacman) run sudo pacman -S --noconfirm --needed "$mapped" || return 1 ;;
-      dnf) run sudo dnf install -y "$mapped" || return 1 ;;
+      apt-get) install_command=(sudo apt-get install -y --no-upgrade "${apt_options[@]}" "$mapped") ;;
+      # Pacman has no --retry option; retry the transaction without using -Sy.
+      pacman) install_command=(sudo pacman -S --noconfirm --needed "$mapped") ;;
+      dnf) install_command=(sudo dnf install -y "--setopt=retries=$attempts" "$mapped") ;;
+      *) echo "Unsupported package manager: $PKG_MANAGER" >&2; return 1 ;;
     esac
+    for ((attempt=1; attempt<=attempts; attempt++)); do
+      if run "${install_command[@]}"; then
+        status=0
+        break
+      else
+        status=$?
+      fi
+      if [ "$attempt" -lt "$attempts" ]; then
+        printf 'Package %s install failed (attempt %s/%s); retrying in %ss.\n' \
+          "$mapped" "$attempt" "$attempts" "$((attempt * 2))" >&2
+        sleep "$((attempt * 2))"
+      fi
+    done
+    if [ "$status" -ne 0 ]; then
+      printf -v manual_command '%q ' "${install_command[@]}"
+      warn "Could not install package $mapped after $attempts attempts (exit $status). Retry manually: ${manual_command% }"
+      # These tools are needed by later setup steps; fail here with the package
+      # name rather than failing later on a missing command or TLS certificates.
+      case "$package" in
+        git|curl|jq|unzip|ca-certificates|rsync|python3|util-linux)
+          printf 'Critical package %s is unavailable; stopping setup.\n' "$mapped" >&2
+          return "$status"
+          ;;
+      esac
+      [ "$required" = 0 ] || return "$status"
+    fi
   done
+  return 0
 }
 
 prepare_packages() {
@@ -304,7 +361,7 @@ install_first_available_package() {
   done
   for package in "$@"; do
     mapped=$(map_package "$package") || continue
-    if package_available "$mapped" && pkg_install "$package"; then return 0; fi
+    if package_available "$mapped" && pkg_install --required "$package"; then return 0; fi
   done
   return 1
 }
@@ -317,6 +374,10 @@ ensure_qortal_setup_script() {
 install_qortal_icons() {
   if [ "$DRY_RUN" = 1 ]; then echo '[dry-run] Install missing Qortal icons'; return 0; fi
   install_repo_file create-icon-theme-uni.sh "$HOME/create-icon-theme-uni.sh" 755 "$APPLY_DEFAULTS" || return 1
+  if ! command_exists magick && ! command_exists convert; then
+    warn 'ImageMagick is unavailable; skipping Qortal icon generation. Install ImageMagick, then retry manually: bash ~/create-icon-theme-uni.sh'
+    return 0
+  fi
   # A preserved home copy may predate the safety switches; execute this
   # checkout's helper, or fetch a current temporary copy for standalone use.
   local helper="$SCRIPT_DIR/create-icon-theme-uni.sh" work="" status=0

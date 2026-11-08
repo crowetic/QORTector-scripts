@@ -117,6 +117,27 @@ mode still installs Cinnamon and optional desktop apps on a fresh machine.
 | `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork, icon files and themes. Desktop preference selection still requires `--apply-defaults`. |
 | — | `REBUILT_MACHINE_HEADLESS=auto` | Detect sessions/installed session files; `1` forces server mode and `0` forces desktop mode. |
 | — | `REBUILT_MACHINE_REBOOT=1` | Opt in to reboot after success and a 30-second cancellation delay; default is `0`. |
+| — | `REBUILT_MACHINE_PKG_RETRIES=3` | Total install attempts per missing package; accepts a positive integer. Wait 2 seconds, then 4 seconds between the default three attempts. |
+
+Package installation retries use the existing package mappings and preserve
+installed packages. APT receives command-local `APT::Get::Retry` and
+`Acquire::Retries` defaults matching the attempt count, preserving either value
+when already configured; `Acquire::Retries` controls APT's download retries.
+Pacman transactions are retried in the script (there is no `--retry` flag), and
+DNF receives `--setopt=retries=<count>`. This option is deprecated in DNF5;
+the script's loop provides transaction retries on both DNF versions.
+Package managers may also retry downloads
+internally, so an attempt can take longer than a single connection timeout.
+Their existing timeout settings are retained; no system configuration is changed.
+
+After the last failure, noncritical packages such as ImageMagick warn with the
+package name and a manual retry command, and setup continues with later packages.
+If ImageMagick is missing, icon generation is skipped with a manual retry hint.
+Required tools (`git`, `curl`, `jq`, `unzip`, `ca-certificates`, `rsync`, `python3`,
+and `util-linux`) still stop setup after exhausting retries. Alternative-package
+checks try the next candidate after an install failure; Java and desktop-mode
+Cinnamon remain required. `--dry-run` previews each install once without querying
+package state or APT configuration, invoking sudo, or sleeping.
 
 Boolean variables accept only `0` or `1`. To get the repository's desktop look on
 a fresh install, run `bash ./rebuilt-machine.sh --apply-defaults`. To update an

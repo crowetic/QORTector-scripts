@@ -150,15 +150,17 @@ if [ "$1" = dump ]; then echo '[old]'; else cat >> "$REBUILD_TEST_LOG"; fi
                          hashlib.md5(override.read_bytes()).hexdigest())
 
     def test_package_fallback_continues_after_install_failure(self):
+        self.stub('sleep', 'exit 0\n')
         self.bash('''package_available() { [ "$1" != unavailable ]; }
 sudo() { printf '%s\n' "$*" >> "$REBUILD_TEST_LOG"; [[ "$*" == *good ]]; }
 install_first_available_package unavailable broken good''')
         result = self.log.read_text()
-        self.assertIn('install -y --no-upgrade broken', result)
-        self.assertIn('install -y --no-upgrade good', result)
-        self.assertNotIn('install -y unavailable', result)
+        calls = result.splitlines()
+        self.assertEqual([call.split()[-1] for call in calls], ['broken'] * 3 + ['good'])
+        self.assertTrue(all(call.startswith('apt-get install -y --no-upgrade ') for call in calls))
 
     def test_failed_package_candidates_return_failure(self):
+        self.stub('sleep', 'exit 0\n')
         self.bash('''package_available() { return 0; }
 sudo() { return 1; }
 install_first_available_package broken bad''', success=False)
@@ -418,6 +420,202 @@ install_packages_if_available yaru-theme-icon
                 if manager != 'apt-get':
                     self.assertNotIn('yaru', calls)
                     self.assertNotIn('apt-get', calls)
+
+    def mock_package_installer(self, manager, failures=2, fail_package='*'):
+        state = self.root / ('package-attempts-' + manager)
+        if state.exists():
+            shutil.rmtree(state)
+        state.mkdir()
+        self.log.unlink(missing_ok=True)
+        self.env.update(REBUILD_TEST_PKG_STATE=str(state),
+                        REBUILD_TEST_PKG_FAILURES=str(failures),
+                        REBUILD_TEST_FAIL_PACKAGE=fail_package)
+        self.stub('sudo', 'exec "$@"\n')
+        self.stub('apt-config', 'exit 0\n')
+        self.stub('sleep', 'printf "sleep %s\\n" "$*" >> "$REBUILD_TEST_LOG"\n')
+        self.stub(manager, '''package="${@: -1}"
+counter="$REBUILD_TEST_PKG_STATE/$package"
+attempt=0
+if [ -f "$counter" ]; then read -r attempt < "$counter"; fi
+attempt=$((attempt + 1))
+printf '%s\n' "$attempt" > "$counter"
+printf '%s %s\n' "${0##*/}" "$*" >> "$REBUILD_TEST_LOG"
+if [[ "$package" == $REBUILD_TEST_FAIL_PACKAGE ]] && [ "$attempt" -le "$REBUILD_TEST_PKG_FAILURES" ]; then
+  echo 'mock connection timeout' >&2
+  exit 42
+fi
+''')
+        return state
+
+    def test_package_install_retries_succeed_on_third_attempt_for_each_manager(self):
+        for manager, package in [('apt-get', 'imagemagick'), ('pacman', 'imagemagick'),
+                                 ('dnf', 'ImageMagick')]:
+            with self.subTest(manager=manager):
+                state = self.mock_package_installer(manager)
+                result = self.bash(f'''set -Eeuo pipefail
+trap 'echo UNEXPECTED_ERR_TRAP >&2' ERR
+PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+pkg_install imagemagick
+echo "warnings=${{#WARNINGS[@]}}"''')
+                self.assertEqual((state / package).read_text().strip(), '3')
+                calls = self.log.read_text().splitlines()
+                installs = [line for line in calls if line.startswith(manager + ' ')]
+                self.assertEqual(len(installs), 3)
+                self.assertEqual([line for line in calls if line.startswith('sleep ')],
+                                 ['sleep 2', 'sleep 4'])
+                self.assertIn('attempt 2/3', result.stderr)
+                self.assertIn('warnings=0', result.stdout)
+                if manager == 'apt-get':
+                    self.assertIn('-o APT::Get::Retry=3', installs[0])
+                    self.assertIn('-o Acquire::Retries=3', installs[0])
+                    self.assertIn('--no-upgrade', installs[0])
+                elif manager == 'pacman':
+                    self.assertIn('-S --noconfirm --needed', installs[0])
+                    self.assertNotIn('--retry', installs[0])
+                else:
+                    self.assertIn('--setopt=retries=3', installs[0])
+
+    def test_exhausted_noncritical_package_warns_and_installs_next_package(self):
+        for manager, package in [('apt-get', 'imagemagick'), ('pacman', 'imagemagick'),
+                                 ('dnf', 'ImageMagick')]:
+            with self.subTest(manager=manager):
+                state = self.mock_package_installer(manager, failures=99, fail_package=package)
+                result = self.bash(f'''set -Eeuo pipefail
+trap 'echo UNEXPECTED_ERR_TRAP >&2' ERR
+PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+pkg_install imagemagick vim
+echo "continued; warnings=${{#WARNINGS[@]}}"''')
+                self.assertEqual((state / package).read_text().strip(), '3')
+                self.assertEqual((state / 'vim').read_text().strip(), '1')
+                self.assertIn('continued; warnings=1', result.stdout)
+                self.assertIn(f'Could not install package {package} after 3 attempts', result.stderr)
+                self.assertIn(f'Retry manually: sudo {manager}', result.stderr)
+                self.assertIn(package, result.stderr.split('Retry manually:', 1)[1])
+
+    def test_critical_package_failure_still_aborts_after_retries(self):
+        for manager in ('apt-get', 'pacman', 'dnf'):
+            for package in ('git', 'curl', 'python3'):
+                with self.subTest(manager=manager, package=package):
+                    state = self.mock_package_installer(manager, failures=99)
+                    mapped = 'python' if manager == 'pacman' and package == 'python3' else package
+                    result = self.bash(f'''set -Eeuo pipefail
+trap 'echo critical_failure_trap >&2' ERR
+PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+pkg_install {package} imagemagick
+echo SHOULD_NOT_CONTINUE''', success=False)
+                    self.assertEqual(result.returncode, 42)
+                    self.assertEqual((state / mapped).read_text().strip(), '3')
+                    self.assertIn(f'Critical package {mapped}', result.stderr)
+                    self.assertIn('critical_failure_trap', result.stderr)
+                    self.assertNotIn('SHOULD_NOT_CONTINUE', result.stdout)
+                    self.assertFalse((state / 'imagemagick').exists())
+                    self.assertFalse((state / 'ImageMagick').exists())
+
+    def test_rebuild_continues_after_imagemagick_failure_and_skips_icon_generation(self):
+        state = self.mock_package_installer('apt-get', failures=99, fail_package='imagemagick')
+        self.stub('sudo', 'if [ "${1:-}" = -v ]; then exit 0; fi\nexec "$@"\n')
+        checkout = self.root / 'checkout'
+        checkout.mkdir()
+        for name in ('rebuilt-machine.sh', 'auto-fix-qortal.sh', 'refresh-qortal.sh',
+                     'check-qortal-status.sh', 'start-qortal-core.sh'):
+            shutil.copy2(ROOT / name, checkout / name)
+        (checkout / 'create-icon-theme-uni.sh').write_text(
+            '#!/bin/bash\necho UNEXPECTED_ICON_GENERATION >&2; exit 99\n')
+        result = self.bash('''source "$TEST_CHECKOUT/rebuilt-machine.sh"
+id() { echo 1000; }
+package_installed() { [ "$1" != imagemagick ]; }
+command_exists() {
+  case "$1" in magick|convert) return 1 ;; *) command -v "$1" >/dev/null 2>&1 ;; esac
+}
+install_machine_artwork() { return 0; }
+install_qortal_core() { echo 'mock Core install' >> "$REBUILD_TEST_LOG"; }
+install_qortal_hub() { echo 'mock Hub install' >> "$REBUILD_TEST_LOG"; }
+main''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': '1',
+                    **self.os_release('ubuntu', 'debian')})
+        self.assertEqual((state / 'imagemagick').read_text().strip(), '3')
+        self.assertIn('Could not install package imagemagick after 3 attempts', result.stderr)
+        self.assertIn('skipping Qortal icon generation', result.stderr)
+        self.assertIn('bash ~/create-icon-theme-uni.sh', result.stderr)
+        self.assertIn('Setup complete.', result.stdout)
+        self.assertTrue((self.home / '.qortector-setup-state.json').exists())
+        self.assertTrue((self.home / 'create-icon-theme-uni.sh').exists())
+        self.assertIn('mock Core install', self.log.read_text())
+
+    def test_configured_package_attempt_limit_and_backoff(self):
+        for manager in ('apt-get', 'pacman', 'dnf'):
+            for attempts in (1, 2, 4):
+                with self.subTest(manager=manager, attempts=attempts):
+                    state = self.mock_package_installer(manager, failures=99)
+                    self.bash(f'''set -euo pipefail
+PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+pkg_install imagemagick''', extra_env={'REBUILT_MACHINE_PKG_RETRIES': str(attempts)})
+                    mapped = 'ImageMagick' if manager == 'dnf' else 'imagemagick'
+                    self.assertEqual((state / mapped).read_text().strip(), str(attempts))
+                    calls = self.log.read_text().splitlines()
+                    self.assertEqual([line for line in calls if line.startswith('sleep ')],
+                                     [f'sleep {n * 2}' for n in range(1, attempts)])
+                    if manager == 'apt-get':
+                        self.assertIn(f'Acquire::Retries={attempts}', calls[0])
+                    elif manager == 'dnf':
+                        self.assertIn(f'--setopt=retries={attempts}', calls[0])
+
+    def test_apt_retry_defaults_preserve_each_explicit_setting_including_zero(self):
+        for settings in ({'APT::Get::Retry': 7, 'Acquire::Retries': 5},
+                         {'Acquire::Retries': 0}, {'APT::Get::Retry': 0}):
+            with self.subTest(settings=settings):
+                self.mock_package_installer('apt-get', failures=0)
+                cases = '\n'.join(f"  {key}) echo \"retry_value='{value}'\" ;;"
+                                  for key, value in settings.items())
+                self.stub('apt-config', 'case "$3" in\n' + cases + '\nesac\n')
+                self.bash('PKG_MANAGER=apt-get; package_installed() { return 1; }; pkg_install imagemagick')
+                calls = self.log.read_text()
+                for key in ('APT::Get::Retry', 'Acquire::Retries'):
+                    if key in settings:
+                        self.assertNotIn(key + '=', calls)
+                    else:
+                        self.assertIn(key + '=3', calls)
+
+    def test_package_alternatives_try_next_candidate_after_retry_exhaustion(self):
+        for manager in ('apt-get', 'pacman', 'dnf'):
+            with self.subTest(manager=manager):
+                state = self.mock_package_installer(manager, failures=99, fail_package='btop')
+                self.bash(f'''set -euo pipefail
+PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+package_available() {{ return 0; }}
+install_first_available_package btop bpytop''')
+                self.assertEqual((state / 'btop').read_text().strip(), '3')
+                self.assertEqual((state / 'bpytop').read_text().strip(), '1')
+                self.mock_package_installer(manager, failures=99)
+                self.bash(f'''PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+package_available() {{ return 0; }}
+install_first_available_package btop bpytop''', success=False)
+
+    def test_package_retry_dry_run_previews_once_without_queries_or_sleep(self):
+        for name in ('apt-config', 'sleep'):
+            self.stub(name, 'echo UNEXPECTED_QUERY_OR_SLEEP >&2; exit 99\n')
+        for manager in ('apt-get', 'pacman', 'dnf'):
+            with self.subTest(manager=manager):
+                result = self.bash(f'''set -euo pipefail
+PKG_MANAGER={manager}
+package_installed() {{ echo UNEXPECTED_QUERY >&2; exit 99; }}
+pkg_install imagemagick cron''', extra_env={'REBUILT_MACHINE_DRY_RUN': '1'})
+                self.assertEqual(result.stdout.count('[dry-run]'), 2)
+                self.assertFalse(self.log.exists())
+
+    def test_invalid_package_retry_counts_fail_before_any_setup(self):
+        for attempts in ('0', '-1', 'no', '1.5', '03', '1+2', '18446744073709551619'):
+            with self.subTest(attempts=attempts):
+                result = self.bash('main', success=False,
+                                   extra_env={'REBUILT_MACHINE_PKG_RETRIES': attempts})
+                self.assertIn('REBUILT_MACHINE_PKG_RETRIES must be a positive integer', result.stderr)
+                self.assertFalse(self.log.exists())
+        self.assertIn('REBUILT_MACHINE_PKG_RETRIES=3', self.bash('main --help').stdout)
 
     def test_installed_fallback_avoids_installing_preferred_alternative(self):
         self.bash('''PKG_MANAGER=pacman
