@@ -212,7 +212,9 @@ Both conflict recovery and `--upgrade-packages` use the same three-phase flow:
 
 Pacman has no `--nodl` or `--dry-run` options. Progress queries use the supported
 read-only `--print-format` option. The download and install phases use `-Su`
-after the initial sync so retrying never changes the database snapshot.
+after the initial sync so ordinary retries keep the database snapshot. Signature
+recovery is the exception: it forces a refresh and re-downloads the new target
+set before retrying a cached installation.
 The download phase only populates the cache; it does not install packages.
 Database/install retries wait 2 and 4 seconds; download retries wait 2, 4, 8,
 16 seconds with the default five attempts (32 seconds for later retries).
@@ -236,6 +238,98 @@ If all fallback attempts fail, setup returns failure and prints the manual
 sync/download/install sequence plus mirror-switching guidance. Review and
 correct the reported transaction errors before rerunning; retries cannot resolve
 every stale keyring, package conflict or required manual intervention.
+
+### Pacman signature and corrupt-cache recovery
+
+All pacman phases, including the initial sync, individual package installs,
+upgrade downloads, cached installation and fallback batches, recognize
+`invalid PGP signature`, `multiple signatures`, `corrupt or invalid`,
+`invalid or corrupted package`, corrupt `.tar.zst` errors, GPGME errors and
+missing/untrusted signing keys. A `.tar.zst` filename in a normal download or
+timeout message alone does not trigger signature recovery. APT/DNF behavior is
+unchanged.
+
+These messages do not prove one root cause. The script logs the available clues:
+
+- Corrupt archives can be stale or incomplete downloads in the package cache.
+  An interrupted `.part` file or an already cached bad archive can survive an
+  ordinary transaction retry; repeating the command alone may not fix it.
+- `multiple signatures`, database errors and GPGME errors can indicate inconsistent
+  signature metadata or partially synced databases. An out-of-sync or bad mirror
+  may serve mismatched databases, packages or signatures. The wording alone does
+  not establish a mirror problem.
+- `unknown trust`, missing keys and similar trust errors point to an outdated
+  distribution keyring or GPG trust database. An incorrect clock can also make
+  signatures fail; inspect `timedatectl status`.
+
+On a detected failure, the script removes all `.part` files in every configured
+`CacheDir` (normally `/var/cache/pacman/pkg`). It removes the archive basenames
+reported in the failed transaction and their detached `.sig` files. If no archive
+filename is available, it explicitly logs and clears **all cached package archives
+and signatures** in those directories. This fallback loses cached rollback
+packages and requires downloading them again; unrelated files and directories
+are retained.
+
+Recovery runs `pacman-key --init`, `--populate` and `--updatedb`, forces a database
+refresh with `pacman -Syy --noconfirm`, then updates `archlinux-keyring` (also
+`manjaro-keyring` on Manjaro) and repopulates keys/trust. `--updatedb` is the valid
+trust-update operation; there is no `pacman-key --update` operation. Updating the
+signed keyring package supplies current distribution keys without depending on a
+keyserver. Signature checking stays enabled, and `/etc/pacman.d/gnupg` is retained.
+
+There are at most **two signature-recovery passes per script run**, shared by all
+phases. A repaired transaction is retried immediately, including when its normal
+attempt budget is one; these repair retries are separate from the existing
+package/download retry budgets. Ordinary failures keep their existing attempts
+and backoff. A failed repair or persistent signature error stops setup/upgrade
+with manual guidance instead of repeatedly trying the same signature in fallback
+batches. `--dry-run` performs no recovery, queries, deletions or keyring changes.
+
+Mirrors are **never changed automatically**. If recovery is insufficient, stop
+other package-manager activity and inspect the actual failing files and clock.
+For Arch, these manual commands repeat the repair and finish with a full upgrade:
+
+```bash
+timedatectl status
+# Prefer deleting only the exact bad archive and its .sig when identified.
+# The following broader cleanup removes all cached rollback archives too.
+sudo find /var/cache/pacman/pkg -maxdepth 1 -type f \
+  \( -name '*.part' -o -name '*.pkg.tar' -o -name '*.pkg.tar.*' \) -delete
+sudo pacman-key --init
+sudo pacman-key --populate
+sudo pacman-key --updatedb
+sudo pacman -Syy && sudo pacman -S archlinux-keyring && sudo pacman -Su
+# If keys still cannot be refreshed from packages, try the configured keyserver:
+sudo pacman-key --refresh-keys
+sudo pacman-key --populate
+sudo pacman-key --updatedb
+```
+
+Use `pacman-conf CacheDir` to find custom caches and repeat cleanup there if
+needed. On Manjaro, include `manjaro-keyring` in the keyring package update.
+After refreshing keys, retry the full upgrade; do not leave the system at a
+database-only refresh or keyring-only update. Third-party repositories may need
+their own verified keyring; do not import or trust arbitrary keys to bypass an
+error.
+
+For persistent mismatches, back up and manually edit the mirror list, comment out
+the failing `Server`, and move another enabled mirror to the top:
+
+```bash
+sudo cp -a /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.before-signature-recovery
+sudo nano /etc/pacman.d/mirrorlist
+sudo pacman -Syy && bash ./rebuilt-machine.sh --pacman-upgrade-only
+```
+
+Check `/etc/pacman.conf` for custom `Include`/`Server` entries. Use your
+distribution's mirror tools if appropriate; Arch and Manjaro mirror lists are
+not interchangeable. The forced refresh after a mirror edit avoids reusing
+databases from the previous mirror. To undo a mirror edit,
+restore the backup and perform a full resync/upgrade. Do not disable signature
+checks or delete the pacman keyring as a shortcut. See the
+[ArchWiki signing guidance](https://wiki.archlinux.org/title/Pacman/Package_signing),
+[pacman-key manual](https://man.archlinux.org/man/pacman-key.8.en) and
+[pacman refresh options](https://man.archlinux.org/man/pacman.8.en).
 
 An optional 7-Zip failure warns and continues to `gcc-libs` and Java setup;
 unrelated 7-Zip failures do not consume the recovery flag or Java's retry budget.

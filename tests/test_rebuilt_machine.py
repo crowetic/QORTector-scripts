@@ -46,6 +46,7 @@ class RebuiltMachineTests(unittest.TestCase):
                     'REBUILT_MACHINE_REBOOT': '0'}
         # These commands never delegate to the real system.
         self.stub('sudo', 'printf "sudo %s\\n" "$*" >> "$REBUILD_TEST_LOG"\n')
+        self.stub('pacman-key', 'echo UNEXPECTED_KEYRING_CHANGE >&2; exit 99\n')
         self.stub('curl', 'echo UNEXPECTED_NETWORK >&2; exit 99\n')
         self.stub('wget', 'echo UNEXPECTED_NETWORK >&2; exit 99\n')
         self.stub('cinnamon', 'echo UNEXPECTED_CINNAMON_RESTART >&2; exit 99\n')
@@ -672,8 +673,12 @@ install_packages_if_available yaru-theme-icon
         self.stub('apt-config', 'exit 0\n')
         self.stub('sleep', 'printf "sleep %s\\n" "$*" >> "$REBUILD_TEST_LOG"\n')
         if manager == 'pacman':
+            cache = self.root / 'package cache'
+            cache.mkdir(exist_ok=True)
+            self.env['REBUILD_TEST_CACHE'] = str(cache)
+            self.stub('pacman-key', 'printf "pacman-key %s\\n" "$*" >> "$REBUILD_TEST_LOG"\n')
             self.stub('pacman-conf', '''if [ "${1:-}" = CacheDir ]; then
-  echo /var/cache/pacman/pkg
+  echo "$REBUILD_TEST_CACHE"
 else
   printf '[options]\nSigLevel = Required DatabaseOptional\n[core]\nServer = https://mirror.invalid/$repo/os/$arch\n'
 fi
@@ -685,11 +690,12 @@ else
 fi
 if [ "${0##*/}" = pacman ]; then
   case "$1" in
-    -Sy) exit "$REBUILD_TEST_SYNC_STATUS" ;;
+    -Sy|-Syy) exit "$REBUILD_TEST_SYNC_STATUS" ;;
     -Su) exit "$REBUILD_TEST_RECOVERY_STATUS" ;;
     -Sup) exit 0 ;;
     -S)
       case " $* " in
+        *' archlinux-keyring '*) exit 0 ;;
         *' glibc linux gcc gcc-libs '*|*' base base-devel '*) exit "$REBUILD_TEST_RECOVERY_STATUS" ;;
       esac ;;
   esac
@@ -719,7 +725,7 @@ fi
         (other_cache / 'glibc-2.pkg.tar.zst').write_text('cached')
         (cache / 'linux-2.pkg.tar.zst.part').write_text('incomplete')
         self.env.update(REBUILD_TEST_CACHE=str(cache), REBUILD_TEST_OTHER_CACHE=str(other_cache))
-        for phase in ('sync', 'download', 'install', 'core', 'base', 'remaining'):
+        for phase in ('sync', 'resync', 'keyring', 'download', 'install', 'core', 'base', 'remaining'):
             (state / (phase + '.failures')).write_text(str(failures.get(phase, 0)))
         self.stub('pacman-conf', '''if [ "${1:-}" = CacheDir ]; then
   printf '%s\n' "$REBUILD_TEST_CACHE" "$REBUILD_TEST_OTHER_CACHE"
@@ -741,6 +747,7 @@ if [ "$1" = -Sup ]; then
 fi
 case "$1" in
   -Sy) phase=sync ;;
+  -Syy) phase=resync ;;
   -Su)
     case " $* " in
       *' --downloadonly '*) phase=download ;;
@@ -754,6 +761,7 @@ case "$1" in
     esac ;;
   -S)
     case "${@: -1}" in
+      archlinux-keyring|manjaro-keyring) phase=keyring ;;
       gcc-libs) phase=core ;;
       base-devel) phase=base ;;
       *) echo UNEXPECTED_PACKAGE_INSTALL >&2; exit 99 ;;
@@ -770,10 +778,187 @@ failures=$(cat "$counter.failures")
 if [ "$phase" = download ] && [ "$attempt" -ge 2 ]; then
   echo cached > "$REBUILD_TEST_CACHE/gcc-2.pkg.tar.zst"
 fi
-if [ "$attempt" -le "$failures" ]; then echo "mock $phase failure" >&2; exit 42; fi
+if [ "$attempt" -le "$failures" ]; then
+  if [ -f "$counter.error" ]; then cat "$counter.error" >&2; else echo "mock $phase failure" >&2; fi
+  exit 42
+fi
 if [ "$phase" = download ]; then echo cached > "$REBUILD_TEST_CACHE/linux-2.pkg.tar.zst"; fi
 ''')
         return state
+
+    def test_pacman_signature_detection_covers_integrity_trust_and_metadata(self):
+        for error in ('error: pacman: invalid PGP signature',
+                      'error: pkg: multiple signatures',
+                      'libimagequant.pkg.tar.zst is corrupt or invalid pgp signature',
+                      'error: invalid or corrupted package (PGP signature)',
+                      'foo.pkg.tar.zst is corrupted',
+                      'error: pkg: signature from "packager" is invalid',
+                      'error: pkg: signature from "packager" is unknown trust',
+                      'error: required key missing from keyring',
+                      'error: GPGME error: No data'):
+            with self.subTest(error=error):
+                self.bash('pacman_signature_failure "$TEST_ERROR"', extra_env={'TEST_ERROR': error})
+        for error in ('downloading libimagequant-1.pkg.tar.zst',
+                      'failed retrieving foo.pkg.tar.zst: connection timed out',
+                      'failed retrieving foo.pkg.tar.zst from mirror.invalid: connection timed out',
+                      'failed retrieving signatures-1.pkg.tar.zst from mirror.invalid: timeout',
+                      'could not satisfy dependencies', 'conflicting files', '404 Not Found'):
+            with self.subTest(error=error):
+                self.bash('pacman_signature_failure "$TEST_ERROR"', success=False,
+                          extra_env={'TEST_ERROR': error})
+        self.assertFalse(self.log.exists())
+
+    def test_pacman_signature_recovery_removes_failed_archives_and_partials_then_retries(self):
+        state = self.mock_package_installer('pacman', failures=1, fail_package='imagemagick',
+                                            error='error: libimagequant-2.pkg.tar.zst is corrupt or invalid PGP signature')
+        cache = self.root / 'package cache'
+        bad = cache / 'libimagequant-2.pkg.tar.zst'
+        sig = cache / (bad.name + '.sig')
+        part = cache / 'pacman-2.pkg.tar.zst.part'
+        good = cache / 'good-1.pkg.tar.zst'
+        for path in (bad, sig, part, good):
+            path.write_text('cached')
+        result = self.bash('''set -Eeuo pipefail
+PKG_MANAGER=pacman
+package_installed() { return 1; }
+pkg_install imagemagick''', extra_env={'REBUILT_MACHINE_PKG_RETRIES': '1'})
+        for path in (bad, sig, part):
+            self.assertFalse(path.exists(), str(path))
+        self.assertTrue(good.exists())
+        self.assertEqual((state / 'imagemagick').read_text().strip(), '2')
+        self.assertEqual(self.log.read_text().splitlines(), [
+            'pacman -Sy --noconfirm', 'pacman -S --noconfirm --needed imagemagick',
+            'pacman-key --init', 'pacman-key --populate', 'pacman-key --updatedb',
+            'pacman -Syy --noconfirm', 'pacman -S --noconfirm archlinux-keyring',
+            'pacman-key --populate', 'pacman-key --updatedb',
+            'pacman -S --noconfirm --needed imagemagick'])
+        self.assertIn('recovery pass 1/2', result.stderr)
+        self.assertIn('Cached archives may be corrupt or incomplete', result.stderr)
+        self.assertIn('retrying the failed pacman transaction', result.stderr)
+
+    def test_pacman_ambiguous_signature_failure_clears_all_configured_caches(self):
+        self.mock_pacman_upgrade(download=1)
+        state = pathlib.Path(self.env['REBUILD_TEST_PKG_STATE'])
+        (state / 'download.error').write_text('error: pkg: multiple signatures\n')
+        untouched = self.root / 'outside.pkg.tar.zst'
+        untouched.write_text('outside cache')
+        for cache_name in ('package cache', 'other cache'):
+            cache = self.root / cache_name
+            (cache / 'old.pkg.tar.xz').write_text('suspect')
+            (cache / 'old.pkg.tar.xz.sig').write_text('signature')
+            (cache / 'keep.txt').write_text('unrelated')
+            (cache / 'keep-dir.pkg.tar.zst').mkdir()
+        result = self.bash('set -Eeuo pipefail; pacman_full_upgrade')
+        for cache_name in ('package cache', 'other cache'):
+            cache = self.root / cache_name
+            self.assertFalse((cache / 'old.pkg.tar.xz').exists())
+            self.assertFalse((cache / 'old.pkg.tar.xz.sig').exists())
+            self.assertTrue((cache / 'keep.txt').exists())
+            self.assertTrue((cache / 'keep-dir.pkg.tar.zst').is_dir())
+        self.assertTrue(untouched.exists())
+        self.assertIn('Signature metadata may be inconsistent', result.stderr)
+        self.assertIn('clearing all cached package archives', result.stderr)
+
+    def test_pacman_signature_recovery_in_every_upgrade_phase(self):
+        for phase in ('sync', 'download', 'install', 'core', 'base', 'remaining'):
+            with self.subTest(phase=phase):
+                failures = {phase: 1}
+                if phase in ('core', 'base', 'remaining'):
+                    failures['download'] = 99  # Enter the existing batch fallback.
+                state = self.mock_pacman_upgrade(**failures)
+                (state / (phase + '.error')).write_text('error: pacman: invalid PGP signature\n')
+                result = self.bash('set -Eeuo pipefail; pacman_full_upgrade',
+                                   extra_env={'REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES': '1'})
+                self.assertEqual((state / phase).read_text().strip(), '2')
+                calls = self.log.read_text().splitlines()
+                first = calls.index(phase)
+                second = calls.index(phase, first + 1)
+                self.assertIn('resync', calls[first:second])
+                self.assertIn('keyring', calls[first:second])
+                if phase == 'install':
+                    self.assertIn('download', calls[first:second])
+                    self.assertIn('re-downloading updates', result.stderr)
+                self.assertIn('System upgrade completed successfully.', result.stdout)
+                if (state / 'offline-path').exists():
+                    self.assertFalse(pathlib.Path((state / 'offline-path').read_text()).exists())
+
+    def test_pacman_persistent_signatures_stop_after_two_repairs_without_changing_mirrors(self):
+        state = self.mock_pacman_upgrade(download=99)
+        (state / 'download.error').write_text('error: pkg: multiple signatures\n')
+        result = self.bash('set -Eeuo pipefail; pacman_full_upgrade', success=False)
+        self.assertEqual((state / 'download').read_text().strip(), '3')
+        self.assertEqual((state / 'resync').read_text().strip(), '2')
+        self.assertEqual((state / 'keyring').read_text().strip(), '2')
+        self.assertFalse((state / 'install').exists())
+        self.assertFalse((state / 'core').exists())
+        self.assertNotIn('sleep', self.log.read_text())
+        self.assertNotIn('reflector', self.log.read_text())
+        self.assertNotIn('rankmirrors', self.log.read_text())
+        self.assertIn('Mirrors have NOT been changed', result.stderr)
+        self.assertIn('out-of-sync or bad mirror', result.stderr)
+        self.assertNotIn('completed successfully', result.stdout)
+
+    def test_pacman_signature_cli_recovers_without_false_error_traps(self):
+        state = self.mock_pacman_upgrade(install=1)
+        (state / 'install.error').write_text('error: pkg: multiple signatures\n')
+        result = subprocess.run([BASH, str(ROOT / 'rebuilt-machine.sh'), '--pacman-upgrade-only'],
+                                env={**self.env, **self.os_release('arch')},
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('System upgrade completed successfully.', result.stdout)
+        self.assertIn('Signature recovery complete', result.stderr)
+        self.assertNotIn('Rebuild failed', result.stderr)
+        self.assertFalse(pathlib.Path((state / 'offline-path').read_text()).exists())
+
+    def test_pacman_failed_signature_repairs_stop_without_recursive_recovery(self):
+        for failing in ('resync', 'keyring', 'populate', 'cache'):
+            with self.subTest(failing=failing):
+                state = self.mock_pacman_upgrade(download=1, **{failing: 99})
+                (state / 'download.error').write_text('error: signature from "packager" is unknown trust\n')
+                if failing == 'populate':
+                    self.stub('pacman-key', 'printf "pacman-key %s\\n" "$*" >> "$REBUILD_TEST_LOG"; exit 42\n')
+                if failing == 'cache':
+                    self.stub('pacman-conf', 'exit 42\n')
+                result = self.bash('set -Eeuo pipefail; pacman_full_upgrade', success=False)
+                self.assertEqual((state / 'download').read_text().strip(), '1')
+                self.assertFalse((state / 'install').exists())
+                self.assertFalse((state / 'core').exists())
+                self.assertIn('Missing/outdated signing keys or GPG trust detected', result.stderr)
+                self.assertIn('signature recovery could not complete', result.stderr)
+
+    def test_pacman_signature_recovery_refreshes_manjaro_keyring_too(self):
+        self.mock_package_installer('pacman', failures=1, fail_package='imagemagick',
+                                    error='invalid PGP signature')
+        self.bash('''set -Eeuo pipefail
+PKG_MANAGER=pacman; DISTRO_ID=manjaro
+package_installed() { return 1; }
+pkg_install imagemagick''')
+        self.assertIn('pacman -S --noconfirm archlinux-keyring manjaro-keyring', self.log.read_text())
+
+    def test_signature_errors_do_not_change_apt_or_dnf_retries(self):
+        for manager in ('apt-get', 'dnf'):
+            with self.subTest(manager=manager):
+                self.mock_package_installer(manager, failures=2,
+                                            error='invalid PGP signature; multiple signatures; corrupt or invalid tar.zst')
+                result = self.bash(f'''set -Eeuo pipefail
+PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+pkg_install imagemagick''')
+                calls = self.log.read_text()
+                self.assertEqual(len(calls.splitlines()), 5)
+                self.assertEqual([line for line in calls.splitlines() if line.startswith('sleep ')],
+                                 ['sleep 2', 'sleep 4'])
+                self.assertNotIn('pacman', calls)
+                self.assertNotIn('Signature recovery', result.stderr)
+
+    def test_pacman_signature_recovery_dry_run_does_not_query_or_change_system(self):
+        self.stub('pacman', 'echo UNEXPECTED_PACKAGE_CHANGE >&2; exit 99\n')
+        self.stub('pacman-conf', 'echo UNEXPECTED_CONFIG_QUERY >&2; exit 99\n')
+        self.bash('''set -Eeuo pipefail
+DRY_RUN=1; PKG_MANAGER=pacman
+pacman_attempt -Su --downloadonly --noconfirm
+[ "$PACMAN_SIGNATURE_RECOVERIES" = 0 ]''')
+        self.assertFalse(self.log.exists())
 
     def test_pacman_upgrade_only_cli_runs_no_other_setup_or_reboot(self):
         state = self.mock_pacman_upgrade()

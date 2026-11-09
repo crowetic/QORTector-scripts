@@ -25,6 +25,9 @@ FORCE_ARTWORK=${REBUILT_MACHINE_FORCE_ARTWORK:-0}
 PKG_MANAGER=""
 PACMAN_DATABASE_SYNCED=0
 PACMAN_CONFLICT_RECOVERY_DONE=0
+PACMAN_SIGNATURE_RECOVERIES=0
+PACMAN_SIGNATURE_BLOCKED=0
+PACMAN_LAST_OUTPUT=""
 HUB_SANDBOX_FLAG=""
 
 usage() {
@@ -48,6 +51,8 @@ REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES=5 sets upgrade download attempts.
 Failed noncritical packages warn and continue; required packages stop setup.
 Pacman refreshes its database before installs; conflicts may trigger one recovery upgrade.
 A successful recovery gives the package a fresh install attempt budget.
+Pacman signature/integrity failures get up to two cache/keyring/database repairs.
+Failed archives are re-downloaded; mirror changes require manual action.
 Existing Core/Hub, preferences, custom cron and autostarts are preserved by default.
 Fresh desktop installs receive Qortal branding; SSH setup defers it to Cinnamon login.
 HELP
@@ -160,9 +165,124 @@ validate_pkg_retries() {
 
 sync_pacman_database() {
   if [ "$PACMAN_DATABASE_SYNCED" = 0 ]; then
-    run sudo pacman -Sy --noconfirm || return $?
+    pacman_attempt -Sy --noconfirm || return $?
     PACMAN_DATABASE_SYNCED=1
   fi
+}
+
+# Capture every mutating pacman phase in English, preserving the real status.
+# Keep this separate from recovery so repair commands cannot recursively repair.
+pacman_run() {
+  local output_file
+  local -a command_status=()
+  PACMAN_LAST_OUTPUT=""
+  if [ "$DRY_RUN" = 1 ]; then run sudo pacman "$@"; return $?; fi
+  output_file=$(mktemp) || return 1
+  # Stream progress while recording diagnostics. Read PIPESTATUS immediately in
+  # both branches, even for source callers that have not enabled pipefail.
+  if LC_ALL=C run sudo pacman "$@" 2>&1 | tee "$output_file" >&2; then
+    command_status=("${PIPESTATUS[@]}")
+  else
+    command_status=("${PIPESTATUS[@]}")
+  fi
+  PACMAN_LAST_OUTPUT=$(< "$output_file")
+  rm -f "$output_file"
+  [ "${command_status[1]}" = 0 ] || return 1
+  return "${command_status[0]}"
+}
+
+pacman_signature_failure() {
+  # A filename alone (e.g. a timeout downloading foo.pkg.tar.zst) is not proof
+  # of bad integrity. Match the error, including GnuPG's trust diagnostics.
+  LC_ALL=C grep -Eiq 'invalid (pgp )?signature|multiple signatures|corrupt(ed)? or invalid|invalid or corrupt(ed)?|signature.* is (invalid|unknown trust|marginal trust|expired)|unknown public key|required key missing|gpgme error|tar\.zst[^[:alnum:]/]*(is[[:space:]]+)?(corrupt|invalid|checksum)' <<< "$1"
+}
+
+pacman_signature_help() {
+  cat >&2 <<'ERROR'
+Pacman signature recovery could not complete. Check the clock with timedatectl status.
+Persistent failures after fresh downloads may indicate an out-of-sync or bad mirror.
+Mirrors have NOT been changed. Back up /etc/pacman.d/mirrorlist, then manually
+comment out the failing Server and move another enabled mirror to the top:
+  sudo nano /etc/pacman.d/mirrorlist
+Check /etc/pacman.conf for custom Include/Server entries and third-party keyrings.
+After correcting the mirror/keyring, run: bash ./rebuilt-machine.sh --pacman-upgrade-only
+See README.md for cache clearing and keyring commands. Keep signature checks enabled.
+ERROR
+}
+
+pacman_clear_failed_cache() {
+  local output=$1 cache_dirs directory filename
+  local -a filenames=() matches=()
+  cache_dirs=$(pacman-conf CacheDir) && [ -n "$cache_dirs" ] || return 1
+  # Extract basenames only; never use a path from package-manager output in rm.
+  mapfile -t filenames < <(LC_ALL=C grep -Eo '[[:alnum:]@_+][[:alnum:]@_+.:-]*\.pkg\.tar(\.(zst|xz|gz|bz2|lrz|lzo|Z))?' <<< "$output" | sort -u || true)
+  while IFS= read -r directory; do
+    [[ "$directory" = /* && "$directory" != / ]] || return 1
+    [ -d "$directory" ] || continue
+    printf 'Signature recovery: clearing partial downloads in %s\n' "$directory" >&2
+    run sudo find "$directory" -maxdepth 1 -type f -name '*.part' -delete || return 1
+    if [ "${#filenames[@]}" -gt 0 ]; then
+      for filename in "${filenames[@]}"; do
+        printf 'Removing suspect cached archive: %s/%s (and detached signature)\n' "$directory" "$filename" >&2
+        run sudo rm -f -- "$directory/$filename" "$directory/$filename.sig" || return 1
+      done
+    else
+      # Pacman sometimes reports only a package name or database error. Do not
+      # keep reusing unidentified suspect archives; leave directories/other files.
+      echo 'No failed archive filename reported; clearing all cached package archives/signatures.' >&2
+      matches=(-name '*.pkg.tar' -o -name '*.pkg.tar.*')
+      run sudo find "$directory" -maxdepth 1 -type f \( "${matches[@]}" \) -delete || return 1
+    fi
+  done <<< "$cache_dirs"
+}
+
+pacman_recover_signature() {
+  local output=$PACMAN_LAST_OUTPUT
+  local -a keyrings=(archlinux-keyring)
+  if [ "$PACMAN_SIGNATURE_RECOVERIES" -ge 2 ]; then
+    echo 'Signature/integrity failures persist after two recovery passes; stopping pacman retries.' >&2
+    return 1
+  fi
+  PACMAN_SIGNATURE_RECOVERIES=$((PACMAN_SIGNATURE_RECOVERIES + 1))
+  printf 'Pacman signature/integrity failure: recovery pass %s/2.\n' "$PACMAN_SIGNATURE_RECOVERIES" >&2
+  if LC_ALL=C grep -Eiq 'unknown trust|marginal trust|unknown public key|required key missing' <<< "$output"; then
+    echo 'Missing/outdated signing keys or GPG trust detected; refreshing the distribution keyring.' >&2
+  elif LC_ALL=C grep -Eiq 'multiple signatures|database.*(invalid|corrupt)|gpgme error' <<< "$output"; then
+    echo 'Signature metadata may be inconsistent; forcing a database resync from the configured mirrors.' >&2
+  else
+    echo 'Cached archives may be corrupt or incomplete; keyring and mirror mismatches are also possible.' >&2
+  fi
+  pacman_clear_failed_cache "$output" || return 1
+  # --update is not a pacman-key operation. Reload packaged keys and rebuild
+  # trust, then update the signed keyring package; no keyserver dependency.
+  run sudo pacman-key --init && run sudo pacman-key --populate && run sudo pacman-key --updatedb || return 1
+  echo 'Signature recovery: forcing database refresh (pacman -Syy), then updating keyrings.' >&2
+  pacman_run -Syy --noconfirm || return 1
+  PACMAN_DATABASE_SYNCED=1
+  [ "${DISTRO_ID:-}" != manjaro ] || keyrings+=(manjaro-keyring)
+  pacman_run -S --noconfirm "${keyrings[@]}" || return 1
+  run sudo pacman-key --populate && run sudo pacman-key --updatedb
+}
+
+pacman_attempt() {
+  local status argument cached_install=0
+  for argument in "$@"; do [ "$argument" != --config ] || cached_install=1; done
+  while true; do
+    if pacman_run "$@"; then return 0; else status=$?; fi
+    pacman_signature_failure "$PACMAN_LAST_OUTPUT" || return "$status"
+    if ! pacman_recover_signature; then
+      PACMAN_SIGNATURE_BLOCKED=1
+      pacman_signature_help
+      return 1
+    fi
+    # Recovery changed the cache and database. A cache-only retry must first
+    # download/validate the new target set with the normal network configuration.
+    if [ "$cached_install" = 1 ]; then
+      echo 'Signature recovery: re-downloading updates before retrying cached installation.' >&2
+      pacman_download_upgrade || return 1
+    fi
+    echo 'Signature recovery complete; retrying the failed pacman transaction.' >&2
+  done
 }
 
 pacman_upgrade_error() {
@@ -192,7 +312,8 @@ pacman_upgrade_retry() {
   local label=$1 attempt delay=2
   shift
   for ((attempt=1; attempt<=3; attempt++)); do
-    if run sudo pacman "$@"; then return 0; fi
+    if pacman_attempt "$@"; then return 0; fi
+    [ "$PACMAN_SIGNATURE_BLOCKED" = 0 ] || return 1
     if [ "$attempt" -lt 3 ]; then
       printf '%s attempt %s/3 failed. Retrying in %ss...\n' "$label" "$attempt" "$delay" >&2
       sleep "$delay"
@@ -261,8 +382,37 @@ pacman_install_cached_upgrade() {
   return "$status"
 }
 
-pacman_full_upgrade() {
+pacman_download_upgrade() {
   local attempt delay=2 downloaded=0
+  local attempts=${REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES:-5}
+  [[ "$attempts" =~ ^[1-9][0-9]*$ ]] && [ "$attempts" -gt 0 ] 2>/dev/null || {
+    echo 'REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES must be a positive integer (total attempts).' >&2
+    return 1
+  }
+  for ((attempt=1; attempt<=attempts; attempt++)); do
+    # Reuse the synced database: refreshing again can change the target versions
+    # between download and install. This phase never installs packages.
+    if pacman_attempt -Su --downloadonly --noconfirm; then
+      printf 'Download attempt %s/%s succeeded. All packages cached.\n' "$attempt" "$attempts"
+      downloaded=1
+      break
+    fi
+    [ "$PACMAN_SIGNATURE_BLOCKED" = 0 ] || return 1
+    printf 'Download attempt %s/%s failed. ' "$attempt" "$attempts" >&2
+    pacman_cache_progress
+    if [ "$attempt" -lt "$attempts" ]; then
+      printf 'Retrying in %ss...\n' "$delay" >&2
+      sleep "$delay"
+      [ "$delay" -ge 32 ] || delay=$((delay * 2))
+    fi
+  done
+  [ "$downloaded" = 1 ]
+}
+
+pacman_full_upgrade() {
+  local downloaded=0
+  # Validate before the sync, including when download-only retries are reused
+  # after signature recovery from the offline install phase.
   local attempts=${REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES:-5}
   [[ "$attempts" =~ ^[1-9][0-9]*$ ]] && [ "$attempts" -gt 0 ] 2>/dev/null || {
     echo 'REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES must be a positive integer (total attempts).' >&2
@@ -273,28 +423,15 @@ pacman_full_upgrade() {
   if ! pacman_upgrade_retry 'Database sync' -Sy --noconfirm; then pacman_upgrade_error; return 1; fi
   PACMAN_DATABASE_SYNCED=1
   echo 'Step 2/3: Downloading updates (this may take a while)...'
-  for ((attempt=1; attempt<=attempts; attempt++)); do
-    # Reuse the synced database: refreshing again can change the target versions
-    # between download and install. This phase never installs packages.
-    if run sudo pacman -Su --downloadonly --noconfirm; then
-      printf 'Download attempt %s/%s succeeded. All packages cached.\n' "$attempt" "$attempts"
-      downloaded=1
-      break
-    fi
-    printf 'Download attempt %s/%s failed. ' "$attempt" "$attempts" >&2
-    pacman_cache_progress
-    if [ "$attempt" -lt "$attempts" ]; then
-      printf 'Retrying in %ss...\n' "$delay" >&2
-      sleep "$delay"
-      [ "$delay" -ge 32 ] || delay=$((delay * 2))
-    fi
-  done
+  if pacman_download_upgrade; then downloaded=1; fi
+  [ "$PACMAN_SIGNATURE_BLOCKED" = 0 ] || return 1
   if [ "$downloaded" = 1 ]; then
     echo 'Step 3/3: Installing updates...'
     if pacman_install_cached_upgrade; then
       echo 'System upgrade completed successfully.'
       return 0
     fi
+    [ "$PACMAN_SIGNATURE_BLOCKED" = 0 ] || return 1
     echo 'Installing cached updates failed after a successful download; check the transaction errors above.' >&2
   else
     printf 'Download phase failed after %s attempts; completed downloads remain cached.\n' "$attempts" >&2
@@ -307,6 +444,7 @@ pacman_full_upgrade() {
   if pacman_upgrade_retry 'Core system batch' -S --needed --noconfirm glibc linux gcc gcc-libs; then
     echo 'Batch 1/3 completed.'
   else
+    [ "$PACMAN_SIGNATURE_BLOCKED" = 0 ] || return 1
     echo 'Batch 1/3 failed; continuing with the remaining batches.' >&2
   fi
   # core is a repository, not an installable package or group.
@@ -314,6 +452,7 @@ pacman_full_upgrade() {
   if pacman_upgrade_retry 'Base utilities batch' -S --needed --noconfirm base base-devel; then
     echo 'Batch 2/3 completed.'
   else
+    [ "$PACMAN_SIGNATURE_BLOCKED" = 0 ] || return 1
     echo 'Batch 2/3 failed; continuing with the remaining packages.' >&2
   fi
   echo 'Batch 3/3: Upgrading remaining packages...'
@@ -365,20 +504,19 @@ pkg_install() {
     for ((attempt=1; attempt<=attempts; attempt++)); do
       install_output=""
       if [ "${PKG_MANAGER:-apt-get}" = pacman ] && [ "$DRY_RUN" = 0 ]; then
-        # Keep pacman's English diagnostics for conflict detection. Capture both
-        # streams without losing its exit status, then show the output to users.
-        if install_output=$(LC_ALL=C run "${install_command[@]}" 2>&1); then
+        if pacman_attempt "${install_command[@]:2}"; then
           status=0
         else
           status=$?
         fi
-        [ -z "$install_output" ] || printf '%s\n' "$install_output" >&2
+        install_output=$PACMAN_LAST_OUTPUT
       elif run "${install_command[@]}"; then
         status=0
       else
         status=$?
       fi
       [ "$status" -ne 0 ] || break
+      if [ "${PKG_MANAGER:-apt-get}" = pacman ] && [ "$PACMAN_SIGNATURE_BLOCKED" = 1 ]; then return 1; fi
       # Recover before checking the retry budget, including on the last attempt.
       # Upgrade all packages together to resolve exact-version dependencies.
       if [ "${PKG_MANAGER:-apt-get}" = pacman ] && [ "$PACMAN_CONFLICT_RECOVERY_DONE" = 0 ] &&
