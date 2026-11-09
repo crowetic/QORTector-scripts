@@ -41,9 +41,10 @@ Equivalent REBUILT_MACHINE_* variables (0 or 1): DRY_RUN, UPDATE_CORE,
 UPDATE_HUB, UPGRADE, APPLY_DEFAULTS, FORCE_ARTWORK. Defaults are all 0.
 REBUILT_MACHINE_REBOOT=1 explicitly enables reboot after a 30-second delay.
 REBUILT_MACHINE_HEADLESS=auto|1|0 selects automatic/server/desktop mode.
-REBUILT_MACHINE_PKG_RETRIES=3 sets total package install attempts (positive integer).
+REBUILT_MACHINE_PKG_RETRIES=3 sets package install attempts (positive integer).
 Failed noncritical packages warn and continue; required packages stop setup.
-Pacman refreshes its database once; file conflicts may trigger one full system sync.
+Pacman refreshes its database once; file/dependency conflicts may trigger one full upgrade.
+A successful recovery gives the package a fresh install attempt budget.
 Existing Core/Hub, preferences, custom cron and autostarts are preserved by default.
 Fresh desktop installs receive Qortal branding; SSH setup defers it to Cinnamon login.
 HELP
@@ -215,15 +216,26 @@ pkg_install() {
         status=$?
       fi
       [ "$status" -ne 0 ] || break
-      if [ "$attempt" -lt "$attempts" ]; then
-        if [ "${PKG_MANAGER:-apt-get}" = pacman ] && [ "$PACMAN_CONFLICT_RECOVERY_DONE" = 0 ] &&
-          [[ "$install_output" == *'conflicting files'* || "$install_output" == *'exists in filesystem'* ]]; then
-          PACMAN_CONFLICT_RECOVERY_DONE=1
-          echo 'Package database is out of sync with installed packages. Running full system sync...' >&2
-          if ! run sudo pacman -Syu --noconfirm; then
-            warn 'Pacman system sync failed; retrying the package install. If conflicts persist, run sudo pacman -Syu manually.'
-          fi
+      # Recover before checking the retry budget, including on the last attempt.
+      # Upgrade all packages together to resolve exact-version dependencies.
+      if [ "${PKG_MANAGER:-apt-get}" = pacman ] && [ "$PACMAN_CONFLICT_RECOVERY_DONE" = 0 ] &&
+        [[ "$install_output" == *'conflicting files'* || "$install_output" == *'exists in filesystem'* ||
+           "$install_output" == *'could not satisfy dependencies'* || "$install_output" == *'breaks dependency'* ||
+           "$install_output" == *'failed to prepare transaction'* ]]; then
+        PACMAN_CONFLICT_RECOVERY_DONE=1
+        echo 'System packages are out of sync. Running full system upgrade to resolve dependencies...' >&2
+        if run sudo pacman -Syu --noconfirm; then
+          # The loop increments to 1; recovery consumes no package attempts.
+          attempt=0
+          continue
+        else
+          status=$?
+          warn 'Pacman full system upgrade failed. Run manually: sudo pacman -Syu'
+          echo 'Then re-run this script.' >&2
+          return "$status"
         fi
+      fi
+      if [ "$attempt" -lt "$attempts" ]; then
         printf 'Package %s install failed (attempt %s/%s); retrying in %ss.\n' \
           "$mapped" "$attempt" "$attempts" "$((attempt * 2))" >&2
         sleep "$((attempt * 2))"
@@ -261,7 +273,7 @@ prepare_packages() {
   if [ "$UPGRADE_PACKAGES" = 0 ]; then
     echo 'System package upgrades skipped (opt in with --upgrade-packages).'
     if [ "$PKG_MANAGER" = pacman ]; then
-      echo 'Pacman file conflicts may trigger one recovery system sync during installation.'
+      echo 'Pacman file or dependency conflicts may trigger one recovery system upgrade during installation.'
     fi
   fi
 }
@@ -950,7 +962,15 @@ main() {
   install_packages_if_available openssh-server vim zlib1g-dev htop net-tools ffmpeg sysbench smartmontools fonts-symbola lm-sensors xdg-utils
   install_first_available_package 7zip p7zip-full || warn 'No supported 7-Zip package could be installed.'
   install_first_available_package btop bpytop || warn 'No optional system monitor could be installed.'
-  install_java_runtime || { echo 'A supported Java runtime is required (Java 17 packages unavailable).' >&2; return 1; }
+  install_java_runtime || {
+    if [ "$PKG_MANAGER" = pacman ]; then
+      printf '%s\n' 'A supported Java runtime is required. The system appears to need a full upgrade. Run: sudo pacman -Syu' \
+        'Then re-run this script.' >&2
+    else
+      echo 'A supported Java runtime is required (Java 17 packages unavailable).' >&2
+    fi
+    return 1
+  }
   install_first_available_package libfuse2t64 libfuse2 || warn 'FUSE2 unavailable; Hub will use AppImage extraction mode.'
   if [ "$HEADLESS_MODE" = false ]; then
     # Fedora and Arch ship Cinnamon in the normal repositories. Never enable a

@@ -648,6 +648,14 @@ install_packages_if_available yaru-theme-icon
         if state.exists():
             shutil.rmtree(state)
         state.mkdir()
+        if isinstance(failures, dict):
+            for package, count in failures.items():
+                (state / (package + '.failures')).write_text(str(count))
+            failures = 0
+        if isinstance(error, dict):
+            for package, message in error.items():
+                (state / (package + '.error')).write_text(message)
+            error = 'mock connection timeout'
         self.log.unlink(missing_ok=True)
         self.env.update(REBUILD_TEST_PKG_STATE=str(state),
                         REBUILD_TEST_PKG_FAILURES=str(failures),
@@ -671,7 +679,10 @@ attempt=0
 if [ -f "$counter" ]; then read -r attempt < "$counter"; fi
 attempt=$((attempt + 1))
 printf '%s\n' "$attempt" > "$counter"
-if [[ "$package" == $REBUILD_TEST_FAIL_PACKAGE ]] && [ "$attempt" -le "$REBUILD_TEST_PKG_FAILURES" ]; then
+failures="$REBUILD_TEST_PKG_FAILURES"
+if [ -f "$counter.failures" ]; then failures=$(cat "$counter.failures"); fi
+if [[ "$package" == $REBUILD_TEST_FAIL_PACKAGE ]] && [ "$attempt" -le "$failures" ]; then
+  if [ -f "$counter.error" ]; then cat "$counter.error" >&2; exit 42; fi
   printf '%s\n' "$REBUILD_TEST_PKG_ERROR" >&2
   exit 42
 fi
@@ -754,14 +765,13 @@ install_java_runtime''')
             'pacman -S --noconfirm --needed gcc-libs',
             'pacman -S --noconfirm --needed jre17-openjdk',
             'pacman -Syu --noconfirm',
-            'sleep 2',
             'pacman -S --noconfirm --needed jre17-openjdk',
         ])
         self.assertEqual((state / 'gcc-libs').read_text().strip(), '1')
         self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '2')
         self.assertIn('libgcc_s.so.1 exists in filesystem (owned by gcc-libs)', result.stderr)
-        self.assertIn('Package database is out of sync with installed packages. '
-                      'Running full system sync...', result.stderr)
+        self.assertIn('System packages are out of sync. Running full system upgrade '
+                      'to resolve dependencies...', result.stderr)
 
     def test_pacman_gcc_libs_failure_prevents_java_install(self):
         state = self.mock_package_installer('pacman', failures=99, fail_package='gcc-libs')
@@ -776,7 +786,11 @@ install_java_runtime''', success=False)
 
     def test_pacman_general_conflicts_recover_only_once_across_packages_and_retries(self):
         for error in ('error: failed to commit transaction (conflicting files)',
-                      'some-package: /usr/share/example exists in filesystem'):
+                      'some-package: /usr/share/example exists in filesystem',
+                      'error: could not satisfy dependencies',
+                      ":: installing gcc-libs (16.2.1+r23+gd564253eb6c8-1) breaks dependency "
+                      "'gcc-libs=15.2.1+r301+gf24307422d1d-1' required by gcc",
+                      'error: failed to prepare transaction'):
             with self.subTest(error=error):
                 state = self.mock_package_installer('pacman', failures=99, error=error)
                 result = self.bash('''set -Eeuo pipefail
@@ -787,13 +801,14 @@ pkg_install imagemagick
 pkg_install vim''')
                 calls = self.log.read_text().splitlines()
                 self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
-                self.assertEqual(result.stderr.count('Running full system sync...'), 1)
+                self.assertEqual(result.stderr.count('Running full system upgrade'), 1)
                 for package in ('imagemagick', 'vim'):
-                    self.assertEqual((state / package).read_text().strip(), '3')
+                    self.assertEqual((state / package).read_text().strip(),
+                                     '4' if package == 'imagemagick' else '3')
                 self.assertEqual([line for line in calls if line.startswith('sleep ')],
                                  ['sleep 2', 'sleep 4', 'sleep 2', 'sleep 4'])
 
-    def test_pacman_conflict_recovery_respects_configured_attempt_budget(self):
+    def test_pacman_conflict_recovery_resets_configured_attempt_budget(self):
         for attempts in (1, 2, 4):
             with self.subTest(attempts=attempts):
                 state = self.mock_package_installer('pacman', failures=99,
@@ -804,26 +819,126 @@ package_installed() { return 1; }
 pkg_install --required openjdk-17-jre''', success=False,
                     extra_env={'REBUILT_MACHINE_PKG_RETRIES': str(attempts)})
                 self.assertEqual(result.returncode, 42)
-                self.assertEqual((state / 'jre17-openjdk').read_text().strip(), str(attempts))
+                self.assertEqual((state / 'jre17-openjdk').read_text().strip(), str(attempts + 1))
                 calls = self.log.read_text().splitlines()
-                self.assertEqual(calls.count('pacman -Syu --noconfirm'), int(attempts > 1))
+                self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
+                self.assertEqual(calls[2], 'pacman -Syu --noconfirm')
                 self.assertEqual([line for line in calls if line.startswith('sleep ')],
                                  [f'sleep {n * 2}' for n in range(1, attempts)])
 
-    def test_failed_pacman_conflict_recovery_warns_and_install_retry_can_succeed(self):
+    def test_pacman_dependency_conflict_recovers_and_can_use_entire_fresh_budget(self):
+        for attempts in (1, 2, 4):
+            with self.subTest(attempts=attempts):
+                state = self.mock_package_installer('pacman', failures=attempts,
+                    fail_package='gcc-libs', error="breaks dependency 'gcc-libs=15.2.1' required by gcc")
+                result = self.bash('''set -Eeuo pipefail
+trap 'echo UNEXPECTED_ERR_TRAP >&2' ERR
+PKG_MANAGER=pacman
+package_installed() { return 1; }
+package_available() { return 0; }
+install_java_runtime''', extra_env={'REBUILT_MACHINE_PKG_RETRIES': str(attempts)})
+                self.assertEqual((state / 'gcc-libs').read_text().strip(), str(attempts + 1))
+                self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '1')
+                calls = self.log.read_text().splitlines()
+                self.assertEqual(calls[:4], [
+                    'pacman -Sy --noconfirm',
+                    'pacman -S --noconfirm --needed gcc-libs',
+                    'pacman -Syu --noconfirm',
+                    'pacman -S --noconfirm --needed gcc-libs',
+                ])
+                self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
+                self.assertNotIn('Could not install package', result.stderr)
+
+    def test_failed_pacman_conflict_recovery_stops_package_and_gives_manual_instructions(self):
+        state = self.mock_package_installer('pacman', failures=1, fail_package='gcc-libs',
+            error='error: could not satisfy dependencies', recovery_status=19)
+        result = self.bash('''set -Eeuo pipefail
+PKG_MANAGER=pacman
+package_installed() { return 1; }
+package_available() { return 0; }
+install_java_runtime
+echo SHOULD_NOT_CONTINUE''', success=False)
+        self.assertEqual(result.returncode, 19)
+        self.assertEqual((state / 'gcc-libs').read_text().strip(), '1')
+        self.assertFalse((state / 'jre17-openjdk').exists())
+        self.assertEqual(self.log.read_text().count('pacman -Syu --noconfirm'), 1)
+        self.assertNotIn('sleep ', self.log.read_text())
+        self.assertNotIn('SHOULD_NOT_CONTINUE', result.stdout)
+        self.assertIn('Pacman full system upgrade failed', result.stderr)
+        self.assertIn('sudo pacman -Syu', result.stderr)
+        self.assertIn('Then re-run this script.', result.stderr)
+
+    def test_failed_pacman_recovery_is_not_repeated_for_later_packages(self):
         state = self.mock_package_installer('pacman', failures=1,
-            error='error: conflicting files', recovery_status=19)
+            error='error: could not satisfy dependencies', recovery_status=19)
         result = self.bash('''set -Eeuo pipefail
 trap 'echo UNEXPECTED_ERR_TRAP >&2' ERR
 PKG_MANAGER=pacman
 package_installed() { return 1; }
-pkg_install --required openjdk-17-jre''')
-        self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '2')
+pkg_install imagemagick || echo "optional install failed: $?"
+pkg_install --required vim''')
+        self.assertIn('optional install failed: 19', result.stdout)
+        self.assertEqual((state / 'imagemagick').read_text().strip(), '1')
+        self.assertEqual((state / 'vim').read_text().strip(), '2')
         self.assertEqual(self.log.read_text().count('pacman -Syu --noconfirm'), 1)
-        self.assertIn('Pacman system sync failed', result.stderr)
-        self.assertIn('run sudo pacman -Syu manually', result.stderr)
 
-    def test_conflict_recovery_is_pacman_only_and_requires_file_conflict(self):
+    def test_7zip_failure_allows_gcc_libs_recovery_and_java_retry(self):
+        state = self.mock_package_installer('pacman',
+            failures={'7zip': 99, 'p7zip': 99, 'gcc-libs': 1, 'jre17-openjdk': 1},
+            error={'gcc-libs': 'error: failed to prepare transaction (could not satisfy dependencies)\n'
+                   ":: installing gcc-libs (16.2.1+r23+gd564253eb6c8-1) breaks dependency "
+                   "'gcc-libs=15.2.1+r301+gf24307422d1d-1' required by gcc",
+                   'jre17-openjdk': 'error: failed to commit transaction (conflicting files)'})
+        self.stub('sudo', 'if [ "${1:-}" = -v ]; then exit 0; fi\nexec "$@"\n')
+        result = self.bash('''id() { echo 1000; }
+package_installed() {
+  case "$1" in 7zip|p7zip|gcc-libs|jre17-openjdk|jre21-openjdk) return 1 ;; esac
+}
+package_available() { return 0; }
+install_qortal_core() { echo 'mock Core install' >> "$REBUILD_TEST_LOG"; }
+install_qortal_hub() { return 0; }
+install_machine_artwork() { return 0; }
+install_qortal_icons() { return 0; }
+main''', extra_env={**self.os_release('arch'), 'REBUILT_MACHINE_HEADLESS': '1'})
+        self.assertIn('No supported 7-Zip package could be installed.', result.stderr)
+        calls = self.log.read_text().splitlines()
+        self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
+        gcc_install = calls.index('pacman -S --noconfirm --needed gcc-libs')
+        self.assertEqual(calls[gcc_install:gcc_install + 6], [
+            'pacman -S --noconfirm --needed gcc-libs',
+            'pacman -Syu --noconfirm',
+            'pacman -S --noconfirm --needed gcc-libs',
+            'pacman -S --noconfirm --needed jre17-openjdk',
+            'sleep 2',
+            'pacman -S --noconfirm --needed jre17-openjdk',
+        ])
+        for package, attempts in (('7zip', 3), ('p7zip', 3), ('gcc-libs', 2), ('jre17-openjdk', 2)):
+            self.assertEqual((state / package).read_text().strip(), str(attempts))
+        self.assertIn('mock Core install', calls)
+        self.assertIn('Setup complete.', result.stdout)
+
+    def test_java_failure_after_pacman_recovery_explains_manual_upgrade(self):
+        state = self.mock_package_installer('pacman',
+            failures={'gcc-libs': 1, 'jre17-openjdk': 99},
+            error='error: could not satisfy dependencies')
+        self.stub('sudo', 'if [ "${1:-}" = -v ]; then exit 0; fi\nexec "$@"\n')
+        result = self.bash('''id() { echo 1000; }
+package_installed() {
+  case "$1" in gcc-libs|jre17-openjdk|jre21-openjdk) return 1 ;; esac
+}
+package_available() { return 0; }
+install_qortal_core() { echo UNEXPECTED_CORE_SETUP; }
+main''', success=False,
+            extra_env={**self.os_release('arch'), 'REBUILT_MACHINE_HEADLESS': '1'})
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual((state / 'gcc-libs').read_text().strip(), '2')
+        self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '6')
+        self.assertEqual(self.log.read_text().count('pacman -Syu --noconfirm'), 1)
+        self.assertIn('A supported Java runtime is required. The system appears to need a full upgrade. '
+                      'Run: sudo pacman -Syu\nThen re-run this script.', result.stderr)
+        self.assertNotIn('Setup complete.', result.stdout)
+
+    def test_conflict_recovery_is_pacman_only_and_requires_matching_error(self):
         for manager, error in (('apt-get', 'error: conflicting files'),
                                ('dnf', 'error: exists in filesystem'),
                                ('pacman', 'gcc-libs: libgcc_s.so.1 signature is invalid')):
@@ -834,7 +949,7 @@ PKG_MANAGER={manager}
 package_installed() {{ return 1; }}
 pkg_install imagemagick''')
                 self.assertNotIn('pacman -Syu', self.log.read_text())
-                self.assertNotIn('Running full system sync...', result.stderr)
+                self.assertNotIn('Running full system upgrade', result.stderr)
 
     def test_exhausted_noncritical_package_warns_and_installs_next_package(self):
         for manager, package in [('apt-get', 'imagemagick'), ('pacman', 'imagemagick'),
