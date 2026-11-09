@@ -13,6 +13,11 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASH = shutil.which('bash')
+PACMAN_UPGRADE_CALLS = [
+    'pacman -Sy --noconfirm',
+    'pacman -Su --downloadonly --noconfirm',
+    'pacman -Su --noconfirm --config <offline>',
+]
 
 
 class RebuiltMachineTests(unittest.TestCase):
@@ -666,11 +671,27 @@ install_packages_if_available yaru-theme-icon
         self.stub('sudo', 'exec "$@"\n')
         self.stub('apt-config', 'exit 0\n')
         self.stub('sleep', 'printf "sleep %s\\n" "$*" >> "$REBUILD_TEST_LOG"\n')
-        self.stub(manager, '''printf '%s %s\n' "${0##*/}" "$*" >> "$REBUILD_TEST_LOG"
+        if manager == 'pacman':
+            self.stub('pacman-conf', '''if [ "${1:-}" = CacheDir ]; then
+  echo /var/cache/pacman/pkg
+else
+  printf '[options]\nSigLevel = Required DatabaseOptional\n[core]\nServer = https://mirror.invalid/$repo/os/$arch\n'
+fi
+''')
+        self.stub(manager, '''if [[ " $* " == *' --config '* ]]; then
+  printf 'pacman -Su --noconfirm --config <offline>\n' >> "$REBUILD_TEST_LOG"
+else
+  printf '%s %s\n' "${0##*/}" "$*" >> "$REBUILD_TEST_LOG"
+fi
 if [ "${0##*/}" = pacman ]; then
   case "$1" in
     -Sy) exit "$REBUILD_TEST_SYNC_STATUS" ;;
-    -Syu) exit "$REBUILD_TEST_RECOVERY_STATUS" ;;
+    -Su) exit "$REBUILD_TEST_RECOVERY_STATUS" ;;
+    -Sup) exit 0 ;;
+    -S)
+      case " $* " in
+        *' glibc linux gcc gcc-libs '*|*' base base-devel '*) exit "$REBUILD_TEST_RECOVERY_STATUS" ;;
+      esac ;;
   esac
 fi
 package="${@: -1}"
@@ -688,6 +709,198 @@ if [[ "$package" == $REBUILD_TEST_FAIL_PACKAGE ]] && [ "$attempt" -le "$failures
 fi
 ''')
         return state
+
+    def mock_pacman_upgrade(self, **failures):
+        state = self.mock_package_installer('pacman', failures=0)
+        cache = self.root / 'package cache'
+        cache.mkdir(exist_ok=True)
+        other_cache = self.root / 'other cache'
+        other_cache.mkdir(exist_ok=True)
+        (other_cache / 'glibc-2.pkg.tar.zst').write_text('cached')
+        (cache / 'linux-2.pkg.tar.zst.part').write_text('incomplete')
+        self.env.update(REBUILD_TEST_CACHE=str(cache), REBUILD_TEST_OTHER_CACHE=str(other_cache))
+        for phase in ('sync', 'download', 'install', 'core', 'base', 'remaining'):
+            (state / (phase + '.failures')).write_text(str(failures.get(phase, 0)))
+        self.stub('pacman-conf', '''if [ "${1:-}" = CacheDir ]; then
+  printf '%s\n' "$REBUILD_TEST_CACHE" "$REBUILD_TEST_OTHER_CACHE"
+else
+  printf '[options]\nSigLevel = Required DatabaseOptional\n'
+  printf 'CacheDir = %s\nCacheDir = %s\n' "$REBUILD_TEST_CACHE" "$REBUILD_TEST_OTHER_CACHE"
+  printf 'XferCommand = /old/downloader %%u\n[core]\nServer = https://mirror.invalid/$repo/os/$arch\n'
+fi
+''')
+        self.stub('pacman', '''printf '%s\n' "$*" >> "$REBUILD_TEST_PKG_STATE/commands"
+case " $* " in
+  *' --nodl '*|*' --dry-run '*) echo UNEXPECTED_UNSUPPORTED_OPTION >&2; exit 99 ;;
+esac
+if [ "$1" = -Sup ]; then
+  echo 'glibc-2.pkg.tar.zst'
+  echo 'gcc-2.pkg.tar.zst'
+  echo 'linux-2.pkg.tar.zst'
+  exit 0
+fi
+case "$1" in
+  -Sy) phase=sync ;;
+  -Su)
+    case " $* " in
+      *' --downloadonly '*) phase=download ;;
+      *' --config '*)
+        phase=install
+        config="${@: -1}"
+        cp "$config" "$REBUILD_TEST_PKG_STATE/offline-config"
+        printf '%s' "$config" > "$REBUILD_TEST_PKG_STATE/offline-path"
+        ;;
+      *) phase=remaining ;;
+    esac ;;
+  -S)
+    case "${@: -1}" in
+      gcc-libs) phase=core ;;
+      base-devel) phase=base ;;
+      *) echo UNEXPECTED_PACKAGE_INSTALL >&2; exit 99 ;;
+    esac ;;
+  *) echo UNEXPECTED_PACMAN_COMMAND >&2; exit 99 ;;
+esac
+printf '%s\n' "$phase" >> "$REBUILD_TEST_LOG"
+counter="$REBUILD_TEST_PKG_STATE/$phase"
+attempt=0
+if [ -f "$counter" ]; then read -r attempt < "$counter"; fi
+attempt=$((attempt + 1))
+printf '%s\n' "$attempt" > "$counter"
+failures=$(cat "$counter.failures")
+if [ "$phase" = download ] && [ "$attempt" -ge 2 ]; then
+  echo cached > "$REBUILD_TEST_CACHE/gcc-2.pkg.tar.zst"
+fi
+if [ "$attempt" -le "$failures" ]; then echo "mock $phase failure" >&2; exit 42; fi
+if [ "$phase" = download ]; then echo cached > "$REBUILD_TEST_CACHE/linux-2.pkg.tar.zst"; fi
+''')
+        return state
+
+    def test_pacman_upgrade_only_cli_runs_no_other_setup_or_reboot(self):
+        state = self.mock_pacman_upgrade()
+        before = sorted(self.home.rglob('*'))
+        result = subprocess.run([BASH, str(ROOT / 'rebuilt-machine.sh'), '--pacman-upgrade-only',
+                                 '--update-core', '--update-hub', '--apply-defaults', '--force-artwork'],
+                                env={**self.env, **self.os_release('arch'), 'REBUILT_MACHINE_REBOOT': '1'},
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.log.read_text().splitlines(), ['sync', 'download', 'install'])
+        self.assertEqual(before, sorted(self.home.rglob('*')))
+        for step in ('Step 1/3: Syncing package database...',
+                     'Step 2/3: Downloading updates (this may take a while)...',
+                     'Step 3/3: Installing updates...'):
+            self.assertIn(step, result.stdout)
+        config = (state / 'offline-config').read_text()
+        self.assertEqual(config.count('XferCommand = '), 1)
+        self.assertIn('XferCommand = /usr/bin/false', config)
+        self.assertIn('SigLevel = Required DatabaseOptional', config)
+        self.assertIn('[core]\nServer = https://mirror.invalid/$repo/os/$arch', config)
+        self.assertIn(str(self.root / 'other cache'), config)
+        self.assertFalse(pathlib.Path((state / 'offline-path').read_text()).exists())
+        self.assertNotIn('UNEXPECTED_', result.stdout + result.stderr)
+
+    def test_pacman_downloads_retry_then_install_with_cache_progress(self):
+        state = self.mock_pacman_upgrade(download=2)
+        result = self.bash('set -Eeuo pipefail; pacman_full_upgrade')
+        self.assertEqual(self.log.read_text().splitlines(),
+                         ['sync', 'download', 'sleep 2', 'download', 'sleep 4', 'download', 'install'])
+        self.assertIn('Download attempt 1/5 failed. 1/3 packages cached.', result.stderr)
+        self.assertIn('Download attempt 2/5 failed. 2/3 packages cached.', result.stderr)
+        self.assertIn('Still missing: gcc-2.pkg.tar.zst linux-2.pkg.tar.zst', result.stderr)
+        self.assertIn('Download attempt 3/5 succeeded. All packages cached.', result.stdout)
+        self.assertFalse((state / 'core').exists())
+
+    def test_pacman_database_and_cached_install_have_independent_retries(self):
+        self.mock_pacman_upgrade(sync=2, install=2)
+        self.bash('set -Eeuo pipefail; pacman_full_upgrade')
+        self.assertEqual(self.log.read_text().splitlines(), [
+            'sync', 'sleep 2', 'sync', 'sleep 4', 'sync', 'download',
+            'install', 'sleep 2', 'install', 'sleep 4', 'install'])
+
+    def test_pacman_full_install_failure_triggers_ordered_batches(self):
+        state = self.mock_pacman_upgrade(install=99, base=99)
+        result = self.bash('set -Eeuo pipefail; pacman_full_upgrade')
+        self.assertEqual(self.log.read_text().splitlines(), [
+            'sync', 'download', 'install', 'sleep 2', 'install', 'sleep 4', 'install',
+            'core', 'base', 'sleep 2', 'base', 'sleep 4', 'base', 'remaining'])
+        self.assertIn('Installing cached updates failed after a successful download', result.stderr)
+        self.assertIn('Full upgrade failed. Trying batched upgrade...', result.stdout)
+        for batch in ('Batch 1/3:', 'Batch 2/3:', 'Batch 3/3:'):
+            self.assertIn(batch, result.stdout)
+        commands = (state / 'commands').read_text().splitlines()
+        self.assertIn('-S --needed --noconfirm glibc linux gcc gcc-libs', commands)
+        self.assertIn('-S --needed --noconfirm base base-devel', commands)
+        self.assertEqual(commands[-1], '-Su --noconfirm')
+        self.assertIn('Batch 1/3 completed.', result.stdout)
+        self.assertIn('Batch 2/3 failed', result.stderr)
+        self.assertIn('System upgrade completed successfully.', result.stdout)
+        self.assertFalse(pathlib.Path((state / 'offline-path').read_text()).exists())
+
+    def test_pacman_download_exhaustion_skips_install_and_tries_batches(self):
+        state = self.mock_pacman_upgrade(download=99, core=99)
+        result = self.bash('set -Eeuo pipefail; pacman_full_upgrade',
+                           extra_env={'REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES': '2'})
+        self.assertEqual((state / 'download').read_text().strip(), '2')
+        self.assertFalse((state / 'install').exists())
+        self.assertEqual(self.log.read_text().splitlines(), [
+            'sync', 'download', 'sleep 2', 'download',
+            'core', 'sleep 2', 'core', 'sleep 4', 'core', 'base', 'remaining'])
+        self.assertIn('Download phase failed after 2 attempts', result.stderr)
+
+    def test_pacman_upgrade_all_failures_report_manual_recovery_and_exit_one(self):
+        self.mock_pacman_upgrade(install=99, core=99, base=99, remaining=99)
+        result = self.bash('set -Eeuo pipefail; pacman_full_upgrade', success=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.log.read_text().splitlines().count('remaining'), 3)
+        for message in ('ERROR: Could not complete the system upgrade automatically.',
+                        'Your system needs a full upgrade before the script can continue.',
+                        '1. sudo pacman -Sy', '2. sudo pacman -Su --downloadonly',
+                        '3. sudo pacman -Su', 'sudo nano /etc/pacman.d/mirrorlist',
+                        'Then re-run this script.'):
+            self.assertIn(message, result.stderr)
+        self.assertNotIn('completed successfully', result.stdout)
+
+    def test_pacman_sync_exhaustion_stops_before_downloading_or_installing(self):
+        self.mock_pacman_upgrade(sync=99)
+        result = self.bash('set -Eeuo pipefail; pacman_full_upgrade', success=False)
+        self.assertEqual(self.log.read_text().splitlines(),
+                         ['sync', 'sleep 2', 'sync', 'sleep 4', 'sync'])
+        self.assertIn('ERROR: Could not complete the system upgrade automatically.', result.stderr)
+
+    def test_pacman_download_retry_limit_and_exponential_backoff_cap(self):
+        for attempts in (1, 5, 7):
+            with self.subTest(attempts=attempts):
+                state = self.mock_pacman_upgrade(download=99)
+                self.bash('set -Eeuo pipefail; pacman_full_upgrade',
+                          extra_env={'REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES': str(attempts)})
+                self.assertEqual((state / 'download').read_text().strip(), str(attempts))
+                self.assertEqual([line for line in self.log.read_text().splitlines() if line.startswith('sleep ')],
+                                 [f'sleep {min(2 ** n, 32)}' for n in range(1, attempts)])
+
+    def test_pacman_upgrade_only_dry_run_and_help_have_no_side_effects(self):
+        self.stub('pacman', 'echo UNEXPECTED_PACKAGE_QUERY >&2; exit 99\n')
+        self.stub('pacman-conf', 'echo UNEXPECTED_CONFIG_QUERY >&2; exit 99\n')
+        self.stub('sleep', 'echo UNEXPECTED_SLEEP >&2; exit 99\n')
+        result = self.bash('main --pacman-upgrade-only --dry-run', extra_env=self.os_release('arch'))
+        self.assertEqual(result.stdout.count('[dry-run]'), 3)
+        self.assertFalse(self.log.exists())
+        self.assertIn('--pacman-upgrade-only', self.bash('main --help').stdout)
+        self.assertIn('REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES=5', self.bash('main --help').stdout)
+
+    def test_pacman_upgrade_only_rejects_other_managers_without_actions(self):
+        for distro in ('ubuntu', 'fedora'):
+            with self.subTest(distro=distro):
+                self.stub('dnf', 'echo UNEXPECTED_DNF >&2; exit 99\n')
+                result = self.bash('main --pacman-upgrade-only', success=False, extra_env=self.os_release(distro))
+                self.assertIn('--pacman-upgrade-only requires pacman.', result.stderr)
+                self.assertFalse(self.log.exists())
+
+    def test_pacman_invalid_download_retry_count_fails_before_upgrade(self):
+        for attempts in ('0', '-1', 'no', '1.5', '03', '1+2', '18446744073709551619'):
+            with self.subTest(attempts=attempts):
+                result = self.bash('set -Eeuo pipefail; pacman_full_upgrade', success=False,
+                                   extra_env={'REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES': attempts})
+                self.assertIn('REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES must be a positive integer', result.stderr)
+                self.assertFalse(self.log.exists())
 
     def test_package_install_retries_succeed_on_third_attempt_for_each_manager(self):
         for manager, package in [('apt-get', 'imagemagick'), ('pacman', 'imagemagick'),
@@ -764,7 +977,7 @@ install_java_runtime''')
             'pacman -Sy --noconfirm',
             'pacman -S --noconfirm --needed gcc-libs',
             'pacman -S --noconfirm --needed jre17-openjdk',
-            'pacman -Syu --noconfirm',
+            *PACMAN_UPGRADE_CALLS,
             'pacman -S --noconfirm --needed jre17-openjdk',
         ])
         self.assertEqual((state / 'gcc-libs').read_text().strip(), '1')
@@ -800,7 +1013,7 @@ package_installed() { return 1; }
 pkg_install imagemagick
 pkg_install vim''')
                 calls = self.log.read_text().splitlines()
-                self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
+                self.assertEqual(calls.count('pacman -Su --downloadonly --noconfirm'), 1)
                 self.assertEqual(result.stderr.count('Running full system upgrade'), 1)
                 for package in ('imagemagick', 'vim'):
                     self.assertEqual((state / package).read_text().strip(),
@@ -821,8 +1034,8 @@ pkg_install --required openjdk-17-jre''', success=False,
                 self.assertEqual(result.returncode, 42)
                 self.assertEqual((state / 'jre17-openjdk').read_text().strip(), str(attempts + 1))
                 calls = self.log.read_text().splitlines()
-                self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
-                self.assertEqual(calls[2], 'pacman -Syu --noconfirm')
+                self.assertEqual(calls.count('pacman -Su --downloadonly --noconfirm'), 1)
+                self.assertEqual(calls[2:5], PACMAN_UPGRADE_CALLS)
                 self.assertEqual([line for line in calls if line.startswith('sleep ')],
                                  [f'sleep {n * 2}' for n in range(1, attempts)])
 
@@ -840,13 +1053,13 @@ install_java_runtime''', extra_env={'REBUILT_MACHINE_PKG_RETRIES': str(attempts)
                 self.assertEqual((state / 'gcc-libs').read_text().strip(), str(attempts + 1))
                 self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '1')
                 calls = self.log.read_text().splitlines()
-                self.assertEqual(calls[:4], [
+                self.assertEqual(calls[:6], [
                     'pacman -Sy --noconfirm',
                     'pacman -S --noconfirm --needed gcc-libs',
-                    'pacman -Syu --noconfirm',
+                    *PACMAN_UPGRADE_CALLS,
                     'pacman -S --noconfirm --needed gcc-libs',
                 ])
-                self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
+                self.assertEqual(calls.count('pacman -Su --downloadonly --noconfirm'), 1)
                 self.assertNotIn('Could not install package', result.stderr)
 
     def test_failed_pacman_conflict_recovery_stops_package_and_gives_manual_instructions(self):
@@ -858,14 +1071,14 @@ package_installed() { return 1; }
 package_available() { return 0; }
 install_java_runtime
 echo SHOULD_NOT_CONTINUE''', success=False)
-        self.assertEqual(result.returncode, 19)
+        self.assertEqual(result.returncode, 1)
         self.assertEqual((state / 'gcc-libs').read_text().strip(), '1')
         self.assertFalse((state / 'jre17-openjdk').exists())
-        self.assertEqual(self.log.read_text().count('pacman -Syu --noconfirm'), 1)
-        self.assertNotIn('sleep ', self.log.read_text())
+        self.assertEqual(self.log.read_text().count('pacman -Su --downloadonly --noconfirm'), 5)
+        self.assertIn('sleep 16', self.log.read_text())
         self.assertNotIn('SHOULD_NOT_CONTINUE', result.stdout)
-        self.assertIn('Pacman full system upgrade failed', result.stderr)
-        self.assertIn('sudo pacman -Syu', result.stderr)
+        self.assertIn('ERROR: Could not complete the system upgrade automatically.', result.stderr)
+        self.assertIn('sudo pacman -Su --downloadonly', result.stderr)
         self.assertIn('Then re-run this script.', result.stderr)
 
     def test_failed_pacman_recovery_is_not_repeated_for_later_packages(self):
@@ -877,10 +1090,10 @@ PKG_MANAGER=pacman
 package_installed() { return 1; }
 pkg_install imagemagick || echo "optional install failed: $?"
 pkg_install --required vim''')
-        self.assertIn('optional install failed: 19', result.stdout)
+        self.assertIn('optional install failed: 1', result.stdout)
         self.assertEqual((state / 'imagemagick').read_text().strip(), '1')
         self.assertEqual((state / 'vim').read_text().strip(), '2')
-        self.assertEqual(self.log.read_text().count('pacman -Syu --noconfirm'), 1)
+        self.assertEqual(self.log.read_text().count('pacman -Su --downloadonly --noconfirm'), 5)
 
     def test_7zip_failure_allows_gcc_libs_recovery_and_java_retry(self):
         state = self.mock_package_installer('pacman',
@@ -902,11 +1115,11 @@ install_qortal_icons() { return 0; }
 main''', extra_env={**self.os_release('arch'), 'REBUILT_MACHINE_HEADLESS': '1'})
         self.assertIn('No supported 7-Zip package could be installed.', result.stderr)
         calls = self.log.read_text().splitlines()
-        self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
+        self.assertEqual(calls.count('pacman -Su --downloadonly --noconfirm'), 1)
         gcc_install = calls.index('pacman -S --noconfirm --needed gcc-libs')
-        self.assertEqual(calls[gcc_install:gcc_install + 6], [
+        self.assertEqual(calls[gcc_install:gcc_install + 8], [
             'pacman -S --noconfirm --needed gcc-libs',
-            'pacman -Syu --noconfirm',
+            *PACMAN_UPGRADE_CALLS,
             'pacman -S --noconfirm --needed gcc-libs',
             'pacman -S --noconfirm --needed jre17-openjdk',
             'sleep 2',
@@ -933,7 +1146,7 @@ main''', success=False,
         self.assertEqual(result.returncode, 1)
         self.assertEqual((state / 'gcc-libs').read_text().strip(), '2')
         self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '6')
-        self.assertEqual(self.log.read_text().count('pacman -Syu --noconfirm'), 1)
+        self.assertEqual(self.log.read_text().count('pacman -Su --downloadonly --noconfirm'), 1)
         self.assertIn('A supported Java runtime is required. The system appears to need a full upgrade. '
                       'Run: sudo pacman -Syu\nThen re-run this script.', result.stderr)
         self.assertNotIn('Setup complete.', result.stdout)
@@ -1111,7 +1324,7 @@ install_first_available_package openjdk-21-jre openjdk-17-jre''')
                     self.assertEqual(calls, 'sudo pacman -Sy --noconfirm\n')
                 self.bash(f'PKG_MANAGER={manager}; UPGRADE_PACKAGES=1; prepare_packages')
                 calls = self.log.read_text()
-                self.assertIn('-Syu' if manager == 'pacman' else 'upgrade', calls)
+                self.assertIn('-Su' if manager == 'pacman' else 'upgrade', calls)
 
     def test_dry_run_all_flags_has_no_side_effects_on_any_supported_distro(self):
         for manager in ('pacman', 'dnf'):

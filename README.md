@@ -116,11 +116,13 @@ mode still installs Cinnamon and optional desktop apps on a fresh machine.
 | `--update-core` | `REBUILT_MACHINE_UPDATE_CORE=1` | Download and validate the release; replace only a changed jar in an existing **stopped** Core. Preserve settings, database, keys, lists, data and custom scripts; back up the old jar. |
 | `--update-hub` | `REBUILT_MACHINE_UPDATE_HUB=1` | Check the release tag and recorded binary SHA-256; skip the binary download when current. Otherwise validate/download, compare, and back up before replacement. Untracked AppImages need one download for comparison. |
 | `--upgrade-packages` | `REBUILT_MACHINE_UPGRADE=1` | Opt in to `apt-get upgrade`, `pacman -Syu`, or `dnf upgrade`. Pacman file/dependency-conflict recovery can also trigger a full upgrade. |
+| `--pacman-upgrade-only` | — | Run only the resilient pacman system upgrade, then exit; no Core/Hub, desktop, automation or reboot steps. Arch/Manjaro only; supports `--dry-run`. |
 | `--apply-defaults` | `REBUILT_MACHINE_APPLY_DEFAULTS=1` | Export dconf before changing desktop preferences, session selection, themes, menu and application defaults. Defer session settings to Cinnamon login when necessary. |
 | `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork, icon files and themes. Configured desktops retain preference selections unless `--apply-defaults` is also used. |
 | — | `REBUILT_MACHINE_HEADLESS=auto` | Detect sessions/installed session files; `1` forces server mode and `0` forces desktop mode. |
 | — | `REBUILT_MACHINE_REBOOT=1` | Opt in to reboot after success and a 30-second cancellation delay; default is `0`. |
 | — | `REBUILT_MACHINE_PKG_RETRIES=3` | Install attempts per missing package; accepts a positive integer. Wait 2 seconds, then 4 seconds between the default three attempts. Successful pacman recovery resets this budget. |
+| — | `REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES=5` | Full-upgrade download attempts; positive integer. Backoff starts at 2 seconds, doubles between attempts and caps at 32 seconds. Cached downloads survive retries. |
 
 Package installation retries use the existing package mappings and skip
 installed packages, except for the Arch `gcc-libs` prerequisite below.
@@ -170,8 +172,8 @@ installed. This checks the owner of `/usr/lib/libgcc_s.so.1` before OpenJDK.
 
 If an install fails with `conflicting files`, `exists in filesystem`,
 `could not satisfy dependencies`, `breaks dependency`, or
-`failed to prepare transaction`, the script runs
-`sudo pacman -Syu --noconfirm` once per run before retrying the package.
+`failed to prepare transaction`, the script calls `pacman_full_upgrade()` once
+per run before retrying the package.
 This recovery performs a full system upgrade even without `--upgrade-packages`;
 unrelated failures such as download timeouts do not trigger it. A database sync
 alone cannot resolve exact-version dependencies: for example, an installed `gcc`
@@ -182,8 +184,58 @@ Recovery runs even when the failed install used its last attempt. On success,
 the package immediately receives a fresh `REBUILT_MACHINE_PKG_RETRIES` budget;
 the upgrade itself consumes no install attempts. Later retries use the normal
 backoff, with no second recovery upgrade during the run. On upgrade failure,
-the package installation stops with instructions to run `sudo pacman -Syu`
-manually and then re-run the script.
+the package installation returns failure with manual recovery instructions.
+
+For a stale machine, run the upgrade by itself first:
+
+```bash
+bash ./rebuilt-machine.sh --pacman-upgrade-only
+# Optional: allow more attempts on an unreliable connection.
+REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES=8 bash ./rebuilt-machine.sh --pacman-upgrade-only
+# After a successful upgrade, run setup normally.
+bash ./rebuilt-machine.sh
+```
+
+Both conflict recovery and `--upgrade-packages` use the same three-phase flow:
+
+1. Sync the database with `sudo pacman -Sy --noconfirm` (up to three attempts).
+2. Download updates using `sudo pacman -Su --downloadonly --noconfirm` (five
+   attempts by default). Failed downloads report how many target archives exist
+   in the configured cache directories and list up to ten missing archives.
+   Incomplete `.part` files are excluded. Cache counts show progress; pacman
+   still validates packages and signatures before installation.
+3. Install with `sudo pacman -Su --noconfirm --config <temporary-offline-config>`
+   (up to three attempts). The resolved pacman configuration, signature policy,
+   repositories and cache directories are preserved; only `XferCommand` changes
+   to `/usr/bin/false` to reject network transfers. The temporary file is removed
+   afterward. No permanent pacman configuration is changed.
+
+Pacman has no `--nodl` or `--dry-run` options. Progress queries use the supported
+read-only `--print-format` option. The download and install phases use `-Su`
+after the initial sync so retrying never changes the database snapshot.
+The download phase only populates the cache; it does not install packages.
+Database/install retries wait 2 and 4 seconds; download retries wait 2, 4, 8,
+16 seconds with the default five attempts (32 seconds for later retries).
+
+If downloads or cached installation remain unsuccessful, the script tries these
+dependency-resolved batches in order, each with up to three attempts:
+
+```bash
+sudo pacman -S --needed --noconfirm glibc linux gcc gcc-libs
+sudo pacman -S --needed --noconfirm base base-devel
+sudo pacman -Su --noconfirm
+```
+
+The first two use `-S` because `-Syu <packages>` still upgrades the entire system;
+`core` is a repository name, not a package target. Pacman orders dependencies
+within each transaction and dependency checks remain enabled. A failed batch
+is reported and subsequent batches are still attempted. These stages can leave
+partial changes; **only a successful final full upgrade counts as recovery**.
+If the initial database sync exhausts its attempts, recovery stops immediately.
+If all fallback attempts fail, setup returns failure and prints the manual
+sync/download/install sequence plus mirror-switching guidance. Review and
+correct the reported transaction errors before rerunning; retries cannot resolve
+every stale keyring, package conflict or required manual intervention.
 
 An optional 7-Zip failure warns and continues to `gcc-libs` and Java setup;
 unrelated 7-Zip failures do not consume the recovery flag or Java's retry budget.

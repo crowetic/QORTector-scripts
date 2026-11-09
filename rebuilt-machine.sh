@@ -18,6 +18,7 @@ DRY_RUN=${REBUILT_MACHINE_DRY_RUN:-0}
 UPDATE_CORE=${REBUILT_MACHINE_UPDATE_CORE:-0}
 UPDATE_HUB=${REBUILT_MACHINE_UPDATE_HUB:-0}
 UPGRADE_PACKAGES=${REBUILT_MACHINE_UPGRADE:-0}
+PACMAN_UPGRADE_ONLY=0
 APPLY_DEFAULTS=${REBUILT_MACHINE_APPLY_DEFAULTS:-0}
 APPLY_BRANDING=0
 FORCE_ARTWORK=${REBUILT_MACHINE_FORCE_ARTWORK:-0}
@@ -35,6 +36,7 @@ Run as the desktop/Core user; sudo is requested for system packages.
   --update-core         Update an existing stopped Core jar; preserve data/settings
   --update-hub          Check the latest release and update Hub when needed
   --upgrade-packages    Opt in to a full system package upgrade
+  --pacman-upgrade-only Run only the resilient pacman full upgrade, then exit
   --apply-defaults      Back up dconf, then apply repository desktop preferences
   --force-artwork       Replace repository artwork/themes/icons (with backups)
 Equivalent REBUILT_MACHINE_* variables (0 or 1): DRY_RUN, UPDATE_CORE,
@@ -42,8 +44,9 @@ UPDATE_HUB, UPGRADE, APPLY_DEFAULTS, FORCE_ARTWORK. Defaults are all 0.
 REBUILT_MACHINE_REBOOT=1 explicitly enables reboot after a 30-second delay.
 REBUILT_MACHINE_HEADLESS=auto|1|0 selects automatic/server/desktop mode.
 REBUILT_MACHINE_PKG_RETRIES=3 sets package install attempts (positive integer).
+REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES=5 sets upgrade download attempts.
 Failed noncritical packages warn and continue; required packages stop setup.
-Pacman refreshes its database once; file/dependency conflicts may trigger one full upgrade.
+Pacman refreshes its database before installs; conflicts may trigger one recovery upgrade.
 A successful recovery gives the package a fresh install attempt budget.
 Existing Core/Hub, preferences, custom cron and autostarts are preserved by default.
 Fresh desktop installs receive Qortal branding; SSH setup defers it to Cinnamon login.
@@ -59,6 +62,7 @@ parse_args() {
       --update-core) UPDATE_CORE=1 ;;
       --update-hub) UPDATE_HUB=1 ;;
       --upgrade-packages) UPGRADE_PACKAGES=1 ;;
+      --pacman-upgrade-only) PACMAN_UPGRADE_ONLY=1 ;;
       --apply-defaults) APPLY_DEFAULTS=1 ;;
       --force-artwork) FORCE_ARTWORK=1 ;;
       *) printf 'Unknown option: %s\n' "$option" >&2; return 1 ;;
@@ -161,6 +165,165 @@ sync_pacman_database() {
   fi
 }
 
+pacman_upgrade_error() {
+  cat >&2 <<'ERROR'
+ERROR: Could not complete the system upgrade automatically.
+
+Your system needs a full upgrade before the script can continue.
+Try these steps manually:
+
+  1. sudo pacman -Sy
+  2. sudo pacman -Su --downloadonly
+  3. sudo pacman -Su
+
+Step 3 reuses the packages downloaded to the cache in step 2.
+If step 2 keeps failing, try switching mirrors:
+  sudo nano /etc/pacman.d/mirrorlist
+  (comment out the failing mirror, uncomment a different one)
+  Check /etc/pacman.conf if it uses a different mirror list.
+
+Then re-run this script.
+ERROR
+  return 1
+}
+
+# Only pacman upgrade phases use these retries; apt/dnf behavior is unchanged.
+pacman_upgrade_retry() {
+  local label=$1 attempt delay=2
+  shift
+  for ((attempt=1; attempt<=3; attempt++)); do
+    if run sudo pacman "$@"; then return 0; fi
+    if [ "$attempt" -lt 3 ]; then
+      printf '%s attempt %s/3 failed. Retrying in %ss...\n' "$label" "$attempt" "$delay" >&2
+      sleep "$delay"
+      delay=$((delay * 2))
+    fi
+  done
+  printf '%s failed after 3 attempts.\n' "$label" >&2
+  return 1
+}
+
+pacman_cache_progress() {
+  local targets cache_dirs filename directory found total=0 cached=0
+  local -a missing=()
+  # --print is read-only. Filename presence is progress, not an integrity check;
+  # only a successful download transaction allows the install phase to start.
+  if ! targets=$(LC_ALL=C pacman -Sup --noconfirm --print-format '%f' 2>/dev/null) ||
+     ! cache_dirs=$(pacman-conf CacheDir 2>/dev/null); then
+    printf 'Cache progress unavailable; completed downloads are retained.\n' >&2
+    return 0
+  fi
+  while IFS= read -r filename; do
+    case "$filename" in
+      */*|*' '*) continue ;;
+      *.pkg.tar|*.pkg.tar.*) ;;
+      *) continue ;;
+    esac
+    total=$((total + 1))
+    found=0
+    while IFS= read -r directory; do
+      if [ -s "$directory/$filename" ]; then found=1; break; fi
+    done <<< "$cache_dirs"
+    if [ "$found" = 1 ]; then cached=$((cached + 1)); else missing+=("$filename"); fi
+  done <<< "$targets"
+  printf '%s/%s packages cached.\n' "$cached" "$total" >&2
+  if [ "${#missing[@]}" -gt 0 ]; then
+    printf 'Still missing:' >&2
+    printf ' %s' "${missing[@]:0:10}" >&2
+    [ "${#missing[@]}" -le 10 ] || printf ' (and %s more)' "$((${#missing[@]} - 10))" >&2
+    printf '\n' >&2
+  fi
+}
+
+pacman_install_cached_upgrade() {
+  local config offline_config status=1
+  if [ "$DRY_RUN" = 1 ]; then
+    echo '[dry-run] Install cached updates with pacman -Su --noconfirm (network transfers disabled)'
+    return 0
+  fi
+  # Pacman has no --nodl option. Preserve its complete, resolved configuration
+  # (including signature checks and repository policy), replacing only the
+  # downloader. Without -y the database is unchanged, and a cache miss fails
+  # locally rather than reaching the network. No persistent config is edited.
+  if ! config=$(pacman-conf) || [[ "$config" != *'[options]'* ]]; then
+    echo 'Could not read pacman configuration for cache-only installation.' >&2
+    return 1
+  fi
+  offline_config=$(mktemp) || return 1
+  if awk '
+    /^[[:space:]]*XferCommand[[:space:]]*=/ { next }
+    { print }
+    /^\[options\]$/ { print "XferCommand = /usr/bin/false" }
+  ' <<< "$config" > "$offline_config"; then
+    if pacman_upgrade_retry 'Cached installation' -Su --noconfirm --config "$offline_config"; then status=0; fi
+  fi
+  rm -f "$offline_config"
+  return "$status"
+}
+
+pacman_full_upgrade() {
+  local attempt delay=2 downloaded=0
+  local attempts=${REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES:-5}
+  [[ "$attempts" =~ ^[1-9][0-9]*$ ]] && [ "$attempts" -gt 0 ] 2>/dev/null || {
+    echo 'REBUILT_MACHINE_PACMAN_DOWNLOAD_RETRIES must be a positive integer (total attempts).' >&2
+    return 1
+  }
+  PACMAN_CONFLICT_RECOVERY_DONE=1
+  echo 'Step 1/3: Syncing package database...'
+  if ! pacman_upgrade_retry 'Database sync' -Sy --noconfirm; then pacman_upgrade_error; return 1; fi
+  PACMAN_DATABASE_SYNCED=1
+  echo 'Step 2/3: Downloading updates (this may take a while)...'
+  for ((attempt=1; attempt<=attempts; attempt++)); do
+    # Reuse the synced database: refreshing again can change the target versions
+    # between download and install. This phase never installs packages.
+    if run sudo pacman -Su --downloadonly --noconfirm; then
+      printf 'Download attempt %s/%s succeeded. All packages cached.\n' "$attempt" "$attempts"
+      downloaded=1
+      break
+    fi
+    printf 'Download attempt %s/%s failed. ' "$attempt" "$attempts" >&2
+    pacman_cache_progress
+    if [ "$attempt" -lt "$attempts" ]; then
+      printf 'Retrying in %ss...\n' "$delay" >&2
+      sleep "$delay"
+      [ "$delay" -ge 32 ] || delay=$((delay * 2))
+    fi
+  done
+  if [ "$downloaded" = 1 ]; then
+    echo 'Step 3/3: Installing updates...'
+    if pacman_install_cached_upgrade; then
+      echo 'System upgrade completed successfully.'
+      return 0
+    fi
+    echo 'Installing cached updates failed after a successful download; check the transaction errors above.' >&2
+  else
+    printf 'Download phase failed after %s attempts; completed downloads remain cached.\n' "$attempts" >&2
+  fi
+  echo 'Full upgrade failed. Trying batched upgrade...'
+  # -Syu with explicit targets still upgrades the entire system. Use -S for
+  # dependency-resolved stages, then require a successful full upgrade. Never
+  # disable dependency checks or treat a partially upgraded system as success.
+  echo 'Batch 1/3: Upgrading core system packages (glibc, linux, gcc, gcc-libs)...'
+  if pacman_upgrade_retry 'Core system batch' -S --needed --noconfirm glibc linux gcc gcc-libs; then
+    echo 'Batch 1/3 completed.'
+  else
+    echo 'Batch 1/3 failed; continuing with the remaining batches.' >&2
+  fi
+  # core is a repository, not an installable package or group.
+  echo 'Batch 2/3: Upgrading base utilities...'
+  if pacman_upgrade_retry 'Base utilities batch' -S --needed --noconfirm base base-devel; then
+    echo 'Batch 2/3 completed.'
+  else
+    echo 'Batch 2/3 failed; continuing with the remaining packages.' >&2
+  fi
+  echo 'Batch 3/3: Upgrading remaining packages...'
+  if pacman_upgrade_retry 'Remaining packages batch' -Su --noconfirm; then
+    echo 'System upgrade completed successfully.'
+    return 0
+  fi
+  pacman_upgrade_error
+}
+
 pkg_install() {
   local package mapped attempt status option configured manual_command install_output required=0
   local attempts=${REBUILT_MACHINE_PKG_RETRIES:-3}
@@ -224,15 +387,12 @@ pkg_install() {
            "$install_output" == *'failed to prepare transaction'* ]]; then
         PACMAN_CONFLICT_RECOVERY_DONE=1
         echo 'System packages are out of sync. Running full system upgrade to resolve dependencies...' >&2
-        if run sudo pacman -Syu --noconfirm; then
+        if pacman_full_upgrade; then
           # The loop increments to 1; recovery consumes no package attempts.
           attempt=0
           continue
         else
-          status=$?
-          warn 'Pacman full system upgrade failed. Run manually: sudo pacman -Syu'
-          echo 'Then re-run this script.' >&2
-          return "$status"
+          return 1
         fi
       fi
       if [ "$attempt" -lt "$attempts" ]; then
@@ -265,8 +425,11 @@ prepare_packages() {
       [ "$UPGRADE_PACKAGES" = 0 ] || run sudo apt-get -y upgrade
       ;;
     pacman)
-      sync_pacman_database || return $?
-      [ "$UPGRADE_PACKAGES" = 0 ] || run sudo pacman -Syu --noconfirm
+      if [ "$UPGRADE_PACKAGES" = 1 ]; then
+        pacman_full_upgrade || return 1
+      else
+        sync_pacman_database || return $?
+      fi
       ;;
     dnf) [ "$UPGRADE_PACKAGES" = 0 ] || run sudo dnf upgrade -y ;;
   esac
@@ -931,6 +1094,14 @@ main() {
   [ "$parse_status" = 0 ] || return "$parse_status"
   trap 'printf "Rebuild failed at line %s. Automatic reboot cancelled.\n" "$LINENO" >&2' ERR
   detect_distro
+  if [ "$PACMAN_UPGRADE_ONLY" = 1 ]; then
+    [ "$PKG_MANAGER" = pacman ] || { echo '--pacman-upgrade-only requires pacman.' >&2; return 1; }
+    if [ "$DRY_RUN" = 0 ]; then
+      command_exists sudo || { echo 'sudo is required for system packages.' >&2; return 1; }
+    fi
+    # Return before desktop detection, backups, Core/Hub, helpers and reboot.
+    if pacman_full_upgrade; then return 0; else return 1; fi
+  fi
   HEADLESS_MODE=false
   if is_headless_mode; then HEADLESS_MODE=true; fi
   APPLY_BRANDING=0
