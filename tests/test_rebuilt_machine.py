@@ -560,9 +560,12 @@ package_installed() {{ return 1; }}
 package_available() {{ return 0; }}
 install_java_runtime''')
                 calls = self.log.read_text().splitlines()
-                self.assertEqual(len(calls), 1)
-                self.assertIn(expected, calls[0])
-                self.assertNotIn('21', calls[0])
+                self.assertEqual(len(calls), 3 if manager == 'pacman' else 1)
+                self.assertIn(expected, calls[-1])
+                self.assertNotIn('21', calls[-1])
+                if manager == 'pacman':
+                    self.assertEqual(calls[0], 'sudo pacman -Sy --noconfirm')
+                    self.assertEqual(calls[1], 'sudo pacman -S --noconfirm --needed gcc-libs')
 
     def test_existing_java_21_does_not_cause_a_second_runtime_install(self):
         for manager, existing in (('apt-get', 'openjdk-21-jre'), ('pacman', 'jre21-openjdk'),
@@ -639,7 +642,8 @@ install_packages_if_available yaru-theme-icon
                     self.assertNotIn('yaru', calls)
                     self.assertNotIn('apt-get', calls)
 
-    def mock_package_installer(self, manager, failures=2, fail_package='*'):
+    def mock_package_installer(self, manager, failures=2, fail_package='*',
+                               error='mock connection timeout', recovery_status=0, sync_status=0):
         state = self.root / ('package-attempts-' + manager)
         if state.exists():
             shutil.rmtree(state)
@@ -647,19 +651,28 @@ install_packages_if_available yaru-theme-icon
         self.log.unlink(missing_ok=True)
         self.env.update(REBUILD_TEST_PKG_STATE=str(state),
                         REBUILD_TEST_PKG_FAILURES=str(failures),
-                        REBUILD_TEST_FAIL_PACKAGE=fail_package)
+                        REBUILD_TEST_FAIL_PACKAGE=fail_package,
+                        REBUILD_TEST_PKG_ERROR=error,
+                        REBUILD_TEST_RECOVERY_STATUS=str(recovery_status),
+                        REBUILD_TEST_SYNC_STATUS=str(sync_status))
         self.stub('sudo', 'exec "$@"\n')
         self.stub('apt-config', 'exit 0\n')
         self.stub('sleep', 'printf "sleep %s\\n" "$*" >> "$REBUILD_TEST_LOG"\n')
-        self.stub(manager, '''package="${@: -1}"
+        self.stub(manager, '''printf '%s %s\n' "${0##*/}" "$*" >> "$REBUILD_TEST_LOG"
+if [ "${0##*/}" = pacman ]; then
+  case "$1" in
+    -Sy) exit "$REBUILD_TEST_SYNC_STATUS" ;;
+    -Syu) exit "$REBUILD_TEST_RECOVERY_STATUS" ;;
+  esac
+fi
+package="${@: -1}"
 counter="$REBUILD_TEST_PKG_STATE/$package"
 attempt=0
 if [ -f "$counter" ]; then read -r attempt < "$counter"; fi
 attempt=$((attempt + 1))
 printf '%s\n' "$attempt" > "$counter"
-printf '%s %s\n' "${0##*/}" "$*" >> "$REBUILD_TEST_LOG"
 if [[ "$package" == $REBUILD_TEST_FAIL_PACKAGE ]] && [ "$attempt" -le "$REBUILD_TEST_PKG_FAILURES" ]; then
-  echo 'mock connection timeout' >&2
+  printf '%s\n' "$REBUILD_TEST_PKG_ERROR" >&2
   exit 42
 fi
 ''')
@@ -678,7 +691,8 @@ pkg_install imagemagick
 echo "warnings=${{#WARNINGS[@]}}"''')
                 self.assertEqual((state / package).read_text().strip(), '3')
                 calls = self.log.read_text().splitlines()
-                installs = [line for line in calls if line.startswith(manager + ' ')]
+                prefix = 'pacman -S ' if manager == 'pacman' else manager + ' '
+                installs = [line for line in calls if line.startswith(prefix)]
                 self.assertEqual(len(installs), 3)
                 self.assertEqual([line for line in calls if line.startswith('sleep ')],
                                  ['sleep 2', 'sleep 4'])
@@ -691,8 +705,136 @@ echo "warnings=${{#WARNINGS[@]}}"''')
                 elif manager == 'pacman':
                     self.assertIn('-S --noconfirm --needed', installs[0])
                     self.assertNotIn('--retry', installs[0])
+                    self.assertNotIn('pacman -Syu --noconfirm', calls)
                 else:
                     self.assertIn('--setopt=retries=3', installs[0])
+
+    def test_pacman_database_sync_precedes_installs_and_only_runs_once(self):
+        for prepare in ('', 'prepare_packages\nprepare_packages'):
+            with self.subTest(prepare=bool(prepare)):
+                self.mock_package_installer('pacman', failures=0)
+                self.bash(f'''set -Eeuo pipefail
+PKG_MANAGER=pacman
+package_installed() {{ return 1; }}
+{prepare}
+pkg_install imagemagick git
+pkg_install vim''')
+                self.assertEqual(self.log.read_text().splitlines(), [
+                    'pacman -Sy --noconfirm',
+                    'pacman -S --noconfirm --needed imagemagick',
+                    'pacman -S --noconfirm --needed git',
+                    'pacman -S --noconfirm --needed vim',
+                ])
+
+    def test_failed_pacman_database_sync_stops_before_installing_packages(self):
+        for entry in ('prepare_packages', 'pkg_install imagemagick'):
+            with self.subTest(entry=entry):
+                self.mock_package_installer('pacman', sync_status=37)
+                result = self.bash(f'''set -euo pipefail
+PKG_MANAGER=pacman
+package_installed() {{ return 1; }}
+{entry}
+echo SHOULD_NOT_CONTINUE''', success=False)
+                self.assertEqual(result.returncode, 37)
+                self.assertNotIn('SHOULD_NOT_CONTINUE', result.stdout)
+                self.assertEqual(self.log.read_text(), 'pacman -Sy --noconfirm\n')
+
+    def test_pacman_java_libgcc_conflict_recovers_and_retries_after_gcc_libs(self):
+        state = self.mock_package_installer('pacman', failures=1, fail_package='jre17-openjdk',
+            error='error: failed to commit transaction (conflicting files)\n'
+                  'libgcc: /usr/lib/libgcc_s.so.1 exists in filesystem (owned by gcc-libs)')
+        result = self.bash('''set -Eeuo pipefail
+trap 'echo UNEXPECTED_ERR_TRAP >&2' ERR
+PKG_MANAGER=pacman
+package_installed() { [ "$1" = gcc-libs ]; }
+package_available() { return 0; }
+install_java_runtime''')
+        self.assertEqual(self.log.read_text().splitlines(), [
+            'pacman -Sy --noconfirm',
+            'pacman -S --noconfirm --needed gcc-libs',
+            'pacman -S --noconfirm --needed jre17-openjdk',
+            'pacman -Syu --noconfirm',
+            'sleep 2',
+            'pacman -S --noconfirm --needed jre17-openjdk',
+        ])
+        self.assertEqual((state / 'gcc-libs').read_text().strip(), '1')
+        self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '2')
+        self.assertIn('libgcc_s.so.1 exists in filesystem (owned by gcc-libs)', result.stderr)
+        self.assertIn('Package database is out of sync with installed packages. '
+                      'Running full system sync...', result.stderr)
+
+    def test_pacman_gcc_libs_failure_prevents_java_install(self):
+        state = self.mock_package_installer('pacman', failures=99, fail_package='gcc-libs')
+        result = self.bash('''set -euo pipefail
+PKG_MANAGER=pacman
+package_installed() { return 1; }
+package_available() { return 0; }
+install_java_runtime''', success=False)
+        self.assertEqual(result.returncode, 42)
+        self.assertEqual((state / 'gcc-libs').read_text().strip(), '3')
+        self.assertFalse((state / 'jre17-openjdk').exists())
+
+    def test_pacman_general_conflicts_recover_only_once_across_packages_and_retries(self):
+        for error in ('error: failed to commit transaction (conflicting files)',
+                      'some-package: /usr/share/example exists in filesystem'):
+            with self.subTest(error=error):
+                state = self.mock_package_installer('pacman', failures=99, error=error)
+                result = self.bash('''set -Eeuo pipefail
+trap 'echo UNEXPECTED_ERR_TRAP >&2' ERR
+PKG_MANAGER=pacman
+package_installed() { return 1; }
+pkg_install imagemagick
+pkg_install vim''')
+                calls = self.log.read_text().splitlines()
+                self.assertEqual(calls.count('pacman -Syu --noconfirm'), 1)
+                self.assertEqual(result.stderr.count('Running full system sync...'), 1)
+                for package in ('imagemagick', 'vim'):
+                    self.assertEqual((state / package).read_text().strip(), '3')
+                self.assertEqual([line for line in calls if line.startswith('sleep ')],
+                                 ['sleep 2', 'sleep 4', 'sleep 2', 'sleep 4'])
+
+    def test_pacman_conflict_recovery_respects_configured_attempt_budget(self):
+        for attempts in (1, 2, 4):
+            with self.subTest(attempts=attempts):
+                state = self.mock_package_installer('pacman', failures=99,
+                                                    error='error: conflicting files')
+                result = self.bash('''set -euo pipefail
+PKG_MANAGER=pacman
+package_installed() { return 1; }
+pkg_install --required openjdk-17-jre''', success=False,
+                    extra_env={'REBUILT_MACHINE_PKG_RETRIES': str(attempts)})
+                self.assertEqual(result.returncode, 42)
+                self.assertEqual((state / 'jre17-openjdk').read_text().strip(), str(attempts))
+                calls = self.log.read_text().splitlines()
+                self.assertEqual(calls.count('pacman -Syu --noconfirm'), int(attempts > 1))
+                self.assertEqual([line for line in calls if line.startswith('sleep ')],
+                                 [f'sleep {n * 2}' for n in range(1, attempts)])
+
+    def test_failed_pacman_conflict_recovery_warns_and_install_retry_can_succeed(self):
+        state = self.mock_package_installer('pacman', failures=1,
+            error='error: conflicting files', recovery_status=19)
+        result = self.bash('''set -Eeuo pipefail
+trap 'echo UNEXPECTED_ERR_TRAP >&2' ERR
+PKG_MANAGER=pacman
+package_installed() { return 1; }
+pkg_install --required openjdk-17-jre''')
+        self.assertEqual((state / 'jre17-openjdk').read_text().strip(), '2')
+        self.assertEqual(self.log.read_text().count('pacman -Syu --noconfirm'), 1)
+        self.assertIn('Pacman system sync failed', result.stderr)
+        self.assertIn('run sudo pacman -Syu manually', result.stderr)
+
+    def test_conflict_recovery_is_pacman_only_and_requires_file_conflict(self):
+        for manager, error in (('apt-get', 'error: conflicting files'),
+                               ('dnf', 'error: exists in filesystem'),
+                               ('pacman', 'gcc-libs: libgcc_s.so.1 signature is invalid')):
+            with self.subTest(manager=manager):
+                self.mock_package_installer(manager, failures=1, error=error)
+                result = self.bash(f'''set -Eeuo pipefail
+PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+pkg_install imagemagick''')
+                self.assertNotIn('pacman -Syu', self.log.read_text())
+                self.assertNotIn('Running full system sync...', result.stderr)
 
     def test_exhausted_noncritical_package_warns_and_installs_next_package(self):
         for manager, package in [('apt-get', 'imagemagick'), ('pacman', 'imagemagick'),
@@ -823,7 +965,7 @@ install_first_available_package btop bpytop''', success=False)
 PKG_MANAGER={manager}
 package_installed() {{ echo UNEXPECTED_QUERY >&2; exit 99; }}
 pkg_install imagemagick cron''', extra_env={'REBUILT_MACHINE_DRY_RUN': '1'})
-                self.assertEqual(result.stdout.count('[dry-run]'), 2)
+                self.assertEqual(result.stdout.count('[dry-run]'), 3 if manager == 'pacman' else 2)
                 self.assertFalse(self.log.exists())
 
     def test_invalid_package_retry_counts_fail_before_any_setup(self):
@@ -842,7 +984,7 @@ package_available() { echo UNEXPECTED_QUERY >&2; exit 99; }
 install_first_available_package openjdk-21-jre openjdk-17-jre''')
         self.assertFalse(self.log.exists())
 
-    def test_system_upgrades_are_opt_in_and_arch_never_uses_sy_alone(self):
+    def test_system_upgrades_are_opt_in_without_file_conflicts(self):
         for manager in ('apt-get', 'pacman', 'dnf'):
             with self.subTest(manager=manager):
                 self.log.unlink(missing_ok=True)
@@ -850,10 +992,11 @@ install_first_available_package openjdk-21-jre openjdk-17-jre''')
                 calls = self.log.read_text() if self.log.exists() else ''
                 self.assertNotIn('upgrade', calls)
                 self.assertNotIn('-Syu', calls)
+                if manager == 'pacman':
+                    self.assertEqual(calls, 'sudo pacman -Sy --noconfirm\n')
                 self.bash(f'PKG_MANAGER={manager}; UPGRADE_PACKAGES=1; prepare_packages')
                 calls = self.log.read_text()
                 self.assertIn('-Syu' if manager == 'pacman' else 'upgrade', calls)
-                self.assertNotIn(' -Sy ', calls)
 
     def test_dry_run_all_flags_has_no_side_effects_on_any_supported_distro(self):
         for manager in ('pacman', 'dnf'):

@@ -22,6 +22,8 @@ APPLY_DEFAULTS=${REBUILT_MACHINE_APPLY_DEFAULTS:-0}
 APPLY_BRANDING=0
 FORCE_ARTWORK=${REBUILT_MACHINE_FORCE_ARTWORK:-0}
 PKG_MANAGER=""
+PACMAN_DATABASE_SYNCED=0
+PACMAN_CONFLICT_RECOVERY_DONE=0
 HUB_SANDBOX_FLAG=""
 
 usage() {
@@ -41,6 +43,7 @@ REBUILT_MACHINE_REBOOT=1 explicitly enables reboot after a 30-second delay.
 REBUILT_MACHINE_HEADLESS=auto|1|0 selects automatic/server/desktop mode.
 REBUILT_MACHINE_PKG_RETRIES=3 sets total package install attempts (positive integer).
 Failed noncritical packages warn and continue; required packages stop setup.
+Pacman refreshes its database once; file conflicts may trigger one full system sync.
 Existing Core/Hub, preferences, custom cron and autostarts are preserved by default.
 Fresh desktop installs receive Qortal branding; SSH setup defers it to Cinnamon login.
 HELP
@@ -150,14 +153,24 @@ validate_pkg_retries() {
   }
 }
 
+sync_pacman_database() {
+  if [ "$PACMAN_DATABASE_SYNCED" = 0 ]; then
+    run sudo pacman -Sy --noconfirm || return $?
+    PACMAN_DATABASE_SYNCED=1
+  fi
+}
+
 pkg_install() {
-  local package mapped attempt status option configured manual_command required=0
+  local package mapped attempt status option configured manual_command install_output required=0
   local attempts=${REBUILT_MACHINE_PKG_RETRIES:-3}
   local -a apt_options=() install_command=()
   validate_pkg_retries || return 1
   # Alternative-package callers need failure status so they can try the next
   # candidate, even when a normal install would only warn and continue.
   if [ "${1:-}" = --required ]; then required=1; shift; fi
+  if [ "${PKG_MANAGER:-apt-get}" = pacman ]; then
+    sync_pacman_database || return $?
+  fi
   if [ "${PKG_MANAGER:-apt-get}" = apt-get ]; then
     for option in APT::Get::Retry Acquire::Retries; do
       configured=""
@@ -172,24 +185,45 @@ pkg_install() {
   for package in "$@"; do
     mapped=$(map_package "$package") || { warn "No $PKG_MANAGER equivalent for $package; skipping."; continue; }
     if [ "$DRY_RUN" = 0 ] && package_installed "$mapped"; then
-      printf 'Package already installed: %s\n' "$mapped"
-      continue
+      # Let pacman compare gcc-libs with the refreshed database before Java.
+      if [ "$PKG_MANAGER" != pacman ] || [ "$mapped" != gcc-libs ]; then
+        printf 'Package already installed: %s\n' "$mapped"
+        continue
+      fi
     fi
     case "${PKG_MANAGER:-apt-get}" in
       apt-get) install_command=(sudo apt-get install -y --no-upgrade "${apt_options[@]}" "$mapped") ;;
-      # Pacman has no --retry option; retry the transaction without using -Sy.
+      # Pacman has no --retry option; retry the transaction in this loop.
       pacman) install_command=(sudo pacman -S --noconfirm --needed "$mapped") ;;
       dnf) install_command=(sudo dnf install -y "--setopt=retries=$attempts" "$mapped") ;;
       *) echo "Unsupported package manager: $PKG_MANAGER" >&2; return 1 ;;
     esac
     for ((attempt=1; attempt<=attempts; attempt++)); do
-      if run "${install_command[@]}"; then
+      install_output=""
+      if [ "${PKG_MANAGER:-apt-get}" = pacman ] && [ "$DRY_RUN" = 0 ]; then
+        # Keep pacman's English diagnostics for conflict detection. Capture both
+        # streams without losing its exit status, then show the output to users.
+        if install_output=$(LC_ALL=C run "${install_command[@]}" 2>&1); then
+          status=0
+        else
+          status=$?
+        fi
+        [ -z "$install_output" ] || printf '%s\n' "$install_output" >&2
+      elif run "${install_command[@]}"; then
         status=0
-        break
       else
         status=$?
       fi
+      [ "$status" -ne 0 ] || break
       if [ "$attempt" -lt "$attempts" ]; then
+        if [ "${PKG_MANAGER:-apt-get}" = pacman ] && [ "$PACMAN_CONFLICT_RECOVERY_DONE" = 0 ] &&
+          [[ "$install_output" == *'conflicting files'* || "$install_output" == *'exists in filesystem'* ]]; then
+          PACMAN_CONFLICT_RECOVERY_DONE=1
+          echo 'Package database is out of sync with installed packages. Running full system sync...' >&2
+          if ! run sudo pacman -Syu --noconfirm; then
+            warn 'Pacman system sync failed; retrying the package install. If conflicts persist, run sudo pacman -Syu manually.'
+          fi
+        fi
         printf 'Package %s install failed (attempt %s/%s); retrying in %ss.\n' \
           "$mapped" "$attempt" "$attempts" "$((attempt * 2))" >&2
         sleep "$((attempt * 2))"
@@ -219,12 +253,17 @@ prepare_packages() {
       [ "$UPGRADE_PACKAGES" = 0 ] || run sudo apt-get -y upgrade
       ;;
     pacman)
-      # Never refresh only the sync database (-Sy): Arch partial upgrades are unsafe.
+      sync_pacman_database || return $?
       [ "$UPGRADE_PACKAGES" = 0 ] || run sudo pacman -Syu --noconfirm
       ;;
     dnf) [ "$UPGRADE_PACKAGES" = 0 ] || run sudo dnf upgrade -y ;;
   esac
-  if [ "$UPGRADE_PACKAGES" = 0 ]; then echo 'System package upgrades skipped (opt in with --upgrade-packages).'; fi
+  if [ "$UPGRADE_PACKAGES" = 0 ]; then
+    echo 'System package upgrades skipped (opt in with --upgrade-packages).'
+    if [ "$PKG_MANAGER" = pacman ]; then
+      echo 'Pacman file conflicts may trigger one recovery system sync during installation.'
+    fi
+  fi
 }
 
 validate_download() {
@@ -390,6 +429,9 @@ install_java_runtime() {
     mapped=$(map_package "$package") || continue
     if package_installed "$mapped"; then return 0; fi
   done
+  if [ "$PKG_MANAGER" = pacman ]; then
+    pkg_install --required gcc-libs || return $?
+  fi
   install_first_available_package openjdk-17-jre openjdk-17-jre-headless
 }
 

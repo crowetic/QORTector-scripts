@@ -102,7 +102,8 @@ bash ./rebuilt-machine.sh
 The default run fills missing packages, applications, desktop assets and
 schedules. Fresh desktop installs also receive the Qortal wallpaper, icon theme,
 and **Qortal OS** menu label/logo. Configured desktops retain their preferences.
-The script **does not upgrade the system, replace existing Core/Hub, or reboot**.
+System upgrades require `--upgrade-packages`, except for the Arch file-conflict
+recovery described below. The script **does not replace existing Core/Hub or reboot**.
 Existing Core directories are retained even
 when stopped, syncing, inaccessible, or incomplete; incomplete installations warn
 for manual repair. User settings, helper scripts, launchers, disabled autostarts,
@@ -114,15 +115,16 @@ mode still installs Cinnamon and optional desktop apps on a fresh machine.
 | `--dry-run` | `REBUILT_MACHINE_DRY_RUN=1` | Preview only; no sudo, downloads, child scripts, files or state changes. |
 | `--update-core` | `REBUILT_MACHINE_UPDATE_CORE=1` | Download and validate the release; replace only a changed jar in an existing **stopped** Core. Preserve settings, database, keys, lists, data and custom scripts; back up the old jar. |
 | `--update-hub` | `REBUILT_MACHINE_UPDATE_HUB=1` | Check the release tag and recorded binary SHA-256; skip the binary download when current. Otherwise validate/download, compare, and back up before replacement. Untracked AppImages need one download for comparison. |
-| `--upgrade-packages` | `REBUILT_MACHINE_UPGRADE=1` | Opt in to `apt-get upgrade`, `pacman -Syu`, or `dnf upgrade`. |
+| `--upgrade-packages` | `REBUILT_MACHINE_UPGRADE=1` | Opt in to `apt-get upgrade`, `pacman -Syu`, or `dnf upgrade`. Pacman file-conflict recovery can also trigger a full sync. |
 | `--apply-defaults` | `REBUILT_MACHINE_APPLY_DEFAULTS=1` | Export dconf before changing desktop preferences, session selection, themes, menu and application defaults. Defer session settings to Cinnamon login when necessary. |
 | `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork, icon files and themes. Configured desktops retain preference selections unless `--apply-defaults` is also used. |
 | — | `REBUILT_MACHINE_HEADLESS=auto` | Detect sessions/installed session files; `1` forces server mode and `0` forces desktop mode. |
 | — | `REBUILT_MACHINE_REBOOT=1` | Opt in to reboot after success and a 30-second cancellation delay; default is `0`. |
 | — | `REBUILT_MACHINE_PKG_RETRIES=3` | Total install attempts per missing package; accepts a positive integer. Wait 2 seconds, then 4 seconds between the default three attempts. |
 
-Package installation retries use the existing package mappings and preserve
-installed packages. APT receives command-local `APT::Get::Retry` and
+Package installation retries use the existing package mappings and skip
+installed packages, except for the Arch `gcc-libs` prerequisite below.
+APT receives command-local `APT::Get::Retry` and
 `Acquire::Retries` defaults matching the attempt count, preserving either value
 when already configured; `Acquire::Retries` controls APT's download retries.
 Pacman transactions are retried in the script (there is no `--retry` flag), and
@@ -155,12 +157,31 @@ alternative. Fresh rebuilds install only the Java 17 runtime (`openjdk-17-jre`,
 fallback). An already installed Java 17 or 21 runtime is kept without adding
 another version. Existing redundant Java packages are not automatically removed.
 Individual apt installs use `--no-upgrade`; installing a missing
-package may still require dependency changes. Arch installs use the existing
-sync database, never `pacman -Sy`. If it is stale, explicitly opt in to a full
-upgrade with `--upgrade-packages`; partial upgrades are unsupported by Arch.
-See [Arch system maintenance](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported).
+package may still require dependency changes.
 Cron is enabled on Arch/Fedora only when its package was previously absent;
 existing service enablement choices are retained.
+
+### Arch and Manjaro package conflicts
+
+Before package installation, the script runs `sudo pacman -Sy --noconfirm` once
+to refresh the package database. Before installing a missing Java runtime, it
+installs or updates `gcc-libs` using `--needed`, even when that package is already
+installed. This checks the owner of `/usr/lib/libgcc_s.so.1` before OpenJDK.
+
+If an install fails with `conflicting files` or `exists in filesystem`, including
+`libgcc_s.so.1` / `gcc-libs` conflicts, the script runs
+`sudo pacman -Syu --noconfirm` once per run before the next install attempt.
+This recovery performs a full system upgrade even without `--upgrade-packages`;
+ordinary install failures do not trigger it. The existing
+`REBUILT_MACHINE_PKG_RETRIES` limit and backoff still apply: recovery requires a
+remaining attempt and does not add attempts. A failed recovery warns and the
+remaining install retries continue without another full sync.
+
+If you encounter package file conflicts, the script will automatically perform a system sync. If the issue persists, run `sudo pacman -Syu` manually before re-running the script.
+Arch does not support partial upgrades; see
+[Arch system maintenance](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported).
+
+### Desktop and server behavior
 
 Server mode skips Cinnamon and uses boot-time cron entries. It still installs a
 missing Hub AppImage on x86_64/ARM64; unsupported Hub architectures warn and keep
