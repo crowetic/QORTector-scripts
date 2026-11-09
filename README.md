@@ -100,8 +100,10 @@ bash ./rebuilt-machine.sh
 ```
 
 The default run fills missing packages, applications, desktop assets and
-schedules. It **does not upgrade the system, replace existing Core/Hub, apply
-desktop preferences, or reboot**. Existing Core directories are retained even
+schedules. Fresh desktop installs also receive the Qortal wallpaper, icon theme,
+and **Qortal OS** menu label/logo. Configured desktops retain their preferences.
+The script **does not upgrade the system, replace existing Core/Hub, or reboot**.
+Existing Core directories are retained even
 when stopped, syncing, inaccessible, or incomplete; incomplete installations warn
 for manual repair. User settings, helper scripts, launchers, disabled autostarts,
 matching Pictures files and existing theme directories are preserved. Desktop
@@ -113,8 +115,8 @@ mode still installs Cinnamon and optional desktop apps on a fresh machine.
 | `--update-core` | `REBUILT_MACHINE_UPDATE_CORE=1` | Download and validate the release; replace only a changed jar in an existing **stopped** Core. Preserve settings, database, keys, lists, data and custom scripts; back up the old jar. |
 | `--update-hub` | `REBUILT_MACHINE_UPDATE_HUB=1` | Check the release tag and recorded binary SHA-256; skip the binary download when current. Otherwise validate/download, compare, and back up before replacement. Untracked AppImages need one download for comparison. |
 | `--upgrade-packages` | `REBUILT_MACHINE_UPGRADE=1` | Opt in to `apt-get upgrade`, `pacman -Syu`, or `dnf upgrade`. |
-| `--apply-defaults` | `REBUILT_MACHINE_APPLY_DEFAULTS=1` | Export dconf before changing desktop preferences, session selection, themes, menu and application defaults. Add a missing first-login settings job. |
-| `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork, icon files and themes. Desktop preference selection still requires `--apply-defaults`. |
+| `--apply-defaults` | `REBUILT_MACHINE_APPLY_DEFAULTS=1` | Export dconf before changing desktop preferences, session selection, themes, menu and application defaults. Defer session settings to Cinnamon login when necessary. |
+| `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork, icon files and themes. Configured desktops retain preference selections unless `--apply-defaults` is also used. |
 | — | `REBUILT_MACHINE_HEADLESS=auto` | Detect sessions/installed session files; `1` forces server mode and `0` forces desktop mode. |
 | — | `REBUILT_MACHINE_REBOOT=1` | Opt in to reboot after success and a 30-second cancellation delay; default is `0`. |
 | — | `REBUILT_MACHINE_PKG_RETRIES=3` | Total install attempts per missing package; accepts a positive integer. Wait 2 seconds, then 4 seconds between the default three attempts. |
@@ -140,14 +142,19 @@ Cinnamon remain required. `--dry-run` previews each install once without queryin
 package state or APT configuration, invoking sudo, or sleeping.
 
 Boolean variables accept only `0` or `1`. To get the repository's desktop look on
-a fresh install, run `bash ./rebuilt-machine.sh --apply-defaults`. To update an
+a fresh install, run `bash ./rebuilt-machine.sh`. To reapply branding and all
+repository preferences on an existing desktop, use `--apply-defaults`. To update an
 existing Core, first stop it using `bash ~/qortal/stop.sh`; the rebuild refuses a
 jar update while this installation's JVM is running. Start it afterward with
 `bash ~/start-qortal-core.sh`. Ordinary reruns never stop or restart Core.
 The rebuild shares the maintenance lock with auto-fix.
 
 Installed package alternatives are kept rather than replaced by a preferred
-alternative. Individual apt installs use `--no-upgrade`; installing a missing
+alternative. Fresh rebuilds install only the Java 17 runtime (`openjdk-17-jre`,
+`jre17-openjdk`, or `java-17-openjdk`, with the Debian headless variant as a
+fallback). An already installed Java 17 or 21 runtime is kept without adding
+another version. Existing redundant Java packages are not automatically removed.
+Individual apt installs use `--no-upgrade`; installing a missing
 package may still require dependency changes. Arch installs use the existing
 sync database, never `pacman -Sy`. If it is stale, explicitly opt in to a full
 upgrade with `--upgrade-packages`; partial upgrades are unsupported by Arch.
@@ -163,9 +170,21 @@ Hub when a GUI is available. The rebuild uses its own preserve-existing install
 path; the standalone `Qortal-Setup-Linux.sh` retains its separate behavior above.
 
 After desktop setup, choose **Cinnamon** in the login-screen session selector.
-The rebuild does not switch the running desktop. Applying defaults adds a
-one-time Cinnamon autostart which backs up dconf again at first login. Without
-`--apply-defaults`, no defaults autostart is created. An **Apply Cinnamon Settings**
+The rebuild does not switch the running desktop. Fresh-install detection happens
+before setup writes configuration: it requires no setup state file, no nonempty
+`${XDG_CONFIG_HOME:-$HOME/.config}/dconf/user`, no `.dmrc`, and no modern/legacy
+Cinnamon menu configuration or user-installed menu applet. Any of these existing
+signals preserves preferences unless `--apply-defaults` is requested.
+
+Branding is applied immediately when a display and desktop D-Bus address are
+available. Over SSH, or after a failed preference write, it creates
+`${XDG_CONFIG_HOME:-$HOME/.config}/autostart/apply-cinnamon-settings.desktop`.
+This Cinnamon-only job backs up dconf at login and removes itself only after
+successful branding. Preference writes are read back to catch silent dconf commit
+failures. A fresh install applies branding only; full application/session/theme
+defaults remain opt-in. Server mode (`REBUILT_MACHINE_HEADLESS=1`) skips desktop
+setup entirely; use `REBUILT_MACHINE_HEADLESS=0` for desktop provisioning over SSH
+when installed session files cannot be detected. An **Apply Cinnamon Settings**
 launcher remains available for deliberate customization later.
 
 On machines without custom automation, Core starts at login, with maintenance
@@ -177,8 +196,9 @@ including when switching modes. Review existing schedules manually if changing
 between server and desktop operation.
 
 Helpers beside the rebuild take precedence over network downloads; Gitea is the
-fallback source. Existing home helpers are preserved by default; explicit `--apply-defaults`
-refreshes its desktop preference/icon helpers with backups so first-login
+fallback source. Existing home helpers are preserved by default; fresh branding
+refreshes its branding helper/settings with backups, and explicit `--apply-defaults`
+also refreshes its desktop preference/icon helpers so first-login
 configuration uses the current safety guards. The rebuild executes its
 current icon helper with preservation switches so an older installed copy cannot
 reset preferences. Scripts, JSON and archives are validated before use. Artwork
@@ -242,7 +262,14 @@ outside a rebuild.
 Running `bash ./apply-cinnamon-settings.sh` without an option also installs icons
 and applies desktop theme/wallpaper preferences. `--settings-only` applies those
 preferences and menu settings without rerunning icon installation;
-`--first-login` is used by the rebuild's one-time autostart. The companion
+`--branding-only` selects the wallpaper, `Yaru-blue-qortal` icon theme, and menu
+branding without changing application or window themes. Both wallpaper URI keys
+are set where Cinnamon provides `picture-uri-dark`; versions without that key
+use `picture-uri` for both appearances. The menu uses the installed
+`qortal-menu-button-2` icon and **Qortal OS** text in the menu applet's JSON settings,
+not a window-manager button-title key. Desktop modes require a display and D-Bus
+session. `--first-login [--branding-only|--settings-only]` is used by the rebuild's
+one-time autostart. The companion
 [`configure-terminal-and-more.sh`](configure-terminal-and-more.sh) handles
 application and terminal preferences during the rebuild.
 

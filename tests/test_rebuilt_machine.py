@@ -35,6 +35,8 @@ class RebuiltMachineTests(unittest.TestCase):
                     'XDG_CONFIG_HOME': str(self.config), 'XDG_DATA_HOME': str(self.data),
                     'PATH': str(self.bin) + ':' + os.environ['PATH'],
                     'REBUILD_TEST_LOG': str(self.log), 'REBUILD_TEST_CRON': str(self.cron),
+                    'REBUILD_TEST_GSETTINGS_STATE': str(self.root / 'gsettings'),
+                    'DISPLAY': '', 'WAYLAND_DISPLAY': '', 'DBUS_SESSION_BUS_ADDRESS': '',
                     'REBUILT_MACHINE_BACKUP_DIR': str(self.backup),
                     'REBUILT_MACHINE_REBOOT': '0'}
         # These commands never delegate to the real system.
@@ -43,10 +45,24 @@ class RebuiltMachineTests(unittest.TestCase):
         self.stub('wget', 'echo UNEXPECTED_NETWORK >&2; exit 99\n')
         self.stub('cinnamon', 'echo UNEXPECTED_CINNAMON_RESTART >&2; exit 99\n')
         self.stub('gsettings', '''printf 'gsettings %s\n' "$*" >> "$REBUILD_TEST_LOG"
-if [ "$1" = get ]; then
+state="$REBUILD_TEST_GSETTINGS_STATE/$2.${3:-}"
+if [ "$1" = set ]; then
+  case "${REBUILD_TEST_GSETTINGS_FAILURE:-}" in
+    fail) exit 1 ;;
+    silent) echo 'dconf-WARNING: failed to commit changes' >&2; exit 0 ;;
+  esac
+  mkdir -p "$REBUILD_TEST_GSETTINGS_STATE"
+  printf '%s' "$4" > "$state"
+elif [ "$1" = list-keys ]; then
+  echo picture-uri
+  [ "${REBUILD_TEST_NO_DARK_KEY:-0}" = 1 ] || echo picture-uri-dark
+elif [ "$1" = get ] && [ -f "$state" ]; then
+  python3 -c 'import pathlib, sys; print(repr(pathlib.Path(sys.argv[1]).read_text()))' "$state"
+elif [ "$1" = get ]; then
   case "$2" in
     org.cinnamon) printf '%s\n' "${REBUILD_TEST_APPLETS:-[]}" ;;
     org.gnome.Terminal.ProfilesList) echo "'11111111-2222-3333-4444-555555555555'" ;;
+    *) echo "''" ;;
   esac
 fi
 ''')
@@ -101,6 +117,42 @@ if [ "$1" = dump ]; then echo '[old]'; else cat >> "$REBUILD_TEST_LOG"; fi
             'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh'),
             'REBUILD_TEST_APPLETS': repr(applets)})
 
+    def desktop_artwork(self):
+        wallpaper = self.home / 'Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png'
+        wallpaper.parent.mkdir(parents=True, exist_ok=True)
+        wallpaper.write_bytes(b'wallpaper')
+        theme = self.home / '.icons/Yaru-blue-qortal'
+        (theme / '48x48/apps').mkdir(parents=True, exist_ok=True)
+        (theme / 'index.theme').write_text('[Icon Theme]\nName=Yaru-blue-qortal\n')
+        (theme / '48x48/apps/qortal-menu-button-2.png').write_bytes(b'logo')
+        return wallpaper
+
+    def desktop_checkout(self):
+        checkout = self.root / 'checkout'
+        checkout.mkdir()
+        for name in ('rebuilt-machine.sh', 'apply-cinnamon-settings.sh', 'cinnamon-settings.json',
+                     'configure-terminal-and-more.sh', 'auto-fix-qortal.sh', 'refresh-qortal.sh',
+                     'check-qortal-status.sh', 'start-qortal-core.sh'):
+            shutil.copy2(ROOT / name, checkout / name)
+        (checkout / 'create-icon-theme-uni.sh').write_text('#!/bin/bash\nexit 0\n')
+        self.env['TEST_CHECKOUT'] = str(checkout)
+        self.menu_schema()
+        self.desktop_artwork()
+        self.stub('sleep', 'exit 0\n')
+        return '''source "$TEST_CHECKOUT/rebuilt-machine.sh"
+id() { echo 1000; }
+package_installed() { return 0; }
+install_machine_artwork() { return 0; }
+install_sensors_applet() { return 0; }
+install_desktop_themes() { return 0; }
+install_qortal_core() { return 0; }
+install_qortal_hub() { return 0; }
+'''
+
+    def desktop_session(self):
+        return {'DISPLAY': ':99', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/mock/session',
+                'REBUILD_TEST_APPLETS': "['panel1:left:0:menu@cinnamon.org:7']"}
+
     def test_menu_migrates_schema_and_all_enabled_instances_at_40px(self):
         schema = self.menu_schema()
         for instance in ('3', '9'):
@@ -116,6 +168,8 @@ if [ "$1" = dump ]; then echo '[old]'; else cat >> "$REBUILD_TEST_LOG"; fi
             actual = json.loads(target.read_text())
             self.assertEqual(actual['menu-icon-size']['value'], 40)
             self.assertEqual(actual['menu-icon']['value'], 'qortal-menu-button-2')
+            self.assertTrue(actual['menu-custom']['value'])
+            self.assertEqual(actual['menu-label']['value'], 'Qortal OS')
             self.assertEqual(actual['new-version-setting']['value'], 99)
             self.assertEqual(actual['layout']['pages'], ['modern-layout'])
             self.assertNotIn('menu-height', actual)
@@ -241,7 +295,7 @@ install_machine_artwork''', extra_env={'TEST_ARCHIVE': str(archive)})
         self.assertEqual(result.stdout.splitlines(), [str(core), 'one argument'])
 
     def test_launchers_validate_with_spaces_in_home(self):
-        self.bash('APPLY_DEFAULTS=1; install_desktop_launchers')
+        self.bash('APPLY_DEFAULTS=1; queue_desktop_branding; install_desktop_launchers')
         if shutil.which('desktop-file-validate'):
             for path in list(self.data.rglob('*.desktop')) + list(self.config.rglob('*.desktop')):
                 result = subprocess.run(['desktop-file-validate', str(path)], capture_output=True, text=True)
@@ -327,6 +381,7 @@ main''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': 
 
     def test_complete_desktop_rebuild_and_first_login_with_mocked_commands(self):
         self.menu_schema()
+        self.desktop_artwork()
         checkout = self.root / 'checkout'
         checkout.mkdir()
         for name in ('rebuilt-machine.sh', 'apply-cinnamon-settings.sh', 'cinnamon-settings.json',
@@ -351,7 +406,7 @@ main --apply-defaults''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MA
         self.assertTrue((self.config / 'autostart/auto-fix-qortal-GUI.desktop').exists())
         self.stub('sleep', 'exit 0\n')
         self.bash('bash "$HOME/apply-cinnamon-settings.sh" --first-login', extra_env={
-            'REBUILD_TEST_APPLETS': "['panel1:left:0:menu@cinnamon.org:7']"})
+            **self.desktop_session()})
         self.assertFalse(once.exists())
         settings = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
         self.assertEqual(json.loads(settings.read_text())['menu-icon-size']['value'], 40)
@@ -363,6 +418,169 @@ sudo() { [[ "$*" != *update* ]]; }
 install_qortal_core() { echo UNEXPECTED_CORE_SETUP; }
 main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         self.assertNotIn('auto-fix-qortal.sh', self.cron.read_text())
+
+    def test_fresh_arch_desktop_applies_branding_and_rerun_preserves_changes(self):
+        code = self.desktop_checkout()
+        self.stub('pacman', 'exit 0\n')
+        env = {**self.os_release('arch'), **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0'}
+        # Arch need not provide XDG_CURRENT_DESKTOP for explicit Cinnamon settings.
+        env['XDG_CURRENT_DESKTOP'] = ''
+        self.bash(code + 'main', extra_env=env)
+        calls = self.log.read_text()
+        uri = (self.home / 'Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png').as_uri()
+        for key in ('picture-uri', 'picture-uri-dark'):
+            self.assertIn(f'gsettings set org.cinnamon.desktop.background {key} {uri}', calls)
+        self.assertIn('gsettings set org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal', calls)
+        menu = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
+        settings = json.loads(menu.read_text())
+        self.assertTrue(settings['menu-custom']['value'])
+        self.assertEqual(settings['menu-label']['value'], 'Qortal OS')
+        self.assertEqual(settings['menu-icon']['value'], 'qortal-menu-button-2')
+        self.assertFalse((self.home / '.dmrc').exists())
+        self.assertNotIn('color-scheme', calls)
+        self.assertFalse((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
+        # Personal edits after setup survive even without a real dconf file in this mock.
+        settings['menu-label']['value'] = 'My menu'
+        menu.write_text(json.dumps(settings))
+        saved_menu = menu.read_bytes()
+        theme_setting = self.root / 'gsettings/org.cinnamon.desktop.interface.icon-theme'
+        theme_setting.write_text('Personal-icons')
+        self.log.write_text('')
+        self.bash(code + 'main', extra_env=env)
+        self.assertEqual(menu.read_bytes(), saved_menu)
+        self.assertEqual(theme_setting.read_text(), 'Personal-icons')
+        self.assertNotIn('gsettings', self.log.read_text())
+        self.assertNotIn('dconf', self.log.read_text())
+
+    def test_fresh_desktop_over_ssh_defers_until_successful_first_login(self):
+        code = self.desktop_checkout()
+        env = {'REBUILT_MACHINE_HEADLESS': '0'}
+        self.bash(code + 'main', extra_env=env)
+        once = self.config / 'autostart/apply-cinnamon-settings.desktop'
+        entry = once.read_bytes()
+        self.assertIn(b'--first-login', entry)
+        self.assertIn(b'--branding-only', entry)
+        self.assertIn(b'OnlyShowIn=X-Cinnamon;', entry)
+        self.assertNotIn('gsettings', self.log.read_text())
+        self.assertNotIn('dconf', self.log.read_text())
+        self.bash(code + 'main', extra_env=env)
+        self.assertEqual(once.read_bytes(), entry)
+        # A failed/early login must retain the job, including a silent dconf failure.
+        for failure in ('fail', 'silent'):
+            with self.subTest(failure=failure):
+                self.bash('bash "$HOME/apply-cinnamon-settings.sh" --first-login --branding-only',
+                          success=False, extra_env={**self.desktop_session(),
+                                                    'REBUILD_TEST_GSETTINGS_FAILURE': failure})
+                self.assertTrue(once.exists())
+        self.bash('bash "$HOME/apply-cinnamon-settings.sh" --first-login --branding-only',
+                  extra_env=self.desktop_session())
+        self.assertFalse(once.exists())
+        menu = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
+        self.assertEqual(json.loads(menu.read_text())['menu-label']['value'], 'Qortal OS')
+        self.assertTrue(list(self.backup.glob('first-login-*.dconf')))
+
+    def test_desktop_without_dbus_defers_and_retains_job_if_login_has_no_display(self):
+        code = self.desktop_checkout()
+        self.bash(code + 'main --apply-defaults', extra_env={
+            'REBUILT_MACHINE_HEADLESS': '0', 'DISPLAY': ':99'})
+        once = self.config / 'autostart/apply-cinnamon-settings.desktop'
+        self.assertTrue(once.exists())
+        self.assertNotIn('gsettings', self.log.read_text())
+        self.bash('bash "$HOME/apply-cinnamon-settings.sh" --first-login', success=False)
+        self.assertTrue(once.exists())
+
+    def test_failed_live_branding_is_queued_for_retry(self):
+        code = self.desktop_checkout()
+        result = self.bash(code + 'main', extra_env={
+            **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0',
+            'REBUILD_TEST_GSETTINGS_FAILURE': 'silent'})
+        self.assertIn('Could not persist', result.stderr)
+        self.assertTrue((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
+
+    def test_live_dconf_backup_failure_defers_without_changing_preferences(self):
+        code = self.desktop_checkout()
+        self.stub('dconf', 'echo cannot-export >&2; exit 1\n')
+        self.bash(code + 'main', extra_env={
+            **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0'})
+        self.assertNotIn('gsettings', self.log.read_text())
+        self.assertTrue((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
+
+    def test_explicit_defaults_reapply_branding_on_configured_live_desktop(self):
+        code = self.desktop_checkout()
+        dconf = self.config / 'dconf/user'
+        dconf.parent.mkdir(parents=True)
+        dconf.write_bytes(b'existing dconf')
+        self.bash(code + 'main --apply-defaults', extra_env={
+            **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0'})
+        calls = self.log.read_text()
+        self.assertIn('gsettings set org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal', calls)
+        self.assertIn('gsettings set org.gnome.desktop.interface color-scheme prefer-dark', calls)
+        self.assertIn('Session = cinnamon', (self.home / '.dmrc').read_text())
+        self.assertFalse((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
+        self.assertTrue(list((self.home / 'backups').glob('rebuilt-machine-*/desktop.dconf')))
+
+    def test_branding_handles_cinnamon_without_dark_wallpaper_key(self):
+        self.menu_schema()
+        self.desktop_artwork()
+        result = self.bash('bash "$MENU_HELPER" --branding-only', extra_env={
+            **self.desktop_session(), 'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh'),
+            'REBUILD_TEST_NO_DARK_KEY': '1'})
+        self.assertIn('no picture-uri-dark key', result.stdout)
+        calls = self.log.read_text()
+        self.assertIn('set org.cinnamon.desktop.background picture-uri ', calls)
+        self.assertNotIn('set org.cinnamon.desktop.background picture-uri-dark', calls)
+        self.assertIn('icon-theme Yaru-blue-qortal', calls)
+
+    def test_existing_desktop_config_is_preserved_without_setup_history(self):
+        self.bash('is_fresh_desktop')
+        dconf = self.config / 'dconf/user'
+        dconf.parent.mkdir(parents=True)
+        dconf.touch()
+        self.bash('is_fresh_desktop')
+        for path in (dconf, self.home / '.qortector-setup-state.json', self.home / '.dmrc',
+                     self.config / 'cinnamon/spices/menu@cinnamon.org/7.json',
+                     self.home / '.cinnamon/configs/menu@cinnamon.org/7.json',
+                     self.data / 'cinnamon/applets/menu@cinnamon.org/metadata.json'):
+            with self.subTest(path=path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('existing settings')
+                self.bash('is_fresh_desktop', success=False)
+                path.unlink()
+                # Menu directory presence itself is the preservation signal.
+                if path.name in ('7.json', 'metadata.json'):
+                    path.parent.rmdir()
+
+    def test_only_java_17_is_requested_on_fresh_installs_for_all_managers(self):
+        for manager, expected in (('apt-get', 'openjdk-17-jre'), ('pacman', 'jre17-openjdk'),
+                                  ('dnf', 'java-17-openjdk')):
+            with self.subTest(manager=manager):
+                self.log.unlink(missing_ok=True)
+                self.bash(f'''PKG_MANAGER={manager}
+package_installed() {{ return 1; }}
+package_available() {{ return 0; }}
+install_java_runtime''')
+                calls = self.log.read_text().splitlines()
+                self.assertEqual(len(calls), 1)
+                self.assertIn(expected, calls[0])
+                self.assertNotIn('21', calls[0])
+
+    def test_existing_java_21_does_not_cause_a_second_runtime_install(self):
+        for manager, existing in (('apt-get', 'openjdk-21-jre'), ('pacman', 'jre21-openjdk'),
+                                  ('dnf', 'java-21-openjdk')):
+            with self.subTest(manager=manager):
+                self.bash(f'''PKG_MANAGER={manager}
+package_installed() {{ [ "$1" = {existing} ]; }}
+package_available() {{ echo UNEXPECTED_PACKAGE_QUERY; exit 99; }}
+install_java_runtime''')
+                self.assertFalse(self.log.exists())
+
+    def test_missing_java_17_never_falls_back_to_installing_java_21(self):
+        result = self.bash('''PKG_MANAGER=pacman
+package_installed() { return 1; }
+package_available() { echo "query $1" >&2; return 1; }
+install_java_runtime''', success=False)
+        self.assertIn('query jre17-openjdk', result.stderr)
+        self.assertNotIn('query jre21-openjdk', result.stderr)
 
     def test_hub_launcher_retains_fuse_extraction_fallback(self):
         # Exercise the real installer launcher-writing section without installing Core/Hub.

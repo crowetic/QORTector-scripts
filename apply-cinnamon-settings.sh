@@ -81,35 +81,74 @@ for instance in sorted(instances):
 PYMENU
 }
 
+set_desktop_setting() {
+  local actual
+  gsettings set "$1" "$2" "$3" || return 1
+  # dconf can report a commit failure on stderr while gsettings exits zero.
+  # Read back in a separate process before considering the preference applied.
+  actual=$(gsettings get "$1" "$2") || return 1
+  if ! python3 - "$3" "$actual" <<'PYCHECK'
+import ast
+import sys
+sys.exit(0 if ast.literal_eval(sys.argv[2]) == sys.argv[1] else 1)
+PYCHECK
+  then
+    echo "Could not persist $1 $2; desktop branding must be retried." >&2
+    return 1
+  fi
+}
+
+apply_desktop_branding() {
+  local wallpaper="$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" value keys
+  if [ ! -s "$wallpaper" ] || [ ! -f "$HOME/.icons/Yaru-blue-qortal/index.theme" ] || \
+      [ ! -s "$HOME/.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png" ]; then
+    echo 'Qortal wallpaper or icon theme is missing; rerun rebuilt-machine.sh to repair artwork.' >&2
+    return 1
+  fi
+  value=$(python3 - "$wallpaper" <<'PYURI'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).as_uri())
+PYURI
+) || return 1
+  set_desktop_setting org.cinnamon.desktop.background picture-uri "$value" || return 1
+  keys=$(gsettings list-keys org.cinnamon.desktop.background) || return 1
+  if grep -Fxq picture-uri-dark <<< "$keys"; then
+    set_desktop_setting org.cinnamon.desktop.background picture-uri-dark "$value" || return 1
+  else
+    echo 'Cinnamon has no picture-uri-dark key; picture-uri is used for both appearances.'
+  fi
+  set_desktop_setting org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal
+}
+
 apply_desktop_themes() {
   # Do not select themes that failed to download or do not support this widget set.
-  local theme_root part schema key value wallpaper
+  local theme_root part schema key value
   for part in 'gtk-3.0:org.cinnamon.desktop.interface:gtk-theme:Windows-10-Dark' \
       'metacity-1:org.cinnamon.desktop.wm.preferences:theme:Windows-10-Dark' \
       'cinnamon:org.cinnamon.theme:name:Windows-10'; do
     IFS=: read -r theme_root schema key value <<< "$part"
     if [ -d "$HOME/.themes/$value/$theme_root" ] || [ -d "/usr/share/themes/$value/$theme_root" ]; then
-      gsettings set "$schema" "$key" "$value" || echo "Could not select $value for $schema." >&2
+      set_desktop_setting "$schema" "$key" "$value" || return 1
     fi
   done
-  wallpaper="$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png"
-  if [ -f "$wallpaper" ]; then
-    value=$(python3 - "$wallpaper" <<'PYURI'
-from pathlib import Path
-import sys
-print(Path(sys.argv[1]).as_uri())
-PYURI
-)
-    gsettings set org.cinnamon.desktop.background picture-uri "$value" || true
-  fi
-  gsettings set org.gnome.desktop.interface color-scheme prefer-dark || true
+  gsettings set org.gnome.desktop.interface color-scheme prefer-dark || echo 'Could not request dark mode.' >&2
 }
 
 main() {
   set -euo pipefail
-  local mode="${1:-all}"
-  case "$mode" in all|--menu-only|--settings-only|--first-login) ;; *) echo 'Usage: apply-cinnamon-settings.sh [--menu-only|--settings-only|--first-login]' >&2; return 1 ;; esac
+  local mode="${1:-all}" first_login=0
   if [ "$mode" = --first-login ]; then
+    first_login=1
+    mode="${2:---settings-only}"
+    case "$mode" in --branding-only|--settings-only) ;; *) echo 'Invalid first-login mode.' >&2; return 1 ;; esac
+  fi
+  case "$mode" in all|--menu-only|--settings-only|--branding-only) ;; *) echo 'Usage: apply-cinnamon-settings.sh [--menu-only|--branding-only|--settings-only|--first-login [--branding-only|--settings-only]]' >&2; return 1 ;; esac
+  if [ "$mode" != --menu-only ] && { [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; }; then
+    echo 'No desktop D-Bus session; leaving first-login branding queued.' >&2
+    return 1
+  fi
+  if [ "$first_login" = 1 ]; then
     sleep 5
     # The first login can occur long after setup. Save the current state again
     # before any gsettings changes, rather than relying on the setup-time copy.
@@ -117,18 +156,22 @@ main() {
     command -v dconf >/dev/null || { echo 'dconf is required before applying first-login defaults.' >&2; return 1; }
     mkdir -p "$backup"
     dconf dump / > "$backup/first-login-$(date +%s%N).dconf"
-    export QORTAL_ICONS_PRESERVE_EXISTING=1
   fi
-  if [ "$mode" = all ] || [ "$mode" = --first-login ]; then
-    if ! bash "$SETTINGS_SCRIPT_DIR/create-icon-theme-uni.sh"; then
+  if [ "$mode" = all ]; then
+    if ! QORTAL_ICONS_SELECT_THEME=0 bash "$SETTINGS_SCRIPT_DIR/create-icon-theme-uni.sh"; then
       echo 'Qortal icon installation failed. Run create-icon-theme-uni.sh to retry.' >&2
       return 1
     fi
-    gsettings set org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal || true
   fi
-  if [ "$mode" != --menu-only ]; then apply_desktop_themes; fi
+  if [ "$mode" != --menu-only ]; then
+    if [ "$mode" != --branding-only ]; then apply_desktop_themes; fi
+    apply_desktop_branding
+  fi
   apply_menu_settings
-  if [ "$mode" = --first-login ]; then
+  if [ "$first_login" = 1 ]; then
+    if [ "$mode" = --settings-only ]; then
+      REBUILT_MACHINE_BACKUP_DIR="$backup" bash "$SETTINGS_SCRIPT_DIR/configure-terminal-and-more.sh" || echo 'Some optional desktop preferences could not be applied.' >&2
+    fi
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/apply-cinnamon-settings.desktop"
   fi
 }

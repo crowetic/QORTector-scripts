@@ -108,7 +108,7 @@
         "description": "Text",
         "tooltip": "Enter custom text to show in the panel.",
         "dependency": "menu-custom",
-        "value": "ortal-OS"
+        "value": "Qortal OS"
     },
     "restrict-menu-height": {
         "type": "switch",

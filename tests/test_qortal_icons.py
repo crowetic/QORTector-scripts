@@ -240,7 +240,9 @@ cp "$archive" "$out"
         (self.bin / 'bash').symlink_to(BASH)
         for command in ('dirname',):
             (self.bin / command).symlink_to(shutil.which(command))
-        result = subprocess.run([BASH, str(settings)], env=self.env, cwd=self.home,
+        result = subprocess.run([BASH, str(settings)],
+                                env={**self.env, 'DISPLAY': ':99',
+                                     'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/mock/session'}, cwd=self.home,
                                 capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Qortal icon installation failed', result.stderr)

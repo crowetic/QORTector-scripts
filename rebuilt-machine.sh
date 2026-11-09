@@ -19,6 +19,7 @@ UPDATE_CORE=${REBUILT_MACHINE_UPDATE_CORE:-0}
 UPDATE_HUB=${REBUILT_MACHINE_UPDATE_HUB:-0}
 UPGRADE_PACKAGES=${REBUILT_MACHINE_UPGRADE:-0}
 APPLY_DEFAULTS=${REBUILT_MACHINE_APPLY_DEFAULTS:-0}
+APPLY_BRANDING=0
 FORCE_ARTWORK=${REBUILT_MACHINE_FORCE_ARTWORK:-0}
 PKG_MANAGER=""
 HUB_SANDBOX_FLAG=""
@@ -41,6 +42,7 @@ REBUILT_MACHINE_HEADLESS=auto|1|0 selects automatic/server/desktop mode.
 REBUILT_MACHINE_PKG_RETRIES=3 sets total package install attempts (positive integer).
 Failed noncritical packages warn and continue; required packages stop setup.
 Existing Core/Hub, preferences, custom cron and autostarts are preserved by default.
+Fresh desktop installs receive Qortal branding; SSH setup defers it to Cinnamon login.
 HELP
 }
 
@@ -328,6 +330,20 @@ is_headless_mode() {
   return 0
 }
 
+is_fresh_desktop() {
+  local config="${XDG_CONFIG_HOME:-$HOME/.config}"
+  # Absence of setup history alone must never reset an existing user's desktop.
+  [ ! -e "$HOME/.qortector-setup-state.json" ] &&
+    [ ! -s "$config/dconf/user" ] && [ ! -e "$HOME/.dmrc" ] &&
+    [ ! -d "$config/cinnamon/spices/menu@cinnamon.org" ] &&
+    [ ! -d "$HOME/.cinnamon/configs/menu@cinnamon.org" ] &&
+    [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/cinnamon/applets/menu@cinnamon.org" ]
+}
+
+desktop_session_available() {
+  [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]
+}
+
 package_available() {
   case "${PKG_MANAGER:-apt-get}" in
     apt-get)
@@ -366,6 +382,17 @@ install_first_available_package() {
   return 1
 }
 
+install_java_runtime() {
+  local package mapped
+  # Keep an already installed supported runtime, including the former Java 21
+  # default. Fresh installs request only Java 17, never a second major version.
+  for package in openjdk-17-jre openjdk-17-jre-headless openjdk-21-jre openjdk-21-jre-headless; do
+    mapped=$(map_package "$package") || continue
+    if package_installed "$mapped"; then return 0; fi
+  done
+  install_first_available_package openjdk-17-jre openjdk-17-jre-headless
+}
+
 ensure_qortal_setup_script() {
   QORTAL_SETUP_SCRIPT="$HOME/Qortal-Setup-Linux.sh"
   install_repo_file Qortal-Setup-Linux.sh "$QORTAL_SETUP_SCRIPT"
@@ -386,10 +413,9 @@ install_qortal_icons() {
     helper="$work/create-icon-theme-uni.sh"
     download_with_retry "$REPO_URL/create-icon-theme-uni.sh" "$helper" || { rm -rf "$work"; return 1; }
   fi
-  local select_theme=0
-  if [ "${HEADLESS_MODE:-false}" = false ]; then select_theme=$APPLY_DEFAULTS; fi
+  # Preference writes belong to the session-aware branding helper below.
   QORTAL_ICONS_PRESERVE_EXISTING="$((1 - FORCE_ARTWORK))" \
-    QORTAL_ICONS_SELECT_THEME="$select_theme" bash "$helper" || status=$?
+    QORTAL_ICONS_SELECT_THEME=0 bash "$helper" || status=$?
   [ -z "$work" ] || rm -rf "$work"
   return "$status"
 }
@@ -472,11 +498,13 @@ write_missing_file() {
 
 backup_desktop_settings() {
   command_exists dconf || { echo 'dconf is required before applying desktop defaults.' >&2; return 1; }
-  dconf dump / > "$BACKUP_DIR/desktop.dconf"
-  backup_file "$HOME/.dmrc"
+  dconf dump / > "$BACKUP_DIR/desktop.dconf" || return 1
+  backup_file "$HOME/.dmrc" || return 1
   local directory
   for directory in "$HOME/.icons/Yaru-blue-qortal" "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"; do
-    [ ! -d "$directory" ] || cp -a "$directory" "$BACKUP_DIR/$(basename "$directory")"
+    if [ -d "$directory" ]; then
+      cp -a "$directory" "$BACKUP_DIR/$(basename "$directory")" || return 1
+    fi
   done
 }
 
@@ -500,6 +528,40 @@ autostart_has_script() {
     if grep -E '^[[:space:]]*Exec=' "$entry" | grep -F "$1" >/dev/null; then return 0; fi
   done
   return 1
+}
+
+queue_desktop_branding() {
+  local mode=--branding-only
+  [ "$APPLY_DEFAULTS" = 0 ] || mode=--settings-only
+  if ! autostart_has_script apply-cinnamon-settings.sh; then
+    write_missing_file "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/apply-cinnamon-settings.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Exec=$(desktop_exec "$HOME/apply-cinnamon-settings.sh" --first-login "$mode")
+OnlyShowIn=X-Cinnamon;
+NoDisplay=true
+Name=Finish Qortal Cinnamon Setup
+Icon=qortal
+EOF
+  fi
+  echo 'Qortal desktop branding queued for the next Cinnamon login.'
+}
+
+apply_or_defer_desktop_branding() {
+  [ "$APPLY_BRANDING" = 1 ] || return 0
+  local mode=--branding-only
+  [ "$APPLY_DEFAULTS" = 0 ] || mode=--settings-only
+  if desktop_session_available; then
+    if backup_desktop_settings && \
+        REBUILT_MACHINE_BACKUP_DIR="$BACKUP_DIR" bash "$HOME/apply-cinnamon-settings.sh" "$mode"; then
+      if [ "$APPLY_DEFAULTS" = 1 ]; then
+        REBUILT_MACHINE_BACKUP_DIR="$BACKUP_DIR" bash "$HOME/configure-terminal-and-more.sh" || warn 'Some optional desktop preferences could not be applied.'
+      fi
+      return 0
+    fi
+    warn 'Desktop branding could not be applied in this session; retrying at Cinnamon login.'
+  fi
+  queue_desktop_branding
 }
 
 install_desktop_launchers() {
@@ -536,17 +598,6 @@ Comment=Apply Qortal desktop settings and the 40-pixel menu icon
 Terminal=false
 Categories=Settings;
 EOF
-  if [ "$APPLY_DEFAULTS" = 1 ] && ! autostart_has_script apply-cinnamon-settings.sh; then
-    write_missing_file "$config/autostart/apply-cinnamon-settings.desktop" <<EOF
-[Desktop Entry]
-Type=Application
-Exec=$(desktop_exec "$HOME/apply-cinnamon-settings.sh" --first-login)
-OnlyShowIn=X-Cinnamon;
-NoDisplay=true
-Name=Finish Qortal Cinnamon Setup
-Icon=qortal
-EOF
-  fi
   # Existing cron schedules take precedence over adding a second GUI trigger.
   if ! autostart_has_script auto-fix-qortal.sh && ! LC_ALL=C crontab -l 2>/dev/null | sed '/^[[:space:]]*#/d' | grep 'auto-fix-qortal[.]sh' >/dev/null; then
     write_missing_file "$config/autostart/auto-fix-qortal-GUI.desktop" <<EOF
@@ -807,7 +858,9 @@ preview_setup() {
   if [ "$HEADLESS_MODE" = false ]; then
     echo '[dry-run] Install missing Cinnamon packages, themes, applet and launchers'
     if [ "$APPLY_DEFAULTS" = 1 ]; then
-      echo '[dry-run] Back up dconf and desktop files, apply repo preferences, add missing first-login defaults job'
+      echo '[dry-run] Back up desktop files; apply repo preferences in a session or queue them for Cinnamon login'
+    elif [ "$APPLY_BRANDING" = 1 ]; then
+      echo '[dry-run] Fresh desktop: apply Qortal wallpaper, icons and menu branding, or queue them for Cinnamon login'
     else
       echo '[dry-run] Preserve desktop preferences and session selection'
     fi
@@ -826,6 +879,10 @@ main() {
   detect_distro
   HEADLESS_MODE=false
   if is_headless_mode; then HEADLESS_MODE=true; fi
+  APPLY_BRANDING=0
+  if [ "$HEADLESS_MODE" = false ] && { [ "$APPLY_DEFAULTS" = 1 ] || is_fresh_desktop; }; then
+    APPLY_BRANDING=1
+  fi
   printf 'Rebuilt-machine setup: %s mode\n' "$([ "$HEADLESS_MODE" = true ] && echo headless || echo desktop)"
   if [ "$DRY_RUN" = 1 ]; then preview_setup; return 0; fi
   if [ "$(id -u)" -eq 0 ]; then
@@ -851,7 +908,7 @@ main() {
   install_packages_if_available openssh-server vim zlib1g-dev htop net-tools ffmpeg sysbench smartmontools fonts-symbola lm-sensors xdg-utils
   install_first_available_package 7zip p7zip-full || warn 'No supported 7-Zip package could be installed.'
   install_first_available_package btop bpytop || warn 'No optional system monitor could be installed.'
-  install_first_available_package openjdk-21-jre openjdk-21-jre-headless openjdk-17-jre openjdk-17-jre-headless || { echo 'A supported Java runtime is required.' >&2; return 1; }
+  install_java_runtime || { echo 'A supported Java runtime is required (Java 17 packages unavailable).' >&2; return 1; }
   install_first_available_package libfuse2t64 libfuse2 || warn 'FUSE2 unavailable; Hub will use AppImage extraction mode.'
   if [ "$HEADLESS_MODE" = false ]; then
     # Fedora and Arch ship Cinnamon in the normal repositories. Never enable a
@@ -863,7 +920,7 @@ main() {
     install_first_available_package papers evince || warn 'No supported PDF viewer could be installed.'
     install_sensors_applet || warn 'Sensors Monitor applet installation failed.'
     if [ "$APPLY_DEFAULTS" = 1 ]; then
-      backup_desktop_settings
+      backup_file "$HOME/.dmrc"
       if command_exists pro; then sudo pro config set apt_news=false || warn 'Could not disable Ubuntu Pro terminal news.'; fi
       python3 - <<'PYSESSION'
 import configparser
@@ -901,15 +958,12 @@ PYSESSION
   install_qortal_menu
   if [ "$HEADLESS_MODE" = false ]; then
     install_desktop_themes
-    # Explicit preference application refreshes its helpers with backups, so a
-    # legacy first-login helper cannot bypass dconf/artwork preservation.
-    install_repo_file cinnamon-settings.json "$HOME/cinnamon-settings.json" 644 "$APPLY_DEFAULTS"
-    install_repo_file apply-cinnamon-settings.sh "$HOME/apply-cinnamon-settings.sh" 755 "$APPLY_DEFAULTS"
+    # Refresh branding helpers when applying them, including after a partial
+    # first install, so a preserved legacy helper cannot bypass session guards.
+    install_repo_file cinnamon-settings.json "$HOME/cinnamon-settings.json" 644 "$APPLY_BRANDING"
+    install_repo_file apply-cinnamon-settings.sh "$HOME/apply-cinnamon-settings.sh" 755 "$APPLY_BRANDING"
     install_repo_file configure-terminal-and-more.sh "$HOME/configure-terminal-and-more.sh" 755 "$APPLY_DEFAULTS"
-    if [ "$APPLY_DEFAULTS" = 1 ]; then
-      REBUILT_MACHINE_BACKUP_DIR="$BACKUP_DIR" bash "$HOME/apply-cinnamon-settings.sh" --settings-only
-      REBUILT_MACHINE_BACKUP_DIR="$BACKUP_DIR" bash "$HOME/configure-terminal-and-more.sh" || warn 'Some optional desktop preferences could not be applied.'
-    fi
+    apply_or_defer_desktop_branding
     install_desktop_launchers
     echo 'Choose Cinnamon in the login-screen session selector when ready.'
   fi
