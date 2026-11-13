@@ -776,8 +776,14 @@ install_qortal_icons() {
 }
 
 install_machine_artwork() {
-  local work marker="$HOME/Pictures/.qortector-artwork-installed"
-  if [ "$FORCE_ARTWORK" = 0 ] && [ -f "$marker" ]; then echo 'Artwork already installed; keeping it.'; return 0; fi
+  local work asset marker="$HOME/Pictures/.qortector-artwork-installed"
+  # A marker from a partial/older install must not hide missing branding assets.
+  if [ "$FORCE_ARTWORK" = 0 ] && [ -f "$marker" ] && \
+      [ -s "$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" ] && \
+      [ -s "$HOME/Pictures/icons/icons_theme/qortal-menu-button-2.png" ]; then
+    echo 'Artwork already installed; keeping it.'
+    return 0
+  fi
   if [ "$DRY_RUN" = 1 ]; then echo '[dry-run] Install missing artwork'; return 0; fi
   work=$(mktemp -d) || return 1
   if download_with_retry 'https://cloud.qortal.org/s/machinefilesnew/download' "$work/machine.zip" && \
@@ -789,6 +795,14 @@ install_machine_artwork() {
       rsync -a "$work/Machine-files/Pictures/" "$HOME/Pictures/" || { rm -rf "$work"; return 1; }
     else
       rsync -a --ignore-existing "$work/Machine-files/Pictures/" "$HOME/Pictures/" || { rm -rf "$work"; return 1; }
+      # --ignore-existing also keeps zero-byte files left by interrupted copies.
+      for asset in wallpapers/Qortal-TheFuture-Wallpaper.png icons/icons_theme/qortal-menu-button-2.png; do
+        if [ -f "$HOME/Pictures/$asset" ] && [ ! -L "$HOME/Pictures/$asset" ] && \
+            [ ! -s "$HOME/Pictures/$asset" ] && [ -s "$work/Machine-files/Pictures/$asset" ]; then
+          backup_file "$HOME/Pictures/$asset" || { rm -rf "$work"; return 1; }
+          cp -p "$work/Machine-files/Pictures/$asset" "$HOME/Pictures/$asset" || { rm -rf "$work"; return 1; }
+        fi
+      done
     fi
     touch "$marker"
   else

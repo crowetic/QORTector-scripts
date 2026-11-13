@@ -101,7 +101,7 @@ bash ./rebuilt-machine.sh
 
 The default run fills missing packages, applications, desktop assets and
 schedules. Fresh desktop installs also receive the Qortal wallpaper, icon theme,
-and **Qortal OS** menu label/logo. Configured desktops retain their preferences.
+and **Qortal-OS** menu label/logo. Configured desktops retain their preferences.
 System upgrades require `--upgrade-packages`, except for the Arch file/dependency-conflict
 recovery described below. The script **does not replace existing Core/Hub or reboot**.
 Existing Core directories are retained even
@@ -380,9 +380,10 @@ also refreshes its desktop preference/icon helpers so first-login
 configuration uses the current safety guards. The rebuild executes its
 current icon helper with preservation switches so an older installed copy cannot
 reset preferences. Scripts, JSON and archives are validated before use. Artwork
-is merged without replacing matching files, then marked with
-`~/Pictures/.qortector-artwork-installed` to skip future bundle downloads. Remove
-that marker to fill missing artwork again, or use `--force-artwork` to replace it.
+is merged without replacing nonempty matching files, then marked with
+`~/Pictures/.qortector-artwork-installed` to skip future bundle downloads while
+the menu logo and wallpaper remain present. Remove that marker to fill other
+missing artwork again, or use `--force-artwork` to replace it.
 `~/.qortector-setup-state.json` records the last successful run, distro, package
 manager and backup directory for reference; it does not override file checks.
 
@@ -432,7 +433,10 @@ Keep `cinnamon-settings.json` beside the helper. It merges preferences with the
 installed Cinnamon menu schema for **each enabled menu instance** under
 `${XDG_CONFIG_HOME:-$HOME/.config}/cinnamon/spices/menu@cinnamon.org/`. It preserves
 new schema entries and existing values where no preference overrides them,
-uses a **40-pixel** menu icon, and can migrate legacy `~/.cinnamon/configs/` values.
+uses a **40-pixel** menu icon, **36-pixel** category icons, **40-pixel** favorites
+icons, and **22-pixel** application icons. Newer Cinnamon versions use
+`sidebar-icon-size` for the favorites area; both schema versions are supported.
+The helper can migrate legacy `~/.cinnamon/configs/` values.
 It does not assume the menu instance is `0` or re-enable a disabled menu applet.
 Previous menu settings are backed up under `~/backups/cinnamon-menu/` when used
 outside a rebuild.
@@ -441,15 +445,27 @@ Running `bash ./apply-cinnamon-settings.sh` without an option also installs icon
 and applies desktop theme/wallpaper preferences. `--settings-only` applies those
 preferences and menu settings without rerunning icon installation;
 `--branding-only` selects the wallpaper, `Yaru-blue-qortal` icon theme, and menu
-branding without changing application or window themes. Both wallpaper URI keys
-are set where Cinnamon provides `picture-uri-dark`; versions without that key
-use `picture-uri` for both appearances. The menu uses the installed
-`qortal-menu-button-2` icon and **Qortal OS** text in the menu applet's JSON settings,
+branding without changing application or window themes. The Future wallpaper is
+`~/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png`. Both `picture-uri` and
+`picture-uri-dark` are set for the installed `org.cinnamon.desktop.background`
+and `org.gnome.desktop.background` schemas; versions without the dark key use
+`picture-uri` for both appearances. `picture-options` is set to `zoom` where
+available so a previous `none` setting cannot hide the image. The menu uses the
+actual `qortal-menu-button-2.png` from `~/Pictures/icons/icons_theme/` (or the
+installed Qortal icon theme), with **Qortal-OS** text in the menu applet's JSON settings,
 not a window-manager button-title key. Desktop modes require a display and D-Bus
 session. `--first-login [--branding-only|--settings-only]` is used by the rebuild's
 one-time autostart. The companion
 [`configure-terminal-and-more.sh`](configure-terminal-and-more.sh) handles
 application and terminal preferences during the rebuild.
+
+On a machine already set up with an older rebuild, run
+`bash ./rebuilt-machine.sh --apply-defaults` from an updated checkout to repair
+assets and reapply these settings with backups. Missing or empty branding assets
+are repaired even if the artwork install marker already exists. To apply only
+branding after repairing assets, run `bash ./apply-cinnamon-settings.sh --branding-only`
+in the desktop session. GNOME Shell has no standard Cinnamon menu applet; menu
+branding takes effect in the Cinnamon session installed by the rebuild.
 
 These repairs do not reinstall Core/Hub. Log out and back in if the panel still
 shows cached icons; a full machine reboot is not required.

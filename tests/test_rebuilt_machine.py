@@ -51,7 +51,7 @@ class RebuiltMachineTests(unittest.TestCase):
         self.stub('wget', 'echo UNEXPECTED_NETWORK >&2; exit 99\n')
         self.stub('cinnamon', 'echo UNEXPECTED_CINNAMON_RESTART >&2; exit 99\n')
         self.stub('gsettings', '''printf 'gsettings %s\n' "$*" >> "$REBUILD_TEST_LOG"
-state="$REBUILD_TEST_GSETTINGS_STATE/$2.${3:-}"
+state="$REBUILD_TEST_GSETTINGS_STATE/${2:-}.${3:-}"
 if [ "$1" = set ]; then
   case "${REBUILD_TEST_GSETTINGS_FAILURE:-}" in
     fail) exit 1 ;;
@@ -59,9 +59,12 @@ if [ "$1" = set ]; then
   esac
   mkdir -p "$REBUILD_TEST_GSETTINGS_STATE"
   printf '%s' "$4" > "$state"
+elif [ "$1" = list-schemas ]; then
+  printf '%s\n' "${REBUILD_TEST_BACKGROUND_SCHEMAS:-org.cinnamon.desktop.background org.gnome.desktop.background}" | tr ' ' '\n'
 elif [ "$1" = list-keys ]; then
   echo picture-uri
   [ "${REBUILD_TEST_NO_DARK_KEY:-0}" = 1 ] || echo picture-uri-dark
+  echo picture-options
 elif [ "$1" = get ] && [ -f "$state" ]; then
   python3 -c 'import pathlib, sys; print(repr(pathlib.Path(sys.argv[1]).read_text()))' "$state"
 elif [ "$1" = get ]; then
@@ -110,6 +113,9 @@ if [ "$1" = dump ]; then echo '[old]'; else cat >> "$REBUILD_TEST_LOG"; fi
             'menu-icon': {'type': 'iconfilechooser', 'default': 'cinnamon-symbolic'},
             'menu-custom': {'type': 'switch', 'default': False},
             'menu-label': {'type': 'entry', 'default': 'Menu'},
+            'category-icon-size': {'type': 'spinbutton', 'default': 22},
+            'application-icon-size': {'type': 'spinbutton', 'default': 22},
+            'fav-icon-size': {'type': 'spinbutton', 'default': 32},
             'new-version-setting': {'type': 'generic', 'default': 12},
         }
         path = self.root / 'menu-schema/settings-schema.json'
@@ -175,13 +181,39 @@ install_qortal_hub() { return 0; }
             self.assertEqual(actual['menu-icon-size']['value'], 40)
             self.assertEqual(actual['menu-icon']['value'], 'qortal-menu-button-2')
             self.assertTrue(actual['menu-custom']['value'])
-            self.assertEqual(actual['menu-label']['value'], 'Qortal OS')
+            self.assertEqual(actual['menu-label']['value'], 'Qortal-OS')
+            self.assertEqual(actual['category-icon-size']['value'], 36)
+            self.assertEqual(actual['fav-icon-size']['value'], 40)
+            self.assertEqual(actual['application-icon-size']['value'], 22)
             self.assertEqual(actual['new-version-setting']['value'], 99)
             self.assertEqual(actual['layout']['pages'], ['modern-layout'])
             self.assertNotIn('menu-height', actual)
             self.assertEqual(actual['__md5__'], hashlib.md5(schema.read_bytes()).hexdigest())
         self.assertEqual(len(list(self.backup.glob('menu-*.json'))), 2)
         self.assertFalse((self.config / 'cinnamon/spices/menu@cinnamon.org/0.json').exists())
+
+    def test_menu_uses_png_and_new_cinnamon_sidebar_size(self):
+        schema = self.menu_schema()
+        settings = json.loads(schema.read_text())
+        settings['sidebar-icon-size'] = settings.pop('fav-icon-size')
+        schema.write_text(json.dumps(settings))
+        self.desktop_artwork()
+        source = self.home / 'Pictures/icons/icons_theme/qortal-menu-button-2.png'
+        source.parent.mkdir(parents=True)
+        source.write_bytes(b'original logo')
+        self.apply_menu(['panel1:left:0:menu@cinnamon.org:7'])
+        target = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
+        actual = json.loads(target.read_text())
+        self.assertEqual(actual['menu-icon']['value'], str(source))
+        self.assertEqual(actual['menu-label']['value'], 'Qortal-OS')
+        self.assertEqual(actual['sidebar-icon-size']['value'], 40)
+        self.assertEqual(actual['category-icon-size']['value'], 36)
+        self.assertEqual(actual['application-icon-size']['value'], 22)
+        self.assertNotIn('fav-icon-size', actual)
+        before = target.stat().st_mtime_ns
+        self.apply_menu(['panel1:left:0:menu@cinnamon.org:7'])
+        self.assertEqual(target.stat().st_mtime_ns, before)
+        self.assertFalse(list(self.backup.glob('menu-*.json')))
 
     def test_menu_migrates_legacy_instance_settings(self):
         self.menu_schema()
@@ -434,14 +466,21 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         self.bash(code + 'main', extra_env=env)
         calls = self.log.read_text()
         uri = (self.home / 'Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png').as_uri()
-        for key in ('picture-uri', 'picture-uri-dark'):
-            self.assertIn(f'gsettings set org.cinnamon.desktop.background {key} {uri}', calls)
+        for schema in ('org.cinnamon.desktop.background', 'org.gnome.desktop.background'):
+            for key in ('picture-uri', 'picture-uri-dark'):
+                self.assertIn(f'gsettings set {schema} {key} {uri}', calls)
+            self.assertIn(f'gsettings set {schema} picture-options zoom', calls)
         self.assertIn('gsettings set org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal', calls)
         menu = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
         settings = json.loads(menu.read_text())
         self.assertTrue(settings['menu-custom']['value'])
-        self.assertEqual(settings['menu-label']['value'], 'Qortal OS')
-        self.assertEqual(settings['menu-icon']['value'], 'qortal-menu-button-2')
+        self.assertEqual(settings['menu-label']['value'], 'Qortal-OS')
+        self.assertEqual(settings['menu-icon']['value'], str(
+            self.home / '.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png'))
+        self.assertEqual(settings['menu-icon-size']['value'], 40)
+        self.assertEqual(settings['category-icon-size']['value'], 36)
+        self.assertEqual(settings['fav-icon-size']['value'], 40)
+        self.assertEqual(settings['application-icon-size']['value'], 22)
         self.assertFalse((self.home / '.dmrc').exists())
         self.assertNotIn('color-scheme', calls)
         self.assertFalse((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
@@ -457,6 +496,23 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         self.assertEqual(theme_setting.read_text(), 'Personal-icons')
         self.assertNotIn('gsettings', self.log.read_text())
         self.assertNotIn('dconf', self.log.read_text())
+
+    def test_fresh_ubuntu_wayland_desktop_sets_menu_and_gnome_wallpaper(self):
+        code = self.desktop_checkout()
+        self.bash(code + 'main', extra_env={
+            **self.os_release('ubuntu'), **self.desktop_session(),
+            'REBUILT_MACHINE_HEADLESS': '0', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME',
+            'DISPLAY': '', 'WAYLAND_DISPLAY': 'wayland-0'})
+        uri = (self.home / 'Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png').as_uri()
+        calls = self.log.read_text()
+        for key in ('picture-uri', 'picture-uri-dark'):
+            self.assertIn(f'gsettings set org.gnome.desktop.background {key} {uri}', calls)
+        settings = json.loads((self.config / 'cinnamon/spices/menu@cinnamon.org/7.json').read_text())
+        self.assertEqual(settings['menu-label']['value'], 'Qortal-OS')
+        self.assertEqual(settings['menu-icon-size']['value'], 40)
+        self.assertEqual(settings['category-icon-size']['value'], 36)
+        self.assertEqual(settings['fav-icon-size']['value'], 40)
+        self.assertEqual(settings['application-icon-size']['value'], 22)
 
     def test_fresh_desktop_over_ssh_defers_until_successful_first_login(self):
         code = self.desktop_checkout()
@@ -482,7 +538,7 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
                   extra_env=self.desktop_session())
         self.assertFalse(once.exists())
         menu = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
-        self.assertEqual(json.loads(menu.read_text())['menu-label']['value'], 'Qortal OS')
+        self.assertEqual(json.loads(menu.read_text())['menu-label']['value'], 'Qortal-OS')
         self.assertTrue(list(self.backup.glob('first-login-*.dconf')))
 
     def test_desktop_without_dbus_defers_and_retains_job_if_login_has_no_display(self):
@@ -536,6 +592,30 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         self.assertIn('set org.cinnamon.desktop.background picture-uri ', calls)
         self.assertNotIn('set org.cinnamon.desktop.background picture-uri-dark', calls)
         self.assertIn('icon-theme Yaru-blue-qortal', calls)
+
+    def test_branding_skips_absent_background_schema(self):
+        self.menu_schema()
+        self.desktop_artwork()
+        for schema in ('org.cinnamon.desktop.background', 'org.gnome.desktop.background'):
+            with self.subTest(schema=schema):
+                self.log.write_text('')
+                self.bash('bash "$MENU_HELPER" --branding-only', extra_env={
+                    **self.desktop_session(), 'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh'),
+                    'REBUILD_TEST_BACKGROUND_SCHEMAS': schema})
+                calls = self.log.read_text()
+                self.assertIn(f'gsettings set {schema} picture-uri ', calls)
+                absent = ('org.gnome.desktop.background' if schema.startswith('org.cinnamon')
+                          else 'org.cinnamon.desktop.background')
+                self.assertNotIn(absent, calls)
+
+    def test_wallpaper_is_applied_even_if_icon_generation_failed(self):
+        self.desktop_artwork()
+        (self.home / '.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png').unlink()
+        self.bash('source "$MENU_HELPER"; apply_desktop_branding', success=False, extra_env={
+            'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh')})
+        for schema in ('org.cinnamon.desktop.background', 'org.gnome.desktop.background'):
+            self.assertIn(f'gsettings set {schema} picture-uri ', self.log.read_text())
+        self.assertNotIn('set org.cinnamon.desktop.interface icon-theme', self.log.read_text())
 
     def test_existing_desktop_config_is_preserved_without_setup_history(self):
         self.bash('is_fresh_desktop')
@@ -1687,6 +1767,8 @@ install_desktop_launchers''')
         archive = self.root / 'art.zip'
         with zipfile.ZipFile(archive, 'w') as z:
             z.writestr('Machine-files/Pictures/wallpaper.png', b'repo')
+            z.writestr('Machine-files/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png', b'wallpaper')
+            z.writestr('Machine-files/Pictures/icons/icons_theme/qortal-menu-button-2.png', b'logo')
         code = '''BACKUP_DIR="$REBUILT_MACHINE_BACKUP_DIR"
 download_with_retry() { cp "$TEST_ART" "$2"; }
 install_machine_artwork'''
@@ -1696,6 +1778,29 @@ install_machine_artwork'''
         self.bash('FORCE_ARTWORK=1\n' + code, extra_env={'TEST_ART': str(archive)})
         self.assertEqual((pictures / 'wallpaper.png').read_bytes(), b'repo')
         self.assertEqual((self.backup / 'Pictures/wallpaper.png').read_bytes(), b'personal')
+
+    def test_artwork_marker_does_not_hide_missing_or_empty_branding_assets(self):
+        pictures = self.home / 'Pictures'
+        pictures.mkdir()
+        (pictures / '.qortector-artwork-installed').touch()
+        archive = self.root / 'art.zip'
+        required = ('wallpapers/Qortal-TheFuture-Wallpaper.png',
+                    'icons/icons_theme/qortal-menu-button-2.png')
+        with zipfile.ZipFile(archive, 'w') as z:
+            for name in required:
+                z.writestr('Machine-files/Pictures/' + name, b'artwork')
+        code = '''download_with_retry() { cp "$TEST_ART" "$2"; }
+install_machine_artwork'''
+        self.bash(code, extra_env={'TEST_ART': str(archive)})
+        for name in required:
+            self.assertEqual((pictures / name).read_bytes(), b'artwork')
+            (pictures / name).unlink()
+            self.bash(code, extra_env={'TEST_ART': str(archive)})
+            self.assertEqual((pictures / name).read_bytes(), b'artwork')
+            (pictures / name).write_bytes(b'')
+            self.bash(code, extra_env={'TEST_ART': str(archive)})
+            self.assertEqual((pictures / name).read_bytes(), b'artwork')
+        self.bash('download_with_retry() { exit 99; }; install_machine_artwork')
 
 
     def test_complete_default_rerun_preserves_configured_desktop_and_no_reboot(self):

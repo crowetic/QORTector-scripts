@@ -34,6 +34,13 @@ if override_file.exists():
         else:
             schema[key] = value
 preferences = json.loads(Path(preferences_path).read_text())
+# Use the actual PNG when available so menu branding does not depend on the
+# active icon theme or a stale icon cache. Keep the theme name as a fallback.
+for icon in (Path.home() / 'Pictures/icons/icons_theme/qortal-menu-button-2.png',
+             Path.home() / '.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png'):
+    if icon.is_file() and icon.stat().st_size:
+        preferences['menu-icon']['value'] = str(icon)
+        break
 instances = set()
 for entry in ast.literal_eval(re.sub(r'^\s*@as\s+', '', enabled)):
     fields = entry.split(':')
@@ -99,10 +106,9 @@ PYCHECK
 }
 
 apply_desktop_branding() {
-  local wallpaper="$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" value keys
-  if [ ! -s "$wallpaper" ] || [ ! -f "$HOME/.icons/Yaru-blue-qortal/index.theme" ] || \
-      [ ! -s "$HOME/.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png" ]; then
-    echo 'Qortal wallpaper or icon theme is missing; rerun rebuilt-machine.sh to repair artwork.' >&2
+  local wallpaper="$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" value keys schemas schema applied=0
+  if [ ! -s "$wallpaper" ]; then
+    echo 'Qortal The Future wallpaper is missing; rerun rebuilt-machine.sh to repair artwork.' >&2
     return 1
   fi
   value=$(python3 - "$wallpaper" <<'PYURI'
@@ -111,12 +117,30 @@ import sys
 print(Path(sys.argv[1]).as_uri())
 PYURI
 ) || return 1
-  set_desktop_setting org.cinnamon.desktop.background picture-uri "$value" || return 1
-  keys=$(gsettings list-keys org.cinnamon.desktop.background) || return 1
-  if grep -Fxq picture-uri-dark <<< "$keys"; then
-    set_desktop_setting org.cinnamon.desktop.background picture-uri-dark "$value" || return 1
-  else
-    echo 'Cinnamon has no picture-uri-dark key; picture-uri is used for both appearances.'
+  # Ubuntu/GNOME and Cinnamon use separate background schemas. Configure both
+  # when installed, including dark mode, without assuming every version has it.
+  schemas=$(gsettings list-schemas) || return 1
+  for schema in org.cinnamon.desktop.background org.gnome.desktop.background; do
+    grep -Fxq "$schema" <<< "$schemas" || continue
+    keys=$(gsettings list-keys "$schema") || return 1
+    grep -Fxq picture-uri <<< "$keys" || continue
+    set_desktop_setting "$schema" picture-uri "$value" || return 1
+    applied=1
+    if grep -Fxq picture-uri-dark <<< "$keys"; then
+      set_desktop_setting "$schema" picture-uri-dark "$value" || return 1
+    else
+      echo "$schema has no picture-uri-dark key; picture-uri is used for both appearances."
+    fi
+    # A previous 'none' value would hide the wallpaper even with a correct URI.
+    if grep -Fxq picture-options <<< "$keys"; then
+      set_desktop_setting "$schema" picture-options zoom || return 1
+    fi
+  done
+  [ "$applied" = 1 ] || { echo 'No supported desktop background schema found.' >&2; return 1; }
+  if [ ! -f "$HOME/.icons/Yaru-blue-qortal/index.theme" ] || \
+      [ ! -s "$HOME/.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png" ]; then
+    echo 'Qortal icon theme is missing; rerun rebuilt-machine.sh to repair artwork.' >&2
+    return 1
   fi
   set_desktop_setting org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal
 }

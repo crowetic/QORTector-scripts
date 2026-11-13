@@ -108,7 +108,7 @@
         "description": "Text",
         "tooltip": "Enter custom text to show in the panel.",
         "dependency": "menu-custom",
-        "value": "Qortal OS"
+        "value": "Qortal-OS"
     },
     "restrict-menu-height": {
         "type": "switch",
@@ -144,7 +144,7 @@
         "units": "px",
         "description": "Categories icon size",
         "dependency": "show-category-icons",
-        "value": 38.0
+        "value": 36
     },
     "show-application-icons": {
         "type": "switch",
@@ -162,7 +162,7 @@
         "units": "px",
         "description": "Applications icon size",
         "dependency": "show-application-icons",
-        "value": 32.0
+        "value": 22
     },
     "favbox-show": {
         "type": "switch",
@@ -180,7 +180,17 @@
         "units": "px",
         "description": "Favorites icon size",
         "dependency": "favbox-show",
-        "value": 42.0
+        "value": 40
+    },
+    "sidebar-icon-size": {
+        "type": "spinbutton",
+        "default": 24,
+        "min": 8,
+        "max": 48,
+        "step": 1,
+        "units": "px",
+        "description": "Sidebar icon size",
+        "value": 40
     },
     "show-favorites": {
         "type": "switch",
@@ -265,4 +275,3 @@
     },
     "__md5__": "c152555b992ad64460760bcb9c99d27f"
 }
-
