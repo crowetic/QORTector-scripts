@@ -233,20 +233,52 @@ cp "$archive" "$out"
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertFalse(self.log.exists())
 
-    def test_apply_cinnamon_settings_preserves_theme_when_helper_fails(self):
+    def test_apply_cinnamon_settings_preserves_icons_but_continues_when_helper_fails(self):
         settings = self.root / 'apply-settings.sh'
         settings.write_text((ROOT / 'apply-cinnamon-settings.sh').read_text())
+        shutil.copy2(ROOT / 'cinnamon-settings.json', self.root / 'cinnamon-settings.json')
         (self.root / 'create-icon-theme-uni.sh').write_text('exit 7\n')
         (self.bin / 'bash').symlink_to(BASH)
-        for command in ('dirname',):
+        for command in ('dirname', 'python3', 'grep', 'sed', 'id'):
             (self.bin / command).symlink_to(shutil.which(command))
+        self.stub('pgrep', 'exit 1\n')
+        self.stub('xrandr', 'echo "Monitors: 1"\n')
+        self.stub('gsettings', '''printf '%s\\n' "$*" >> "$ICON_TEST_LOG"
+state="$TMPDIR/${2:-}.${3:-}"
+case "$1" in
+  set) printf '%s' "$4" > "$state" ;;
+  get)
+    if [ "$2" = org.cinnamon ]; then echo '[]'
+    else python3 -c 'import pathlib,sys; print(repr(pathlib.Path(sys.argv[1]).read_text()))' "$state"; fi ;;
+  list-schemas) printf '%s\\n' org.cinnamon.desktop.background org.gnome.desktop.interface ;;
+  list-keys) printf '%s\\n' picture-uri picture-options color-scheme ;;
+esac
+''')
+        for theme, component in (('yaru-blue-qortal', 'gtk-3.0'),
+                                 ('windows-10-dark', 'metacity-1'),
+                                 ('windows-10-dark', 'cinnamon')):
+            (self.home / '.themes' / theme / component).mkdir(parents=True, exist_ok=True)
+        wallpaper = self.home / 'Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png'
+        wallpaper.parent.mkdir(parents=True)
+        wallpaper.write_bytes(b'wallpaper')
+        schema = self.root / 'menu-schema.json'
+        schema.write_text('{}')
         result = subprocess.run([BASH, str(settings)],
                                 env={**self.env, 'DISPLAY': ':99',
+                                     'CINNAMON_MENU_SCHEMA': str(schema),
+                                     'XDG_CONFIG_HOME': str(self.home / 'config'),
                                      'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/mock/session'}, cwd=self.home,
                                 capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Qortal icon installation failed', result.stderr)
-        self.assertFalse(self.log.exists())
+        calls = self.log.read_text()
+        self.assertNotIn('icon-theme', calls)
+        self.assertIn('set org.cinnamon.desktop.interface gtk-theme yaru-blue-qortal', calls)
+        self.assertIn('set org.cinnamon.desktop.wm.preferences theme windows-10-dark', calls)
+        self.assertIn('set org.gnome.desktop.interface color-scheme prefer-dark', calls)
+        self.assertIn(f'set org.cinnamon.desktop.background picture-uri {wallpaper.as_uri()}', calls)
+        self.assertIn('nemo-icon-view-auto-layout=false',
+                      (self.home / 'config/nemo/desktop-metadata').read_text())
 
 
 if __name__ == '__main__':

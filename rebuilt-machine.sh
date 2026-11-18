@@ -41,7 +41,7 @@ Run as the desktop/Core user; sudo is requested for system packages.
   --upgrade-packages    Opt in to a full system package upgrade
   --pacman-upgrade-only Run only the resilient pacman full upgrade, then exit
   --apply-defaults      Back up dconf, then apply repository desktop preferences
-  --force-artwork       Replace repository artwork/themes/icons (with backups)
+  --force-artwork       Replace repository artwork/icons (with backups)
 Equivalent REBUILT_MACHINE_* variables (0 or 1): DRY_RUN, UPDATE_CORE,
 UPDATE_HUB, UPGRADE, APPLY_DEFAULTS, FORCE_ARTWORK. Defaults are all 0.
 REBUILT_MACHINE_REBOOT=1 explicitly enables reboot after a 30-second delay.
@@ -684,12 +684,45 @@ is_headless_mode() {
 
 is_fresh_desktop() {
   local config="${XDG_CONFIG_HOME:-$HOME/.config}"
-  # Absence of setup history alone must never reset an existing user's desktop.
-  [ ! -e "$HOME/.qortector-setup-state.json" ] &&
-    [ ! -s "$config/dconf/user" ] && [ ! -e "$HOME/.dmrc" ] &&
-    [ ! -d "$config/cinnamon/spices/menu@cinnamon.org" ] &&
-    [ ! -d "$HOME/.cinnamon/configs/menu@cinnamon.org" ] &&
-    [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/cinnamon/applets/menu@cinnamon.org" ]
+  [ ! -e "$HOME/.qortector-setup-state.json" ] || return 1
+  [ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/cinnamon/applets/menu@cinnamon.org" ] || return 1
+  # The first Cinnamon login creates dconf and stock menu JSON. Their mere
+  # existence must not suppress all customization on a newly installed machine.
+  if [ -s "$config/dconf/user" ]; then
+    command_exists dconf || return 1
+    local path settings
+    for path in /org/cinnamon/desktop/interface/ /org/cinnamon/desktop/wm/preferences/ \
+        /org/cinnamon/theme/ /org/cinnamon/desktop/background/ /org/nemo/desktop/ \
+        /org/gnome/desktop/interface/ /org/gnome/desktop/background/; do
+      settings=$(dconf dump "$path") || return 1
+      [ -z "$settings" ] || return 1
+    done
+  fi
+  if [ ! -e "$HOME/.dmrc" ] && [ ! -d "$config/cinnamon/spices/menu@cinnamon.org" ] && \
+      [ ! -d "$HOME/.cinnamon/configs/menu@cinnamon.org" ]; then return 0; fi
+  python3 - "$config" <<'PYFRESH'
+import configparser
+import json
+import sys
+from pathlib import Path
+
+try:
+    dmrc = Path.home() / '.dmrc'
+    if dmrc.exists():
+        session = configparser.ConfigParser(interpolation=None)
+        session.read(dmrc)
+        if session.get('Desktop', 'Session', fallback='') != 'cinnamon':
+            sys.exit(1)
+    for directory in (Path(sys.argv[1]) / 'cinnamon/spices/menu@cinnamon.org',
+                      Path.home() / '.cinnamon/configs/menu@cinnamon.org'):
+        for file in directory.glob('*.json'):
+            for item in json.loads(file.read_text()).values():
+                if isinstance(item, dict) and 'value' in item:
+                    if 'default' not in item or item['value'] != item['default']:
+                        sys.exit(1)
+except (OSError, ValueError, configparser.Error):
+    sys.exit(1)
+PYFRESH
 }
 
 desktop_session_available() {
@@ -829,33 +862,6 @@ install_sensors_applet() {
   rm -rf "$work"
 }
 
-install_desktop_themes() {
-  local work
-  if [ "$DRY_RUN" = 1 ]; then echo '[dry-run] Install missing desktop themes'; return 0; fi
-  mkdir -p "$HOME/.themes"
-  if [ "$FORCE_ARTWORK" = 1 ] || [ ! -e "$HOME/.themes/Windows-10" ]; then
-    work=$(mktemp -d) || return 1
-    if download_with_retry 'https://cinnamon-spices.linuxmint.com/files/themes/Windows-10.zip' "$work/theme.zip" && \
-        unzip -oq "$work/theme.zip" -d "$work" && [ -d "$work/Windows-10" ]; then
-      if [ -e "$HOME/.themes/Windows-10" ]; then mv "$HOME/.themes/Windows-10" "$BACKUP_DIR/Windows-10"; fi
-      mv "$work/Windows-10" "$HOME/.themes/" || { mv "$BACKUP_DIR/Windows-10" "$HOME/.themes/"; rm -rf "$work"; return 1; }
-    else
-      warn 'Windows-10 Cinnamon theme was unavailable; keeping installed theme.'
-    fi
-    rm -rf "$work"
-  fi
-  if [ "$FORCE_ARTWORK" = 1 ] || [ ! -e "$HOME/.themes/Windows-10-Dark" ]; then
-    work=$(mktemp -d) || return 1
-    if git clone --depth 1 https://github.com/B00merang-Project/Windows-10-Dark.git "$work/theme"; then
-      if [ -e "$HOME/.themes/Windows-10-Dark" ]; then mv "$HOME/.themes/Windows-10-Dark" "$BACKUP_DIR/Windows-10-Dark"; fi
-      mv "$work/theme" "$HOME/.themes/Windows-10-Dark" || { mv "$BACKUP_DIR/Windows-10-Dark" "$HOME/.themes/"; rm -rf "$work"; return 1; }
-    else
-      warn 'Windows-10-Dark GTK theme was unavailable; keeping installed theme.'
-    fi
-    rm -rf "$work"
-  fi
-}
-
 write_missing_file() {
   if [ -e "$1" ] || [ -L "$1" ]; then
     cat >/dev/null
@@ -900,7 +906,7 @@ autostart_has_script() {
 }
 
 queue_desktop_branding() {
-  local mode=--branding-only
+  local mode=--desktop-only
   [ "$APPLY_DEFAULTS" = 0 ] || mode=--settings-only
   if ! autostart_has_script apply-cinnamon-settings.sh; then
     write_missing_file "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/apply-cinnamon-settings.desktop" <<EOF
@@ -918,7 +924,7 @@ EOF
 
 apply_or_defer_desktop_branding() {
   [ "$APPLY_BRANDING" = 1 ] || return 0
-  local mode=--branding-only
+  local mode=--desktop-only
   [ "$APPLY_DEFAULTS" = 0 ] || mode=--settings-only
   if desktop_session_available; then
     if backup_desktop_settings && \
@@ -1225,11 +1231,11 @@ preview_setup() {
   fi
   printf '[dry-run] Artwork: fill missing assets; force replacement=%s\n' "$FORCE_ARTWORK"
   if [ "$HEADLESS_MODE" = false ]; then
-    echo '[dry-run] Install missing Cinnamon packages, themes, applet and launchers'
+    echo '[dry-run] Install missing Cinnamon packages, applet and launchers; check Qortal OS themes'
     if [ "$APPLY_DEFAULTS" = 1 ]; then
       echo '[dry-run] Back up desktop files; apply repo preferences in a session or queue them for Cinnamon login'
     elif [ "$APPLY_BRANDING" = 1 ]; then
-      echo '[dry-run] Fresh desktop: apply Qortal wallpaper, icons and menu branding, or queue them for Cinnamon login'
+      echo '[dry-run] Fresh desktop: apply Qortal themes, dark mode, manual desktop layout, wallpaper, icons and menu, or queue them for Cinnamon login'
     else
       echo '[dry-run] Preserve desktop preferences and session selection'
     fi
@@ -1257,7 +1263,7 @@ main() {
   HEADLESS_MODE=false
   if is_headless_mode; then HEADLESS_MODE=true; fi
   APPLY_BRANDING=0
-  if [ "$HEADLESS_MODE" = false ] && { [ "$APPLY_DEFAULTS" = 1 ] || is_fresh_desktop; }; then
+  if [ "$HEADLESS_MODE" = false ] && { [ "$APPLY_DEFAULTS" = 1 ] || { [ "$DRY_RUN" = 1 ] && is_fresh_desktop; }; }; then
     APPLY_BRANDING=1
   fi
   printf 'Rebuilt-machine setup: %s mode\n' "$([ "$HEADLESS_MODE" = true ] && echo headless || echo desktop)"
@@ -1304,6 +1310,12 @@ main() {
     install_first_available_package loupe eog || warn 'No supported image viewer could be installed.'
     install_first_available_package papers evince || warn 'No supported PDF viewer could be installed.'
     install_sensors_applet || warn 'Sensors Monitor applet installation failed.'
+    # Classify the pre-setup profile after installing dconf/Python: these tools
+    # need not exist yet on a fresh machine. No user preferences were written.
+    if [ "$APPLY_DEFAULTS" = 0 ] && is_fresh_desktop; then APPLY_BRANDING=1; fi
+    if [ "$APPLY_BRANDING" = 0 ]; then
+      echo 'Existing desktop preferences detected; use --apply-defaults to reapply Qortal customization.'
+    fi
     if [ "$APPLY_DEFAULTS" = 1 ]; then
       backup_file "$HOME/.dmrc"
       if command_exists pro; then sudo pro config set apt_news=false || warn 'Could not disable Ubuntu Pro terminal news.'; fi
@@ -1342,7 +1354,8 @@ PYSESSION
   install_qortal_icons
   install_qortal_menu
   if [ "$HEADLESS_MODE" = false ]; then
-    install_desktop_themes
+    # The custom themes ship with Qortal OS. The settings helper checks their
+    # exact names/components; unrelated Windows theme downloads cannot supply them.
     # Refresh branding helpers when applying them, including after a partial
     # first install, so a preserved legacy helper cannot bypass session guards.
     install_repo_file cinnamon-settings.json "$HOME/cinnamon-settings.json" 644 "$APPLY_BRANDING"

@@ -100,8 +100,9 @@ bash ./rebuilt-machine.sh
 ```
 
 The default run fills missing packages, applications, desktop assets and
-schedules. Fresh desktop installs also receive the Qortal wallpaper, icon theme,
-and **Qortal-OS** menu label/logo. Configured desktops retain their preferences.
+schedules. Fresh desktop installs also receive the Qortal themes, dark appearance,
+manual desktop icon arrangement, wallpaper, icon theme, and **Qortal-OS** menu
+label/logo. Configured desktops retain their preferences.
 System upgrades require `--upgrade-packages`, except for the Arch file/dependency-conflict
 recovery described below. The script **does not replace existing Core/Hub or reboot**.
 Existing Core directories are retained even
@@ -118,7 +119,7 @@ mode still installs Cinnamon and optional desktop apps on a fresh machine.
 | `--upgrade-packages` | `REBUILT_MACHINE_UPGRADE=1` | Opt in to `apt-get upgrade`, `pacman -Syu`, or `dnf upgrade`. Pacman file/dependency-conflict recovery can also trigger a full upgrade. |
 | `--pacman-upgrade-only` | — | Run only the resilient pacman system upgrade, then exit; no Core/Hub, desktop, automation or reboot steps. Arch/Manjaro only; supports `--dry-run`. |
 | `--apply-defaults` | `REBUILT_MACHINE_APPLY_DEFAULTS=1` | Export dconf before changing desktop preferences, session selection, themes, menu and application defaults. Defer session settings to Cinnamon login when necessary. |
-| `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork, icon files and themes. Configured desktops retain preference selections unless `--apply-defaults` is also used. |
+| `--force-artwork` | `REBUILT_MACHINE_FORCE_ARTWORK=1` | Back up and replace repository artwork and icon files. Configured desktops retain preference selections unless `--apply-defaults` is also used. |
 | — | `REBUILT_MACHINE_HEADLESS=auto` | Detect sessions/installed session files; `1` forces server mode and `0` forces desktop mode. |
 | — | `REBUILT_MACHINE_REBOOT=1` | Opt in to reboot after success and a 30-second cancellation delay; default is `0`. |
 | — | `REBUILT_MACHINE_PKG_RETRIES=3` | Install attempts per missing package; accepts a positive integer. Wait 2 seconds, then 4 seconds between the default three attempts. Successful pacman recovery resets this budget. |
@@ -349,18 +350,23 @@ path; the standalone `Qortal-Setup-Linux.sh` retains its separate behavior above
 
 After desktop setup, choose **Cinnamon** in the login-screen session selector.
 The rebuild does not switch the running desktop. Fresh-install detection happens
-before setup writes configuration: it requires no setup state file, no nonempty
-`${XDG_CONFIG_HOME:-$HOME/.config}/dconf/user`, no `.dmrc`, and no modern/legacy
-Cinnamon menu configuration or user-installed menu applet. Any of these existing
-signals preserves preferences unless `--apply-defaults` is requested.
+before setup writes configuration. Setup history, a user-installed menu
+applet, customized menu values, a non-Cinnamon `.dmrc` session or explicit theme,
+background or Nemo desktop preferences preserve the desktop unless
+`--apply-defaults` is requested. A stock Cinnamon `.dmrc`, menu values equal to
+their defaults, and dconf data unrelated to those desktop preferences do not
+suppress customization merely because the user has already logged in once.
+Unreadable or malformed configuration is preserved. The script prints how to
+reapply defaults when it preserves an existing desktop.
 
 Branding is applied immediately when a display and desktop D-Bus address are
 available. Over SSH, or after a failed preference write, it creates
 `${XDG_CONFIG_HOME:-$HOME/.config}/autostart/apply-cinnamon-settings.desktop`.
 This Cinnamon-only job backs up dconf at login and removes itself only after
 successful branding. Preference writes are read back to catch silent dconf commit
-failures. A fresh install applies branding only; full application/session/theme
-defaults remain opt-in. Server mode (`REBUILT_MACHINE_HEADLESS=1`) skips desktop
+failures. A fresh install applies all desktop customization, including themes
+and icon arrangement; application and session-selection defaults remain opt-in.
+Server mode (`REBUILT_MACHINE_HEADLESS=1`) skips desktop
 setup entirely; use `REBUILT_MACHINE_HEADLESS=0` for desktop provisioning over SSH
 when installed session files cannot be detected. An **Apply Cinnamon Settings**
 launcher remains available for deliberate customization later.
@@ -391,7 +397,7 @@ Before replacing managed content, the rebuild saves old files under
 `~/backups/rebuilt-machine-<timestamp>.<suffix>/` and prints the directory. Applying
 defaults saves a full `desktop.dconf` export and the previous `.dmrc`; menu and
 application helpers save their own backups. Force-artwork saves Pictures and
-replaced themes/icons. Required failures stop setup and cancel reboot; optional
+replaced icons. Required failures stop setup and cancel reboot; optional
 failures are listed at completion. Completed package changes remain in place if
 a later step fails; this is not a whole-system rollback.
 
@@ -433,8 +439,8 @@ Keep `cinnamon-settings.json` beside the helper. It merges preferences with the
 installed Cinnamon menu schema for **each enabled menu instance** under
 `${XDG_CONFIG_HOME:-$HOME/.config}/cinnamon/spices/menu@cinnamon.org/`. It preserves
 new schema entries and existing values where no preference overrides them,
-uses a **40-pixel** menu icon, **36-pixel** category icons, **40-pixel** favorites
-icons, and **22-pixel** application icons. Newer Cinnamon versions use
+uses a **40-pixel** menu icon, **32-pixel** category icons, **38-pixel** favorites
+icons, and **28-pixel** application icons. Newer Cinnamon versions use
 `sidebar-icon-size` for the favorites area; both schema versions are supported.
 The helper can migrate legacy `~/.cinnamon/configs/` values.
 It does not assume the menu instance is `0` or re-enable a disabled menu applet.
@@ -442,8 +448,10 @@ Previous menu settings are backed up under `~/backups/cinnamon-menu/` when used
 outside a rebuild.
 
 Running `bash ./apply-cinnamon-settings.sh` without an option also installs icons
-and applies desktop theme/wallpaper preferences. `--settings-only` applies those
-preferences and menu settings without rerunning icon installation;
+and applies desktop preferences. `--desktop-only` applies the themes, dark mode,
+manual desktop icon arrangement, wallpaper, icon theme and menu settings without
+rerunning icon installation. `--settings-only` applies the same desktop settings
+and, at first login, the application preferences from the companion helper;
 `--branding-only` selects the wallpaper, `Yaru-blue-qortal` icon theme, and menu
 branding without changing application or window themes. The Future wallpaper is
 `~/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png`. Both `picture-uri` and
@@ -454,17 +462,45 @@ available so a previous `none` setting cannot hide the image. The menu uses the
 actual `qortal-menu-button-2.png` from `~/Pictures/icons/icons_theme/` (or the
 installed Qortal icon theme), with **Qortal-OS** text in the menu applet's JSON settings,
 not a window-manager button-title key. Desktop modes require a display and D-Bus
-session. `--first-login [--branding-only|--settings-only]` is used by the rebuild's
+session. `--first-login [--branding-only|--desktop-only|--settings-only]` is used by the rebuild's
 one-time autostart. The companion
 [`configure-terminal-and-more.sh`](configure-terminal-and-more.sh) handles
 application and terminal preferences during the rebuild.
+
+The GTK theme is **`yaru-blue-qortal`** in
+`org.cinnamon.desktop.interface gtk-theme`. Window borders use
+**`windows-10-dark`** in `org.cinnamon.desktop.wm.preferences theme`, and the
+Cinnamon desktop theme uses the same name in `org.cinnamon.theme name`.
+These names are case sensitive and separate from the `Yaru-blue-qortal` **icon**
+theme. The custom themes ship with Qortal OS; the helper checks `~/.themes`,
+`${XDG_DATA_HOME:-$HOME/.local/share}/themes` and the theme directories under
+`${XDG_DATA_DIRS:-/usr/local/share:/usr/share}`. It no longer downloads unrelated
+`Windows-10`/`Windows-10-Dark` themes. Missing components are reported with their
+exact names, while the other settings are still applied and first-login retry
+is retained. Install the missing Qortal OS theme assets before retrying.
+`org.gnome.desktop.interface color-scheme` is set to `prefer-dark`, as is
+the Cinnamon interface key when the installed schema supports it. All supported
+preference writes are read back, including the dark preference.
+
+Nemo's desktop auto-arrange is stored in
+`${XDG_CONFIG_HOME:-$HOME/.config}/nemo/desktop-metadata`, rather than a
+window-manager gsettings key. The helper sets `nemo-icon-view-auto-layout=false`
+for existing and detected monitor sections, preserving icon coordinates and grid
+spacing. You can then drag icons into the desired grid positions. A running
+`nemo-desktop` is briefly stopped and restarted so its cached metadata cannot
+overwrite the change; file-manager windows stay open. The previous metadata is
+saved as `nemo-desktop-metadata-<timestamp>` alongside menu/dconf backups.
+To restore it, log out of Cinnamon, copy the chosen backup to the metadata path
+from a text console or SSH session as the desktop user, then log back in.
 
 On a machine already set up with an older rebuild, run
 `bash ./rebuilt-machine.sh --apply-defaults` from an updated checkout to repair
 assets and reapply these settings with backups. Missing or empty branding assets
 are repaired even if the artwork install marker already exists. To apply only
 branding after repairing assets, run `bash ./apply-cinnamon-settings.sh --branding-only`
-in the desktop session. GNOME Shell has no standard Cinnamon menu applet; menu
+in the desktop session. To repair all requested desktop settings without running
+the rebuild, use `bash ./apply-cinnamon-settings.sh --desktop-only` after ensuring
+the themes, wallpaper and icons are installed. GNOME Shell has no standard Cinnamon menu applet; menu
 branding takes effect in the Cinnamon session installed by the rebuild.
 
 These repairs do not reinstall Core/Hub. Log out and back in if the panel still

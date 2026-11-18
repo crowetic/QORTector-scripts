@@ -97,7 +97,10 @@ set_desktop_setting() {
   if ! python3 - "$3" "$actual" <<'PYCHECK'
 import ast
 import sys
-sys.exit(0 if ast.literal_eval(sys.argv[2]) == sys.argv[1] else 1)
+expected = {'true': True, 'false': False}.get(sys.argv[1], sys.argv[1])
+actual = sys.argv[2].strip()
+actual = {'true': True, 'false': False}[actual] if actual in ('true', 'false') else ast.literal_eval(actual)
+sys.exit(0 if actual == expected else 1)
 PYCHECK
   then
     echo "Could not persist $1 $2; desktop branding must be retried." >&2
@@ -146,18 +149,113 @@ PYURI
 }
 
 apply_desktop_themes() {
-  # Do not select themes that failed to download or do not support this widget set.
-  local theme_root part schema key value
-  for part in 'gtk-3.0:org.cinnamon.desktop.interface:gtk-theme:Windows-10-Dark' \
-      'metacity-1:org.cinnamon.desktop.wm.preferences:theme:Windows-10-Dark' \
-      'cinnamon:org.cinnamon.theme:name:Windows-10'; do
-    IFS=: read -r theme_root schema key value <<< "$part"
-    if [ -d "$HOME/.themes/$value/$theme_root" ] || [ -d "/usr/share/themes/$value/$theme_root" ]; then
-      set_desktop_setting "$schema" "$key" "$value" || return 1
+  local component part schema key value root found status=0
+  local -a roots
+  IFS=: read -r -a roots <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+  roots=("$HOME/.themes" "${XDG_DATA_HOME:-$HOME/.local/share}/themes" "${roots[@]/%//themes}")
+  for part in 'gtk-3.0:org.cinnamon.desktop.interface:gtk-theme:yaru-blue-qortal' \
+      'metacity-1:org.cinnamon.desktop.wm.preferences:theme:windows-10-dark' \
+      'cinnamon:org.cinnamon.theme:name:windows-10-dark'; do
+    IFS=: read -r component schema key value <<< "$part"
+    # Names are case sensitive. Save the requested selection even if a fresh
+    # non-Qortal OS installation still needs its custom theme assets installed.
+    set_desktop_setting "$schema" "$key" "$value" || status=1
+    found=0
+    for root in "${roots[@]}"; do
+      if [ -d "$root/$value/$component" ]; then found=1; break; fi
+    done
+    if [ "$found" = 0 ]; then
+      echo "Missing Qortal OS theme component $value/$component; install it in ~/.themes, XDG themes or /usr/share/themes and retry." >&2
+      status=1
     fi
   done
-  gsettings set org.gnome.desktop.interface color-scheme prefer-dark || echo 'Could not request dark mode.' >&2
+  local schemas keys
+  schemas=$(gsettings list-schemas) || return 1
+  for schema in org.cinnamon.desktop.interface org.gnome.desktop.interface; do
+    grep -Fxq "$schema" <<< "$schemas" || continue
+    keys=$(gsettings list-keys "$schema") || { status=1; continue; }
+    if grep -Fxq color-scheme <<< "$keys"; then
+      set_desktop_setting "$schema" color-scheme prefer-dark || status=1
+    fi
+  done
+  return "$status"
 }
+
+apply_desktop_icon_layout() (
+  # Nemo caches desktop-metadata for the life of nemo-desktop. Stop only the
+  # current user's desktop process while editing it, leaving file windows alone.
+  local visible status=0 attempt monitors=1
+  command -v pgrep >/dev/null || { echo 'pgrep is required to safely update Nemo desktop metadata.' >&2; return 1; }
+  if pgrep -u "$(id -u)" -x nemo-desktop >/dev/null; then
+    visible=$(gsettings get org.nemo.desktop show-desktop-icons) || return 1
+    # Restore visibility and the desktop process on errors or interruption too.
+    trap 'status=$?; set_desktop_setting org.nemo.desktop show-desktop-icons "$visible" || status=1; nohup nemo-desktop >/dev/null 2>&1 & exit "$status"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # Avoid Cinnamon's conditional autostart racing the metadata replacement.
+    set_desktop_setting org.nemo.desktop show-desktop-icons false || return 1
+    nemo-desktop --quit || status=1
+    for ((attempt=0; attempt<50; attempt++)); do
+      pgrep -u "$(id -u)" -x nemo-desktop >/dev/null || break
+      sleep 0.1
+    done
+    if pgrep -u "$(id -u)" -x nemo-desktop >/dev/null; then
+      echo 'Nemo desktop did not stop; retaining first-login retry.' >&2
+      status=1
+    fi
+  fi
+  if [ "$status" = 0 ]; then
+    if command -v xrandr >/dev/null; then
+      monitors=$(xrandr --listactivemonitors 2>/dev/null | sed -n 's/^Monitors: //p') || monitors=1
+    fi
+    python3 - "${monitors:-1}" <<'PYLAYOUT' || status=1
+import configparser
+import os
+import re
+import shutil
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+target = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'nemo/desktop-metadata'
+previous = target.read_text() if target.exists() else ''
+parser = configparser.RawConfigParser()
+parser.read_string(previous)  # Fail safely on malformed metadata.
+count = int(sys.argv[1]) if sys.argv[1].isdigit() else 1
+sections = {f'desktop-monitor-{i}' for i in range(max(1, count))}
+sections.update(s for s in parser.sections() if re.fullmatch(r'desktop-monitor-\d+|directory', s))
+output = previous + ('\n' if previous and not previous.endswith('\n') else '')
+for section in sorted(sections):
+    pattern = r'(?ms)(^\[' + re.escape(section) + r'\][^\n]*\n)(.*?)(?=^\[|\Z)'
+    match = re.search(pattern, output)
+    setting = 'nemo-icon-view-auto-layout=false\n'
+    if match:
+        body = match[2]
+        key = r'(?m)^[ \t]*nemo-icon-view-auto-layout\s*=.*(?:\n|$)'
+        body = re.sub(key, setting, body) if re.search(key, body) else body.rstrip('\n') + '\n' + setting
+        output = output[:match.start(2)] + body + output[match.end(2):]
+    else:
+        output = (output.rstrip('\n') + '\n\n' if output else '') + f'[{section}]\n' + setting
+if output != previous:
+    if target.exists():
+        backup = Path(os.environ.get('REBUILT_MACHINE_BACKUP_DIR') or Path.home() / 'backups/cinnamon-menu')
+        backup.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target, backup / f'nemo-desktop-metadata-{time.time_ns()}')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix='desktop-metadata.', dir=target.parent)
+    try:
+        with os.fdopen(fd, 'w') as out:
+            out.write(output)
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+print('Nemo desktop auto-arrange disabled; existing icon positions and grid spacing preserved.')
+PYLAYOUT
+  fi
+  return "$status"
+)
 
 main() {
   set -euo pipefail
@@ -165,9 +263,9 @@ main() {
   if [ "$mode" = --first-login ]; then
     first_login=1
     mode="${2:---settings-only}"
-    case "$mode" in --branding-only|--settings-only) ;; *) echo 'Invalid first-login mode.' >&2; return 1 ;; esac
+    case "$mode" in --branding-only|--desktop-only|--settings-only) ;; *) echo 'Invalid first-login mode.' >&2; return 1 ;; esac
   fi
-  case "$mode" in all|--menu-only|--settings-only|--branding-only) ;; *) echo 'Usage: apply-cinnamon-settings.sh [--menu-only|--branding-only|--settings-only|--first-login [--branding-only|--settings-only]]' >&2; return 1 ;; esac
+  case "$mode" in all|--menu-only|--settings-only|--desktop-only|--branding-only) ;; *) echo 'Usage: apply-cinnamon-settings.sh [--menu-only|--branding-only|--desktop-only|--settings-only|--first-login [--branding-only|--desktop-only|--settings-only]]' >&2; return 1 ;; esac
   if [ "$mode" != --menu-only ] && { [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; }; then
     echo 'No desktop D-Bus session; leaving first-login branding queued.' >&2
     return 1
@@ -181,17 +279,23 @@ main() {
     mkdir -p "$backup"
     dconf dump / > "$backup/first-login-$(date +%s%N).dconf"
   fi
+  local status=0
   if [ "$mode" = all ]; then
     if ! QORTAL_ICONS_SELECT_THEME=0 bash "$SETTINGS_SCRIPT_DIR/create-icon-theme-uni.sh"; then
       echo 'Qortal icon installation failed. Run create-icon-theme-uni.sh to retry.' >&2
-      return 1
+      status=1
     fi
   fi
   if [ "$mode" != --menu-only ]; then
-    if [ "$mode" != --branding-only ]; then apply_desktop_themes; fi
-    apply_desktop_branding
+    # Each group must run even if a missing asset or failed write affects another.
+    if [ "$mode" != --branding-only ]; then
+      apply_desktop_themes || status=1
+      apply_desktop_icon_layout || status=1
+    fi
+    apply_desktop_branding || status=1
   fi
-  apply_menu_settings
+  apply_menu_settings || status=1
+  [ "$status" = 0 ] || return "$status"
   if [ "$first_login" = 1 ]; then
     if [ "$mode" = --settings-only ]; then
       REBUILT_MACHINE_BACKUP_DIR="$backup" bash "$SETTINGS_SCRIPT_DIR/configure-terminal-and-more.sh" || echo 'Some optional desktop preferences could not be applied.' >&2
