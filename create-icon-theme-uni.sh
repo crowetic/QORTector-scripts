@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-for cmd in rsync curl unzip; do
+for cmd in rsync curl unzip python3; do
   if ! command -v "$cmd" >/dev/null; then
     echo "[!] Required command '$cmd' is not installed. Please install it and re-run." >&2
     exit 1
@@ -56,6 +56,11 @@ if ! have_icon_sources "$ICON_SOURCE_DIR"; then
         # Merge directories, including into an existing Pictures/icons directory.
         if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" = 1 ]; then
           rsync -a --ignore-existing "$WORK_DIR/extracted/Pictures/" "${HOME}/Pictures/"
+          for name in "${ICON_NAMES[@]}"; do
+            if [ -f "$ICON_SOURCE_DIR/$name.png" ] && [ ! -L "$ICON_SOURCE_DIR/$name.png" ] && [ ! -s "$ICON_SOURCE_DIR/$name.png" ]; then
+              cp -p "$WORK_DIR/extracted/Pictures/icons/icons_theme/$name.png" "$ICON_SOURCE_DIR/$name.png"
+            fi
+          done
         else
           rsync -a "$WORK_DIR/extracted/Pictures/" "${HOME}/Pictures/"
         fi
@@ -93,28 +98,88 @@ done
 INHERITED_THEMES="${BASE_THEME:+${BASE_THEME},}hicolor"
 
 mkdir -p "$TARGET_THEME_DIR" "$HICOLOR_DIR/48x48/apps"
-if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -e "${ICON_CACHE_DIR}/index.theme" ]; then
-cat > "${ICON_CACHE_DIR}/index.theme" <<EOF
-[Icon Theme]
-Name=${ICON_THEME_NAME}
-Comment=Qortal application icons with system theme artwork
-Inherits=${INHERITED_THEMES}
-Directories=48x48/apps
+python3 - "$ICON_CACHE_DIR/index.theme" "$ICON_THEME_NAME" "$INHERITED_THEMES" <<'PYINDEX'
+import configparser
+import io
+import os
+import re
+import shutil
+import sys
+import tempfile
+import time
+from pathlib import Path
 
-[48x48/apps]
-Size=48
-Context=Applications
-Type=Fixed
-EOF
-fi
+target, name, inherited = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+previous = target.read_text() if target.exists() else ''
+parser = configparser.ConfigParser(interpolation=None, strict=False)
+parser.optionxform = str
+try:
+    parser.read_string(previous)
+except configparser.Error:
+    parser.clear()
+if os.environ.get('QORTAL_ICONS_PRESERVE_EXISTING') != '1':
+    parser.clear()
+if not parser.has_section('Icon Theme'):
+    parser.add_section('Icon Theme')
+theme = parser['Icon Theme']
+theme.setdefault('Name', name)
+theme.setdefault('Comment', 'Qortal application icons with system theme artwork')
+directory_values = [theme.get('Directories', '')]
+if os.environ.get('QORTAL_ICONS_PRESERVE_EXISTING') == '1':
+    # Earlier helpers appended a second Directories key after a copied index.
+    # Recover both lists so private icon directories remain reachable too.
+    section = re.search(r'(?ms)^\[Icon Theme\]\s*\n(.*?)(?=^\[|\Z)', previous)
+    if section:
+        directory_values += re.findall(r'(?m)^Directories\s*=([^\n]*)', section[1])
+directories = list(dict.fromkeys(d.strip() for value in directory_values for d in value.split(',') if d.strip()))
+if '48x48/apps' not in directories:
+    directories.append('48x48/apps')
+theme['Directories'] = ','.join(directories)
+parents = [d.strip() for d in theme.get('Inherits', inherited).split(',') if d.strip() and d.strip() not in (name, 'hicolor')]
+for parent in inherited.split(','):
+    if parent != 'hicolor' and parent not in parents:
+        parents.append(parent)
+parents.append('hicolor')
+theme['Inherits'] = ','.join(parents)
+if not parser.has_section('48x48/apps'):
+    parser.add_section('48x48/apps')
+parser['48x48/apps'].update(Size='48', Context='Applications', Type='Fixed')
+out = io.StringIO()
+parser.write(out, space_around_delimiters=False)
+output = out.getvalue()
+# Keep valid personal indexes byte-for-byte; repair old indexes that never
+# declared the Qortal app directory, even during a preserve-existing rebuild.
+if previous:
+    old = configparser.ConfigParser(interpolation=None)
+    old.optionxform = str
+    try:
+        old.read_string(previous)
+        unchanged = {s: dict(old[s]) for s in old.sections()} == {s: dict(parser[s]) for s in parser.sections()}
+    except configparser.Error:
+        unchanged = False
+    if unchanged:
+        sys.exit(0)
+    backup = Path(os.environ.get('REBUILT_MACHINE_BACKUP_DIR') or Path.home() / 'backups/qortal-icons')
+    backup.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(target, backup / f'qortal-index-{time.time_ns()}.theme')
+fd, tmp = tempfile.mkstemp(prefix='index.theme.', dir=target.parent)
+try:
+    with os.fdopen(fd, 'w') as out:
+        out.write(output)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, target)
+finally:
+    if os.path.exists(tmp):
+        os.unlink(tmp)
+PYINDEX
 
 for name in "${ICON_NAMES[@]}"; do
-  if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -e "${TARGET_THEME_DIR}/${name}.png" ]; then
+  if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -s "${TARGET_THEME_DIR}/${name}.png" ]; then
     install -m 644 "$WORK_DIR/rendered/${name}.png" "${TARGET_THEME_DIR}/${name}.png"
   fi
   # hicolor is the standard fallback in every desktop icon theme. These names
   # must resolve even when GNOME/Cinnamon keeps or later selects another theme.
-  if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -e "$HICOLOR_DIR/48x48/apps/${name}.png" ]; then
+  if [ "${QORTAL_ICONS_PRESERVE_EXISTING:-0}" != 1 ] || [ ! -s "$HICOLOR_DIR/48x48/apps/${name}.png" ]; then
     install -m 644 "$WORK_DIR/rendered/${name}.png" "$HICOLOR_DIR/48x48/apps/${name}.png"
   fi
 done

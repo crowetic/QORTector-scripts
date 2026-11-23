@@ -4,10 +4,12 @@ import configparser
 import os
 import pathlib
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
 import zipfile
+import zlib
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -43,7 +45,7 @@ class QortalIconTests(unittest.TestCase):
         self.make_archive(self.archive)
         # Restrict PATH so the ImageMagick 7 case genuinely has no convert.
         for command in ('rsync', 'unzip', 'mktemp', 'rm', 'mkdir', 'install',
-                        'cat', 'tr', 'touch', 'cp'):
+                        'cat', 'tr', 'touch', 'cp', 'python3'):
             (self.bin / command).symlink_to(shutil.which(command))
         self.stub('magick', 'printf "magick\\n" >> "$ICON_TEST_LOG"\n'
                   'cp "$1" "${@: -1}"\n')
@@ -103,6 +105,7 @@ cp "$archive" "$out"
         self.assertEqual(index['48x48/apps']['Context'], 'Applications')
         self.assertEqual(index['48x48/apps']['Size'], '48')
         self.assertIn('hicolor', index['Icon Theme']['Inherits'].split(','))
+        self.assertEqual(index['Icon Theme']['Inherits'].split(',')[-1], 'hicolor')
         self.assertFalse(list(self.root.glob('qortal-icons.*')))
 
     def test_imagemagick7_without_convert_and_composite_gnome(self):
@@ -185,6 +188,65 @@ cp "$archive" "$out"
         self.assert_icons()
         self.assertEqual(unrelated.read_bytes(), b'keep')
 
+    def test_preserve_rebuild_repairs_duplicate_index_and_zero_byte_icons(self):
+        self.local_sources()
+        (self.source / 'qortal-menu-button-2.png').write_bytes(b'')
+        (self.theme / '48x48/apps').mkdir(parents=True)
+        (self.theme / 'index.theme').write_text(
+            '[Icon Theme]\nName=Yaru-blue-qortal\nDirectories=scalable/apps\n'
+            'Directories=\nInherits=Yaru-blue-qortal,hicolor\n'
+            '[scalable/apps]\nSize=48\nType=Scalable\nContext=Applications\n')
+        (self.theme / '48x48/apps/qortal-menu-button-2.png').touch()
+        self.fallback.mkdir(parents=True)
+        (self.fallback / 'qortal-hub.png').touch()
+        self.run_helper(QORTAL_ICONS_PRESERVE_EXISTING='1', QORTAL_ICONS_SELECT_THEME='0')
+        self.assert_icons()
+        self.assertTrue((self.source / 'qortal-menu-button-2.png').stat().st_size)
+        before = (self.theme / 'index.theme').read_bytes()
+        self.assertNotIn('Inherits=Yaru-blue-qortal', before.decode())
+        index = configparser.ConfigParser(interpolation=None)
+        index.read_string(before.decode())
+        self.assertEqual(set(index['Icon Theme']['Directories'].split(',')), {'48x48/apps', 'scalable/apps'})
+        self.run_helper(QORTAL_ICONS_PRESERVE_EXISTING='1', QORTAL_ICONS_SELECT_THEME='0')
+        self.assertEqual((self.theme / 'index.theme').read_bytes(), before)
+        self.assertEqual(len(list((self.home / 'backups/qortal-icons').glob('qortal-index-*.theme'))), 1)
+
+    def test_gtk_resolves_and_renders_qortal_icons_at_requested_menu_sizes(self):
+        self.local_sources()
+        def chunk(kind, data):
+            return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+        png = (b'\x89PNG\r\n\x1a\n' +
+               chunk(b'IHDR', struct.pack('!2I5B', 48, 48, 8, 6, 0, 0, 0)) +
+               chunk(b'IDAT', zlib.compress((b'\x00' + b'\x00\x80\xff\xff' * 48) * 48)) +
+               chunk(b'IEND', b''))
+        for source in self.source.glob('*.png'):
+            source.write_bytes(png)
+        self.theme.mkdir(parents=True)
+        (self.theme / 'index.theme').write_text('[Icon Theme]\nDirectories=\n')
+        self.run_helper(QORTAL_ICONS_PRESERVE_EXISTING='1', QORTAL_ICONS_SELECT_THEME='0')
+        code = '''import os, pathlib, sys
+try:
+    import gi
+    gi.require_version('Gtk', '3.0')
+    from gi.repository import Gtk
+except (ImportError, ValueError):
+    sys.exit(77)
+home = pathlib.Path.home()
+icons = Gtk.IconTheme.new()
+icons.set_search_path([str(home / '.icons'), str(pathlib.Path(os.environ['XDG_DATA_HOME']) / 'icons')])
+icons.set_custom_theme('Yaru-blue-qortal')
+for name in ('qortal', 'qortal-hub', 'qortal-ui', 'qortal-menu-button-2'):
+    for size in (26, 36, 40):
+        icon = icons.lookup_icon(name, size, Gtk.IconLookupFlags.FORCE_SIZE)
+        assert icon and 'Yaru-blue-qortal/48x48/apps/' in icon.get_filename(), (name, size)
+        assert icon.load_icon().get_width() == size, (name, size)
+'''
+        result = subprocess.run(['/usr/bin/python3', '-c', code], env=self.env,
+                                capture_output=True, text=True, timeout=10)
+        if result.returncode == 77:
+            self.skipTest('GTK 3 Python bindings unavailable')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_headless_or_failed_settings_still_installs_fallback(self):
         self.local_sources()
         for desktop in ('', 'ubuntu:GNOME', 'X-Cinnamon'):
@@ -201,17 +263,25 @@ cp "$archive" "$out"
 
     def test_preserve_mode_keeps_custom_artwork_icons_and_theme_selection(self):
         # Partial sources force the download/merge path without replacing the
-        # user's existing source, generated icon or theme index.
+        # user's existing source, generated icon or valid custom theme entries.
         self.source.mkdir(parents=True)
         (self.source / 'qortal.png').write_bytes(b'personal source')
         (self.theme / '48x48/apps').mkdir(parents=True)
-        (self.theme / 'index.theme').write_text('personal index\n')
+        (self.theme / 'index.theme').write_text(
+            '[Icon Theme]\nName=Personal Qortal\nDirectories=custom/apps\nInherits=Adwaita,hicolor\n'
+            '[custom/apps]\nSize=96\nType=Fixed\nContext=Applications\n')
         (self.theme / '48x48/apps/qortal.png').write_bytes(b'personal icon')
         self.fallback.mkdir(parents=True)
         (self.fallback / 'qortal.png').write_bytes(b'personal fallback')
         self.run_helper(QORTAL_ICONS_PRESERVE_EXISTING='1', QORTAL_ICONS_SELECT_THEME='0')
         self.assertEqual((self.source / 'qortal.png').read_bytes(), b'personal source')
-        self.assertEqual((self.theme / 'index.theme').read_text(), 'personal index\n')
+        index = configparser.ConfigParser(interpolation=None)
+        index.read(self.theme / 'index.theme')
+        self.assertEqual(index['Icon Theme']['Name'], 'Personal Qortal')
+        self.assertIn('custom/apps', index['Icon Theme']['Directories'])
+        self.assertEqual(index['custom/apps']['Size'], '96')
+        self.assertIn('48x48/apps', index['Icon Theme']['Directories'])
+        self.assertEqual(len(list((self.home / 'backups/qortal-icons').glob('qortal-index-*.theme'))), 1)
         self.assertEqual((self.theme / '48x48/apps/qortal.png').read_bytes(), b'personal icon')
         self.assertEqual((self.fallback / 'qortal.png').read_bytes(), b'personal fallback')
         self.assertTrue((self.fallback / 'qortal-hub.png').exists())
@@ -239,7 +309,7 @@ cp "$archive" "$out"
         shutil.copy2(ROOT / 'cinnamon-settings.json', self.root / 'cinnamon-settings.json')
         (self.root / 'create-icon-theme-uni.sh').write_text('exit 7\n')
         (self.bin / 'bash').symlink_to(BASH)
-        for command in ('dirname', 'python3', 'grep', 'sed', 'id'):
+        for command in ('dirname', 'grep', 'sed', 'id'):
             (self.bin / command).symlink_to(shutil.which(command))
         self.stub('pgrep', 'exit 1\n')
         self.stub('xrandr', 'echo "Monitors: 1"\n')
@@ -249,15 +319,17 @@ case "$1" in
   set) printf '%s' "$4" > "$state" ;;
   get)
     if [ "$2" = org.cinnamon ]; then echo '[]'
-    else python3 -c 'import pathlib,sys; print(repr(pathlib.Path(sys.argv[1]).read_text()))' "$state"; fi ;;
+    else python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); v=p.read_text() if p.exists() else ""; print(v if v in ("true", "false") else repr(v))' "$state"; fi ;;
   list-schemas) printf '%s\\n' org.cinnamon.desktop.background org.gnome.desktop.interface ;;
   list-keys) printf '%s\\n' picture-uri picture-options color-scheme ;;
 esac
 ''')
-        for theme, component in (('yaru-blue-qortal', 'gtk-3.0'),
-                                 ('windows-10-dark', 'metacity-1'),
-                                 ('windows-10-dark', 'cinnamon')):
-            (self.home / '.themes' / theme / component).mkdir(parents=True, exist_ok=True)
+        for theme, component in (('yaru-blue-qortal', 'gtk-3.0/gtk.css'),
+                                 ('windows-10-dark', 'metacity-1/metacity-theme-3.xml'),
+                                 ('windows-10-dark', 'cinnamon/cinnamon.css')):
+            asset = self.home / '.themes' / theme / component
+            asset.parent.mkdir(parents=True, exist_ok=True)
+            asset.write_text('theme component')
         wallpaper = self.home / 'Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png'
         wallpaper.parent.mkdir(parents=True)
         wallpaper.write_bytes(b'wallpaper')

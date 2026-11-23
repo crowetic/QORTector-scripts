@@ -52,9 +52,12 @@ config_home = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config')
 backup_dir = Path(os.environ.get('REBUILT_MACHINE_BACKUP_DIR') or Path.home() / 'backups/cinnamon-menu')
 for instance in sorted(instances):
     target = config_home / f'cinnamon/spices/menu@cinnamon.org/{instance}.json'
-    # Read legacy values once when migrating an existing desktop.
+    # Cinnamon keeps watching the legacy file if it was the only file at login.
+    # Update that same file so a running applet sees the change immediately.
     legacy = Path.home() / f'.cinnamon/configs/menu@cinnamon.org/{instance}.json'
-    previous_path = target if target.exists() else legacy
+    if legacy.exists() and not target.exists():
+        target = legacy
+    previous_path = target
     previous = json.loads(previous_path.read_text()) if previous_path.exists() else {}
     merged = copy.deepcopy(schema)
     for key, item in merged.items():
@@ -108,8 +111,8 @@ PYCHECK
   fi
 }
 
-apply_desktop_branding() {
-  local wallpaper="$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" value keys schemas schema applied=0
+apply_desktop_wallpaper() {
+  local wallpaper="$HOME/Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png" value keys schemas schema applied=0 status=0
   if [ ! -s "$wallpaper" ]; then
     echo 'Qortal The Future wallpaper is missing; rerun rebuilt-machine.sh to repair artwork.' >&2
     return 1
@@ -125,59 +128,109 @@ PYURI
   schemas=$(gsettings list-schemas) || return 1
   for schema in org.cinnamon.desktop.background org.gnome.desktop.background; do
     grep -Fxq "$schema" <<< "$schemas" || continue
-    keys=$(gsettings list-keys "$schema") || return 1
+    keys=$(gsettings list-keys "$schema") || { status=1; continue; }
     grep -Fxq picture-uri <<< "$keys" || continue
-    set_desktop_setting "$schema" picture-uri "$value" || return 1
+    set_desktop_setting "$schema" picture-uri "$value" || status=1
     applied=1
     if grep -Fxq picture-uri-dark <<< "$keys"; then
-      set_desktop_setting "$schema" picture-uri-dark "$value" || return 1
+      set_desktop_setting "$schema" picture-uri-dark "$value" || status=1
     else
       echo "$schema has no picture-uri-dark key; picture-uri is used for both appearances."
     fi
     # A previous 'none' value would hide the wallpaper even with a correct URI.
     if grep -Fxq picture-options <<< "$keys"; then
-      set_desktop_setting "$schema" picture-options zoom || return 1
+      set_desktop_setting "$schema" picture-options zoom || status=1
     fi
   done
-  [ "$applied" = 1 ] || { echo 'No supported desktop background schema found.' >&2; return 1; }
+  [ "$applied" = 1 ] || { echo 'No supported desktop background schema found.' >&2; status=1; }
+  return "$status"
+}
+
+apply_desktop_branding() {
+  local schemas schema status=0
+  apply_desktop_wallpaper || status=1
   if [ ! -f "$HOME/.icons/Yaru-blue-qortal/index.theme" ] || \
       [ ! -s "$HOME/.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png" ]; then
     echo 'Qortal icon theme is missing; rerun rebuilt-machine.sh to repair artwork.' >&2
     return 1
   fi
-  set_desktop_setting org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal
+  schemas=$(gsettings list-schemas) || return 1
+  for schema in org.cinnamon.desktop.interface org.gnome.desktop.interface; do
+    grep -Fxq "$schema" <<< "$schemas" || continue
+    set_desktop_setting "$schema" icon-theme Yaru-blue-qortal || status=1
+  done
+  return "$status"
 }
 
-apply_desktop_themes() {
-  local component part schema key value root found status=0
+# Return a directory containing the requested component, in GTK search order.
+find_desktop_theme() {
+  local name="$1" component="$2" root
   local -a roots
   IFS=: read -r -a roots <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
   roots=("$HOME/.themes" "${XDG_DATA_HOME:-$HOME/.local/share}/themes" "${roots[@]/%//themes}")
-  for part in 'gtk-3.0:org.cinnamon.desktop.interface:gtk-theme:yaru-blue-qortal' \
-      'metacity-1:org.cinnamon.desktop.wm.preferences:theme:windows-10-dark' \
-      'cinnamon:org.cinnamon.theme:name:windows-10-dark'; do
-    IFS=: read -r component schema key value <<< "$part"
-    # Names are case sensitive. Save the requested selection even if a fresh
-    # non-Qortal OS installation still needs its custom theme assets installed.
-    set_desktop_setting "$schema" "$key" "$value" || status=1
-    found=0
-    for root in "${roots[@]}"; do
-      if [ -d "$root/$value/$component" ]; then found=1; break; fi
-    done
-    if [ "$found" = 0 ]; then
-      echo "Missing Qortal OS theme component $value/$component; install it in ~/.themes, XDG themes or /usr/share/themes and retry." >&2
-      status=1
+  for root in "${roots[@]}"; do
+    if [ -s "$root/$name/$component" ]; then
+      printf '%s\n' "$root/$name"
+      return 0
     fi
   done
-  local schemas keys
+  return 1
+}
+
+apply_desktop_themes() {
+  local schema keys name selected='' status=0
+  # Yaru-blue-qortal is our ICON theme. Only select a custom GTK theme when
+  # its actual stylesheet exists; otherwise use an installed dark GTK theme.
+  for name in yaru-blue-qortal Yaru-blue-dark Yaru-dark Windows-10-Dark Adwaita-dark; do
+    if find_desktop_theme "$name" gtk-3.0/gtk.css >/dev/null; then selected=$name; break; fi
+  done
+  if [ -n "$selected" ]; then
+    set_desktop_setting org.cinnamon.desktop.interface gtk-theme "$selected" || status=1
+  else
+    echo 'No supported dark GTK theme installed; install Yaru-dark, Windows-10-Dark or Adwaita-dark and retry.' >&2
+    status=1
+  fi
+  selected=''
+  for name in windows-10-dark Windows-10-Dark Yaru-blue-dark Yaru-dark Adwaita; do
+    if find_desktop_theme "$name" metacity-1/metacity-theme-3.xml >/dev/null || \
+        find_desktop_theme "$name" metacity-1/metacity-theme-2.xml >/dev/null || \
+        find_desktop_theme "$name" metacity-1/metacity-theme-1.xml >/dev/null; then selected=$name; break; fi
+  done
+  if [ -n "$selected" ]; then
+    set_desktop_setting org.cinnamon.desktop.wm.preferences theme "$selected" || status=1
+  else
+    echo 'Keeping installed window borders; no optional dark border theme found.'
+  fi
+  # Keep a working panel theme, including Cinnamon's built-in default. Repair
+  # the nonexistent lower-case selection left by older rebuilds when needed.
+  selected=$(gsettings get org.cinnamon.theme name) || return 1
+  selected=$(python3 -c 'import ast,sys; print(ast.literal_eval(sys.argv[1]))' "$selected") || return 1
+  if [ -n "$selected" ] && ! find_desktop_theme "$selected" cinnamon/cinnamon.css >/dev/null; then
+    selected=''
+    for name in windows-10-dark Windows-10-Dark Windows-10; do
+      if find_desktop_theme "$name" cinnamon/cinnamon.css >/dev/null; then selected=$name; break; fi
+    done
+    set_desktop_setting org.cinnamon.theme name "$selected" || status=1
+  fi
+  local schemas
   schemas=$(gsettings list-schemas) || return 1
-  for schema in org.cinnamon.desktop.interface org.gnome.desktop.interface; do
+  # Cinnamon's Themes > Settings > Dark mode uses the XApp portal key.
+  for schema in org.x.apps.portal org.cinnamon.desktop.interface org.gnome.desktop.interface; do
     grep -Fxq "$schema" <<< "$schemas" || continue
     keys=$(gsettings list-keys "$schema") || { status=1; continue; }
     if grep -Fxq color-scheme <<< "$keys"; then
       set_desktop_setting "$schema" color-scheme prefer-dark || status=1
     fi
   done
+  return "$status"
+}
+
+apply_desktop_icons() {
+  local key status=0
+  for key in show-desktop-icons home-icon-visible trash-icon-visible; do
+    set_desktop_setting org.nemo.desktop "$key" true || status=1
+  done
+  set_desktop_setting org.nemo.desktop desktop-layout 'true::false' || status=1
   return "$status"
 }
 
@@ -291,6 +344,7 @@ main() {
     if [ "$mode" != --branding-only ]; then
       apply_desktop_themes || status=1
       apply_desktop_icon_layout || status=1
+      apply_desktop_icons || status=1
     fi
     apply_desktop_branding || status=1
   fi

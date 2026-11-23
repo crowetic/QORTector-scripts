@@ -66,7 +66,8 @@ if [ "$1" = set ]; then
 elif [ "$1" = list-schemas ]; then
   printf '%s\n' "${REBUILD_TEST_BACKGROUND_SCHEMAS:-org.cinnamon.desktop.background org.gnome.desktop.background}" | tr ' ' '\n'
   printf '%s\n' org.cinnamon.desktop.interface org.gnome.desktop.interface org.nemo.desktop
-elif [ "$1" = list-keys ] && [[ "$2" = *interface ]]; then
+  [ "${REBUILD_TEST_NO_XAPP:-0}" = 1 ] || echo org.x.apps.portal
+elif [ "$1" = list-keys ] && [[ "$2" = *interface || "$2" = org.x.apps.portal ]]; then
   if [ "$2" = org.cinnamon.desktop.interface ] && [ "${REBUILD_TEST_NO_CINNAMON_COLOR_SCHEME:-0}" = 1 ]; then exit 0; fi
   [ "${REBUILD_TEST_NO_COLOR_SCHEME:-0}" = 1 ] || echo color-scheme
 elif [ "$1" = list-keys ]; then
@@ -138,10 +139,12 @@ if [ "$1" = dump ]; then echo '[old]'; else cat >> "$REBUILD_TEST_LOG"; fi
             'REBUILD_TEST_APPLETS': repr(applets)})
 
     def desktop_artwork(self):
-        for name, component in (('yaru-blue-qortal', 'gtk-3.0'),
-                                ('windows-10-dark', 'metacity-1'),
-                                ('windows-10-dark', 'cinnamon')):
-            (self.home / '.themes' / name / component).mkdir(parents=True, exist_ok=True)
+        for name, component in (('yaru-blue-qortal', 'gtk-3.0/gtk.css'),
+                                ('windows-10-dark', 'metacity-1/metacity-theme-3.xml'),
+                                ('windows-10-dark', 'cinnamon/cinnamon.css')):
+            asset = self.home / '.themes' / name / component
+            asset.parent.mkdir(parents=True, exist_ok=True)
+            asset.write_text('theme component')
         wallpaper = self.home / 'Pictures/wallpapers/Qortal-TheFuture-Wallpaper.png'
         wallpaper.parent.mkdir(parents=True, exist_ok=True)
         wallpaper.write_bytes(b'wallpaper')
@@ -194,9 +197,9 @@ install_qortal_hub() { return 0; }
             self.assertEqual(actual['menu-icon']['value'], 'qortal-menu-button-2')
             self.assertTrue(actual['menu-custom']['value'])
             self.assertEqual(actual['menu-label']['value'], 'Qortal-OS')
-            self.assertEqual(actual['category-icon-size']['value'], 32)
-            self.assertEqual(actual['fav-icon-size']['value'], 38)
-            self.assertEqual(actual['application-icon-size']['value'], 28)
+            self.assertEqual(actual['category-icon-size']['value'], 36)
+            self.assertEqual(actual['fav-icon-size']['value'], 40)
+            self.assertEqual(actual['application-icon-size']['value'], 26)
             self.assertEqual(actual['new-version-setting']['value'], 99)
             self.assertEqual(actual['layout']['pages'], ['modern-layout'])
             self.assertNotIn('menu-height', actual)
@@ -218,24 +221,24 @@ install_qortal_hub() { return 0; }
         actual = json.loads(target.read_text())
         self.assertEqual(actual['menu-icon']['value'], str(source))
         self.assertEqual(actual['menu-label']['value'], 'Qortal-OS')
-        self.assertEqual(actual['sidebar-icon-size']['value'], 38)
-        self.assertEqual(actual['category-icon-size']['value'], 32)
-        self.assertEqual(actual['application-icon-size']['value'], 28)
+        self.assertEqual(actual['sidebar-icon-size']['value'], 40)
+        self.assertEqual(actual['category-icon-size']['value'], 36)
+        self.assertEqual(actual['application-icon-size']['value'], 26)
         self.assertNotIn('fav-icon-size', actual)
         before = target.stat().st_mtime_ns
         self.apply_menu(['panel1:left:0:menu@cinnamon.org:7'])
         self.assertEqual(target.stat().st_mtime_ns, before)
         self.assertFalse(list(self.backup.glob('menu-*.json')))
 
-    def test_menu_migrates_legacy_instance_settings(self):
+    def test_menu_updates_file_watched_by_legacy_running_applet(self):
         self.menu_schema()
         legacy = self.home / '.cinnamon/configs/menu@cinnamon.org/4.json'
         legacy.parent.mkdir(parents=True)
         legacy.write_text(json.dumps({'new-version-setting': {'value': 78}}))
         self.apply_menu(['panel1:left:0:menu@cinnamon.org:4'])
-        target = self.config / 'cinnamon/spices/menu@cinnamon.org/4.json'
-        self.assertEqual(json.loads(target.read_text())['new-version-setting']['value'], 78)
-        self.assertTrue(legacy.exists())
+        self.assertEqual(json.loads(legacy.read_text())['new-version-setting']['value'], 78)
+        self.assertEqual(json.loads(legacy.read_text())['application-icon-size']['value'], 26)
+        self.assertFalse((self.config / 'cinnamon/spices/menu@cinnamon.org/4.json').exists())
 
     def test_disabled_menu_is_not_reenabled_or_given_instance_zero(self):
         self.menu_schema()
@@ -469,7 +472,7 @@ install_qortal_core() { echo UNEXPECTED_CORE_SETUP; }
 main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         self.assertNotIn('auto-fix-qortal.sh', self.cron.read_text())
 
-    def test_fresh_arch_desktop_applies_branding_and_rerun_preserves_changes(self):
+    def test_arch_default_run_reapplies_desktop_and_explicit_opt_out_preserves_changes(self):
         code = self.desktop_checkout()
         self.stub('pacman', 'exit 0\n')
         env = {**self.os_release('arch'), **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0'}
@@ -490,14 +493,14 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         self.assertEqual(settings['menu-icon']['value'], str(
             self.home / '.icons/Yaru-blue-qortal/48x48/apps/qortal-menu-button-2.png'))
         self.assertEqual(settings['menu-icon-size']['value'], 40)
-        self.assertEqual(settings['category-icon-size']['value'], 32)
-        self.assertEqual(settings['fav-icon-size']['value'], 38)
-        self.assertEqual(settings['application-icon-size']['value'], 28)
+        self.assertEqual(settings['category-icon-size']['value'], 36)
+        self.assertEqual(settings['fav-icon-size']['value'], 40)
+        self.assertEqual(settings['application-icon-size']['value'], 26)
         self.assertFalse((self.home / '.dmrc').exists())
         self.assertIn('color-scheme prefer-dark', calls)
         self.assertIn('gtk-theme yaru-blue-qortal', calls)
         self.assertIn('org.cinnamon.desktop.wm.preferences theme windows-10-dark', calls)
-        self.assertIn('org.cinnamon.theme name windows-10-dark', calls)
+        self.assertNotIn('gsettings set org.cinnamon.theme name', calls)
         metadata = configparser.RawConfigParser()
         metadata.read(self.config / 'nemo/desktop-metadata')
         self.assertFalse(metadata.getboolean('desktop-monitor-0', 'nemo-icon-view-auto-layout'))
@@ -509,7 +512,7 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         theme_setting = self.root / 'gsettings/org.cinnamon.desktop.interface.icon-theme'
         theme_setting.write_text('Personal-icons')
         self.log.write_text('')
-        self.bash(code + 'main', extra_env=env)
+        self.bash(code + 'main --preserve-desktop', extra_env=env)
         self.assertEqual(menu.read_bytes(), saved_menu)
         self.assertEqual(theme_setting.read_text(), 'Personal-icons')
         self.assertNotIn('gsettings', self.log.read_text())
@@ -528,9 +531,9 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         settings = json.loads((self.config / 'cinnamon/spices/menu@cinnamon.org/7.json').read_text())
         self.assertEqual(settings['menu-label']['value'], 'Qortal-OS')
         self.assertEqual(settings['menu-icon-size']['value'], 40)
-        self.assertEqual(settings['category-icon-size']['value'], 32)
-        self.assertEqual(settings['fav-icon-size']['value'], 38)
-        self.assertEqual(settings['application-icon-size']['value'], 28)
+        self.assertEqual(settings['category-icon-size']['value'], 36)
+        self.assertEqual(settings['fav-icon-size']['value'], 40)
+        self.assertEqual(settings['application-icon-size']['value'], 26)
 
     def test_fresh_desktop_over_ssh_defers_until_successful_first_login(self):
         code = self.desktop_checkout()
@@ -642,13 +645,12 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         result = self.bash(code + 'main', extra_env={
             **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0',
             'XDG_DATA_DIRS': str(self.root / 'system-data')})
-        self.assertIn('Missing Qortal OS theme component yaru-blue-qortal/gtk-3.0', result.stderr)
-        self.assertIn('windows-10-dark/metacity-1', result.stderr)
-        self.assertIn('windows-10-dark/cinnamon', result.stderr)
+        self.assertIn('No supported dark GTK theme installed', result.stderr)
+        self.assertNotIn('gtk-theme yaru-blue-qortal', self.log.read_text())
         self.assertTrue((self.config / 'autostart/apply-cinnamon-settings.desktop').exists())
         self.assertTrue((self.config / 'nemo/desktop-metadata').exists())
         menu = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
-        self.assertEqual(json.loads(menu.read_text())['application-icon-size']['value'], 28)
+        self.assertEqual(json.loads(menu.read_text())['application-icon-size']['value'], 26)
         self.assertIn('picture-options zoom', self.log.read_text())
         self.assertIn('color-scheme prefer-dark', self.log.read_text())
         # Installing the actual custom assets lets the queued job complete.
@@ -671,9 +673,102 @@ main''', success=False, extra_env={'REBUILT_MACHINE_HEADLESS': '1'})
         calls = self.log.read_text()
         self.assertIn('org.cinnamon.desktop.interface gtk-theme yaru-blue-qortal', calls)
         self.assertIn('org.cinnamon.desktop.wm.preferences theme windows-10-dark', calls)
-        self.assertIn('org.cinnamon.theme name windows-10-dark', calls)
+        self.assertNotIn('gsettings set org.cinnamon.theme name', calls)
         self.assertIn('org.gnome.desktop.interface color-scheme prefer-dark', calls)
         self.assertNotIn('org.cinnamon.desktop.interface color-scheme', calls)
+
+    def test_stock_cinnamon_selects_real_dark_theme_and_xapp_preference(self):
+        self.desktop_artwork()
+        shutil.rmtree(self.home / '.themes')
+        dark = self.data / 'themes/Yaru-dark/gtk-3.0/gtk.css'
+        dark.parent.mkdir(parents=True)
+        dark.write_text('dark stylesheet')
+        # An empty directory from an interrupted install must not be selected.
+        (self.home / '.themes/yaru-blue-qortal/gtk-3.0').mkdir(parents=True)
+        self.bash('source "$MENU_HELPER"; apply_desktop_themes', extra_env={
+            'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh'),
+            'XDG_DATA_DIRS': str(self.root / 'empty'),
+            'REBUILD_TEST_NO_CINNAMON_COLOR_SCHEME': '1'})
+        calls = self.log.read_text()
+        self.assertIn('set org.cinnamon.desktop.interface gtk-theme Yaru-dark', calls)
+        self.assertNotIn('gtk-theme yaru-blue-qortal', calls)
+        self.assertIn('set org.x.apps.portal color-scheme prefer-dark', calls)
+        self.assertNotIn('set org.cinnamon.theme name', calls)
+
+    def test_existing_valid_panel_theme_is_kept_and_invalid_name_repaired(self):
+        self.desktop_artwork()
+        panel = self.home / '.themes/My panel/cinnamon/cinnamon.css'
+        panel.parent.mkdir(parents=True)
+        panel.write_text('panel stylesheet')
+        helper = {'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh')}
+        self.bash('gsettings set org.cinnamon.theme name "My panel"', extra_env=helper)
+        self.log.write_text('')
+        self.bash('source "$MENU_HELPER"; apply_desktop_themes', extra_env=helper)
+        self.assertNotIn('set org.cinnamon.theme name', self.log.read_text())
+        self.bash('gsettings set org.cinnamon.theme name missing-theme', extra_env=helper)
+        self.bash('source "$MENU_HELPER"; apply_desktop_themes', extra_env=helper)
+        self.assertEqual((self.root / 'gsettings/org.cinnamon.theme.name').read_text(), 'windows-10-dark')
+
+    def test_missing_wallpaper_does_not_suppress_icon_theme_selection(self):
+        self.desktop_artwork().unlink()
+        self.bash('source "$MENU_HELPER"; apply_desktop_branding', success=False, extra_env={
+            'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh')})
+        calls = self.log.read_text()
+        self.assertIn('set org.cinnamon.desktop.interface icon-theme Yaru-blue-qortal', calls)
+        self.assertIn('set org.gnome.desktop.interface icon-theme Yaru-blue-qortal', calls)
+
+    def test_windows_theme_downloads_are_validated_and_repeat_without_network(self):
+        shell = self.root / 'shell.zip'
+        dark = self.root / 'dark.zip'
+        with zipfile.ZipFile(shell, 'w') as archive:
+            archive.writestr('Windows-10/cinnamon/cinnamon.css', 'shell css')
+            archive.writestr('Windows-10/cinnamon/personal.css', 'upstream')
+        with zipfile.ZipFile(dark, 'w') as archive:
+            archive.writestr('Windows-10-Dark-master/gtk-3.0/gtk.css', 'dark css')
+            archive.writestr('Windows-10-Dark-master/metacity-1/metacity-theme-3.xml', 'borders')
+        partial = self.home / '.themes/Windows-10/cinnamon'
+        partial.mkdir(parents=True)
+        (partial / 'cinnamon.css').touch()
+        (partial / 'personal.css').write_text('personal')
+        code = '''BACKUP_DIR="$REBUILT_MACHINE_BACKUP_DIR"
+download_with_retry() {
+  printf '%s\\n' "$1" >> "$REBUILD_TEST_LOG"
+  case "$1" in
+    *Windows-10.zip) cp "$TEST_SHELL" "$2" ;;
+    *Windows-10-Dark*) cp "$TEST_DARK" "$2" ;;
+    *) return 99 ;;
+  esac
+}
+install_desktop_themes'''
+        env = {'TEST_SHELL': str(shell), 'TEST_DARK': str(dark),
+               'XDG_DATA_DIRS': str(self.root / 'empty')}
+        self.bash(code, extra_env=env)
+        self.assertEqual((partial / 'cinnamon.css').read_text(), 'shell css')
+        self.assertEqual((partial / 'personal.css').read_text(), 'personal')
+        self.assertTrue((self.home / '.themes/Windows-10-Dark/metacity-1/metacity-theme-3.xml').exists())
+        downloads = self.log.read_text()
+        self.assertIn('cinnamon-spices.linuxmint.com/files/themes/Windows-10.zip', downloads)
+        self.assertIn('B00merang-Project/Windows-10-Dark', downloads)
+        self.bash(code, extra_env=env)
+        self.assertEqual(self.log.read_text(), downloads)
+        # A failed archive is never installed or chosen as a theme.
+        shutil.rmtree(self.home / '.themes/Windows-10-Dark')
+        dark.write_bytes(b'not a zip')
+        result = self.bash(code, extra_env=env)
+        self.assertIn('Windows-10-Dark theme download failed', result.stderr)
+        self.assertFalse((self.home / '.themes/Windows-10-Dark').exists())
+
+    def test_theme_downloads_skip_xdg_installs_and_dry_run_has_no_writes(self):
+        for theme, component in [('Windows-10', 'cinnamon/cinnamon.css'),
+                                 ('Windows-10-Dark', 'gtk-3.0/gtk.css')]:
+            target = self.data / 'themes' / theme / component
+            target.parent.mkdir(parents=True)
+            target.write_text('existing')
+        self.bash('install_desktop_themes')
+        self.assertFalse((self.home / '.themes').exists())
+        shutil.rmtree(self.data / 'themes')
+        self.bash('DRY_RUN=1; install_desktop_themes')
+        self.assertFalse((self.home / '.themes').exists())
 
     def test_nemo_manual_layout_preserves_positions_and_is_idempotent(self):
         target = self.config / 'nemo/desktop-metadata'
@@ -790,6 +885,7 @@ apply_desktop_icon_layout''', success=False, extra_env={
         self.menu_schema()
         self.desktop_artwork()
         self.stub('gsettings', f'exec "{real_gsettings}" "$@"\n')
+        subprocess.run([real_gsettings, 'set', 'org.cinnamon.theme', 'name', ''], env=env, check=True)
         subprocess.run([real_gsettings, 'set', 'org.cinnamon', 'enabled-applets',
                         "['panel1:left:0:menu@cinnamon.org:7']"], env=env, check=True)
         self.bash('''bash "$MENU_HELPER" --desktop-only
@@ -799,36 +895,59 @@ set_desktop_setting org.nemo.desktop show-desktop-icons false''', extra_env={
         for schema, key, value in (
                 ('org.cinnamon.desktop.interface', 'gtk-theme', "'yaru-blue-qortal'"),
                 ('org.cinnamon.desktop.wm.preferences', 'theme', "'windows-10-dark'"),
-                ('org.cinnamon.theme', 'name', "'windows-10-dark'"),
+                ('org.cinnamon.theme', 'name', "''"),
+                ('org.cinnamon.desktop.interface', 'icon-theme', "'Yaru-blue-qortal'"),
+                ('org.gnome.desktop.interface', 'icon-theme', "'Yaru-blue-qortal'"),
+                ('org.nemo.desktop', 'home-icon-visible', 'true'),
+                ('org.nemo.desktop', 'trash-icon-visible', 'true'),
+                ('org.nemo.desktop', 'desktop-layout', "'true::false'"),
                 ('org.gnome.desktop.interface', 'color-scheme', "'prefer-dark'"),
                 ('org.cinnamon.desktop.background', 'picture-options', "'zoom'"),
                 ('org.nemo.desktop', 'show-desktop-icons', 'false')):
             actual = subprocess.check_output([real_gsettings, 'get', schema, key], env=env, text=True)
             self.assertEqual(actual.strip(), value)
+        if 'org.x.apps.portal' in schemas:
+            actual = subprocess.check_output([real_gsettings, 'get', 'org.x.apps.portal', 'color-scheme'], env=env, text=True)
+            self.assertEqual(actual.strip(), "'prefer-dark'")
         target = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
         before = target.stat().st_mtime_ns
         self.bash('bash "$MENU_HELPER" --desktop-only', extra_env={
             **env, 'MENU_HELPER': str(ROOT / 'apply-cinnamon-settings.sh')})
         self.assertEqual(target.stat().st_mtime_ns, before)
 
-    def test_existing_desktop_config_is_preserved_without_setup_history(self):
-        self.bash('is_fresh_desktop')
+    def test_plain_rerun_repairs_desktop_despite_setup_history_and_personal_settings(self):
+        code = self.desktop_checkout()
+        (self.home / '.qortector-setup-state.json').write_text('{"schema":1}')
         dconf = self.config / 'dconf/user'
         dconf.parent.mkdir(parents=True)
-        dconf.touch()
-        self.bash('is_fresh_desktop')
-        for path in (dconf, self.home / '.qortector-setup-state.json', self.home / '.dmrc',
-                     self.config / 'cinnamon/spices/menu@cinnamon.org/7.json',
-                     self.home / '.cinnamon/configs/menu@cinnamon.org/7.json',
-                     self.data / 'cinnamon/applets/menu@cinnamon.org/metadata.json'):
-            with self.subTest(path=path):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text('existing settings')
-                self.bash('is_fresh_desktop', success=False)
-                path.unlink()
-                # Menu directory presence itself is the preservation signal.
-                if path.name in ('7.json', 'metadata.json'):
-                    path.parent.rmdir()
+        dconf.write_bytes(b'previous setup')
+        menu = self.config / 'cinnamon/spices/menu@cinnamon.org/7.json'
+        menu.parent.mkdir(parents=True)
+        menu.write_text(json.dumps({'menu-label': {'value': 'Old menu'}}))
+        self.bash(code + 'main', extra_env={
+            **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0'})
+        settings = json.loads(menu.read_text())
+        for key, value in [('menu-label', 'Qortal-OS'), ('menu-icon-size', 40),
+                           ('category-icon-size', 36), ('fav-icon-size', 40),
+                           ('application-icon-size', 26)]:
+            self.assertEqual(settings[key]['value'], value)
+        calls = self.log.read_text()
+        self.assertIn('dconf dump /', calls)
+        self.assertIn('set org.x.apps.portal color-scheme prefer-dark', calls)
+        self.assertIn('set org.nemo.desktop home-icon-visible true', calls)
+        self.assertIn('set org.nemo.desktop trash-icon-visible true', calls)
+        self.assertFalse((self.home / '.dmrc').exists())
+        before = menu.read_bytes()
+        self.bash(code + 'main', extra_env={
+            **self.desktop_session(), 'REBUILT_MACHINE_HEADLESS': '0'})
+        self.assertEqual(menu.read_bytes(), before)
+
+    def test_preserve_desktop_env_and_conflicting_flags(self):
+        self.bash('main --dry-run', extra_env={
+            'REBUILT_MACHINE_PRESERVE_DESKTOP': '1', 'REBUILT_MACHINE_HEADLESS': '0'})
+        result = self.bash('main --apply-defaults --preserve-desktop', success=False)
+        self.assertIn('cannot be combined', result.stderr)
+        self.assertFalse(self.log.exists())
 
     def test_only_java_17_is_requested_on_fresh_installs_for_all_managers(self):
         for manager, expected in (('apt-get', 'openjdk-17-jre'), ('pacman', 'jre17-openjdk'),
@@ -1997,7 +2116,7 @@ install_machine_artwork'''
         self.bash('download_with_retry() { exit 99; }; install_machine_artwork')
 
 
-    def test_complete_default_rerun_preserves_configured_desktop_and_no_reboot(self):
+    def test_explicit_preserve_rerun_keeps_configured_desktop_and_no_reboot(self):
         checkout = self.root / 'checkout'
         checkout.mkdir()
         for name in ('rebuilt-machine.sh', 'apply-cinnamon-settings.sh', 'cinnamon-settings.json',
@@ -2026,8 +2145,8 @@ package_installed() { return 0; }
 install_machine_artwork() { return 0; }
 install_sensors_applet() { return 0; }
 install_desktop_themes() { return 0; }
-main
-main''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': '0'})
+main --preserve-desktop
+main --preserve-desktop''', extra_env={'TEST_CHECKOUT': str(checkout), 'REBUILT_MACHINE_HEADLESS': '0'})
         for path, content in custom.items():
             self.assertEqual(path.read_bytes(), content, str(path))
         self.assertEqual(self.cron.read_text(), old_cron)
