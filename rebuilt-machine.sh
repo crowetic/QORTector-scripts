@@ -694,6 +694,13 @@ desktop_session_available() {
   [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]
 }
 
+cinnamon_session_available() {
+  command_exists gdbus || return 1
+  [[ $(gdbus call --session --timeout 5 --dest org.freedesktop.DBus \
+    --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner \
+    org.Cinnamon 2>/dev/null) == '(true,)' ]]
+}
+
 package_available() {
   case "${PKG_MANAGER:-apt-get}" in
     apt-get)
@@ -944,6 +951,9 @@ apply_or_defer_desktop_branding() {
       if [ "$APPLY_DEFAULTS" = 1 ]; then
         REBUILT_MACHINE_BACKUP_DIR="$BACKUP_DIR" bash "$HOME/configure-terminal-and-more.sh" || warn 'Some optional desktop preferences could not be applied.'
       fi
+      # Fresh Ubuntu often starts setup in GNOME before Cinnamon has created
+      # its menu instance. Finish again in Cinnamon even if all writes passed.
+      if ! cinnamon_session_available; then queue_desktop_branding; fi
       return 0
     fi
     warn 'Desktop branding could not be applied in this session; retrying at Cinnamon login.'

@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -50,6 +51,38 @@ if not instances:
     print('No enabled standard Cinnamon menu applet; leaving menu instances unchanged.')
 config_home = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config')
 backup_dir = Path(os.environ.get('REBUILT_MACHINE_BACKUP_DIR') or Path.home() / 'backups/cinnamon-menu')
+live = False
+status = 0
+if instances and os.environ.get('DBUS_SESSION_BUS_ADDRESS') and shutil.which('gdbus'):
+    try:
+        owner = subprocess.run(
+            ['gdbus', 'call', '--session', '--timeout', '5', '--dest', 'org.freedesktop.DBus',
+             '--object-path', '/org/freedesktop/DBus', '--method', 'org.freedesktop.DBus.NameHasOwner',
+             'org.Cinnamon'], capture_output=True, text=True, timeout=7)
+        live = owner.returncode == 0 and owner.stdout.strip() == '(true,)'
+    except subprocess.TimeoutExpired:
+        pass
+
+def refresh_menu(instance):
+    # Use the same notification as Cinnamon Settings. File writes alone can
+    # leave the running applet's in-memory values stale, even on a repeat run.
+    global status
+    if not live:
+        return
+    try:
+        result = subprocess.run(
+            ['gdbus', 'call', '--session', '--timeout', '5', '--dest', 'org.Cinnamon',
+             '--object-path', '/org/Cinnamon', '--method', 'org.Cinnamon.updateSetting',
+             'menu@cinnamon.org', instance, '', ''],
+            capture_output=True, text=True, timeout=7)
+        if result.returncode == 0:
+            return
+        detail = result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        detail = 'request timed out'
+    print(f'Could not refresh Cinnamon menu {instance}: {detail}; retry at Cinnamon login.', file=sys.stderr)
+    status = 1
+
 for instance in sorted(instances):
     target = config_home / f'cinnamon/spices/menu@cinnamon.org/{instance}.json'
     # Cinnamon keeps watching the legacy file if it was the only file at login.
@@ -74,6 +107,7 @@ for instance in sorted(instances):
     output = json.dumps(merged, indent=4, ensure_ascii=False) + '\n'
     if target.exists() and target.read_text() == output:
         print(f'Cinnamon menu {instance} already configured (40px).')
+        refresh_menu(instance)
         continue
     if previous_path.exists():
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -88,6 +122,8 @@ for instance in sorted(instances):
         if os.path.exists(tmp):
             os.unlink(tmp)
     print(f'Configured Cinnamon menu {instance}: {target} (40px).')
+    refresh_menu(instance)
+sys.exit(status)
 PYMENU
 }
 
@@ -201,16 +237,13 @@ apply_desktop_themes() {
   else
     echo 'Keeping installed window borders; no optional dark border theme found.'
   fi
-  # Keep a working panel theme, including Cinnamon's built-in default. Repair
-  # the nonexistent lower-case selection left by older rebuilds when needed.
-  selected=$(gsettings get org.cinnamon.theme name) || return 1
-  selected=$(python3 -c 'import ast,sys; print(ast.literal_eval(sys.argv[1]))' "$selected") || return 1
-  if [ -n "$selected" ] && ! find_desktop_theme "$selected" cinnamon/cinnamon.css >/dev/null; then
-    selected=''
-    for name in windows-10-dark Windows-10-Dark Windows-10; do
-      if find_desktop_theme "$name" cinnamon/cinnamon.css >/dev/null; then selected=$name; break; fi
-    done
-    set_desktop_setting org.cinnamon.theme name "$selected" || status=1
+  # The Desktop row in Cinnamon Themes is the shell/panel theme. Use the
+  # requested Windows-10 shell independently of dark applications and borders.
+  if find_desktop_theme Windows-10 cinnamon/cinnamon.css >/dev/null; then
+    set_desktop_setting org.cinnamon.theme name Windows-10 || status=1
+  else
+    echo 'Windows-10 Cinnamon desktop theme is missing; rerun rebuilt-machine.sh to install it.' >&2
+    status=1
   fi
   local schemas
   schemas=$(gsettings list-schemas) || return 1

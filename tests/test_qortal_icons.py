@@ -326,7 +326,7 @@ esac
 ''')
         for theme, component in (('yaru-blue-qortal', 'gtk-3.0/gtk.css'),
                                  ('windows-10-dark', 'metacity-1/metacity-theme-3.xml'),
-                                 ('windows-10-dark', 'cinnamon/cinnamon.css')):
+                                 ('Windows-10', 'cinnamon/cinnamon.css')):
             asset = self.home / '.themes' / theme / component
             asset.parent.mkdir(parents=True, exist_ok=True)
             asset.write_text('theme component')

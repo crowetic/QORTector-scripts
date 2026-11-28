@@ -100,7 +100,8 @@ bash ./rebuilt-machine.sh
 ```
 
 The default run fills missing packages, applications, desktop assets and
-schedules. Every desktop run applies the Qortal icon theme, dark appearance,
+schedules. Every desktop run applies the Qortal icon theme, dark applications,
+the **Windows-10** Cinnamon desktop theme,
 manual desktop icon arrangement, visible Home/Trash icons, The Future wallpaper,
 and **Qortal-OS** menu label/logo, with a dconf backup first. This includes
 machines configured by an older rebuild. Use `--preserve-desktop` to keep personal
@@ -359,7 +360,8 @@ choices. Application preferences and `.dmrc` session selection require
 `--apply-defaults`.
 
 Branding is applied immediately when a display and desktop D-Bus address are
-available. Over SSH, or after a failed preference write, it creates
+available. Over SSH, when Cinnamon is not running (such as Ubuntu's initial
+GNOME session), or after a failed preference write or menu refresh, it creates
 `${XDG_CONFIG_HOME:-$HOME/.config}/autostart/apply-cinnamon-settings.desktop`.
 This Cinnamon-only job backs up dconf at login and removes itself only after
 successful branding. Preference writes are read back to catch silent dconf commit
@@ -439,11 +441,15 @@ Keep `cinnamon-settings.json` beside the helper. It merges preferences with the
 installed Cinnamon menu schema for **each enabled menu instance** under
 `${XDG_CONFIG_HOME:-$HOME/.config}/cinnamon/spices/menu@cinnamon.org/`. It preserves
 new schema entries and existing values where no preference overrides them,
-uses a **40-pixel** menu icon, **36-pixel** category icons, **40-pixel** favorites
-icons, and **26-pixel** application icons. Newer Cinnamon versions use
+uses a **40-pixel** menu icon, **32-pixel** category icons, **38-pixel** favorites
+icons, and **24-pixel** application icons. Newer Cinnamon versions use
 `sidebar-icon-size` for the favorites area; both schema versions are supported.
 When only a legacy `~/.cinnamon/configs/` instance exists, it updates that file
 because a running Cinnamon applet continues watching it until logout.
+After saving, it also asks the running Cinnamon menu to reload through
+[`org.Cinnamon.updateSetting`](https://github.com/linuxmint/cinnamon/blob/master/js/ui/cinnamonDBus.js),
+including when the saved values already match. A failed refresh retains the
+first-login retry.
 It does not assume the menu instance is `0` or re-enable a disabled menu applet.
 Previous menu settings are backed up under `~/backups/cinnamon-menu/` when used
 outside a rebuild.
@@ -481,9 +487,11 @@ missing `Windows-10` from Cinnamon Spices and `Windows-10-Dark` from the
 [B00merang project](https://github.com/B00merang-Project/Windows-10-Dark), validates
 their entry-point files, and fills partial directories without replacing personal
 files. Existing installations in `~/.themes`, XDG data themes or system themes
-are reused. Downloads do not select the Windows panel theme: a working current
-panel theme or Cinnamon's built-in default is kept. Invalid panel selections from
-older rebuilds fall back to an installed Windows theme or Cinnamon's default.
+are reused. Desktop defaults explicitly select **`Windows-10`** in
+`org.cinnamon.theme name`, the **Desktop** row in Cinnamon Themes. The dark
+Windows variant is used only for applications/window borders, never as the
+desktop theme. A missing Windows-10 shell stylesheet leaves the current shell
+selected and retains the first-login retry until the asset is repaired.
 Window borders prefer an installed Windows dark theme, with Yaru/Adwaita fallbacks.
 
 Dark preference is set to `prefer-dark` in **`org.x.apps.portal color-scheme`**,
@@ -521,16 +529,18 @@ Check the result in the Cinnamon session:
 ```bash
 gsettings get org.cinnamon.desktop.interface icon-theme
 gsettings get org.cinnamon.desktop.interface gtk-theme
+gsettings get org.cinnamon.theme name
 gsettings get org.x.apps.portal color-scheme  # when this schema is installed
 gsettings get org.cinnamon.desktop.background picture-uri
 gsettings get org.nemo.desktop home-icon-visible
 gsettings get org.nemo.desktop trash-icon-visible
 ```
 
-Expected values include `Yaru-blue-qortal`, an installed dark GTK theme,
+Expected values include `Yaru-blue-qortal`, an installed dark GTK theme, `Windows-10`,
 `prefer-dark`, the URI ending in `Qortal-TheFuture-Wallpaper.png`, and `true` for
 both desktop icons. In the menu applet configuration, check the PNG and sizes
-40/36/40/26; in the desktop context menu, Auto-arrange should be unchecked.
+menu **40**, categories **32**, applications **24**, favorites **38**;
+in the desktop context menu, Auto-arrange should be unchecked.
 Restore `desktop.dconf`, the backed-up menu JSON and Nemo metadata as described
 above if you need to undo the desktop choices. No service restart is required.
 

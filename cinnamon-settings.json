@@ -144,7 +144,7 @@
         "units": "px",
         "description": "Categories icon size",
         "dependency": "show-category-icons",
-        "value": 36
+        "value": 32
     },
     "show-application-icons": {
         "type": "switch",
@@ -162,7 +162,7 @@
         "units": "px",
         "description": "Applications icon size",
         "dependency": "show-application-icons",
-        "value": 26
+        "value": 24
     },
     "favbox-show": {
         "type": "switch",
@@ -180,7 +180,7 @@
         "units": "px",
         "description": "Favorites icon size",
         "dependency": "favbox-show",
-        "value": 40
+        "value": 38
     },
     "sidebar-icon-size": {
         "type": "spinbutton",
@@ -190,7 +190,7 @@
         "step": 1,
         "units": "px",
         "description": "Sidebar icon size",
-        "value": 40
+        "value": 38
     },
     "show-favorites": {
         "type": "switch",
